@@ -1,3 +1,8 @@
+> **Desktop2Stereo server:** This repository extends new-api with licensing, device, order, balance,
+> invite, withdrawal, and administration APIs for Desktop2Stereo. See
+> [README.desktop2stereo.md](README.desktop2stereo.md) for the project entry point. The original
+> new-api documentation and attribution are retained below.
+
 <div align="center">
 
 ![new-api](/web/public/logo.png)
