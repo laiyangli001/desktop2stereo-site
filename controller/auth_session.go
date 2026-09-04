@@ -64,6 +64,10 @@ func AuthLogout(c *gin.Context) {
 				writeAuthSessionError(c, err)
 				return
 			}
+			if err := model.ReleaseAllD2SOnlineLeases(identity.UserID); err != nil {
+				writeAuthSessionError(c, err)
+				return
+			}
 			cookieCleared := false
 			if cookieErr == nil && hasCookieSID && cookieSID == identity.SessionID {
 				if err := service.RevokeByRefreshToken(rawRefreshToken, identity.SessionID, "logout"); err != nil {
@@ -86,7 +90,15 @@ func AuthLogout(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 		return
 	}
+	var logoutUserID int
+	if session, err := model.GetUserSessionBySID(cookieSID); err == nil {
+		logoutUserID = session.UserID
+	}
 	if err := service.RevokeByRefreshToken(rawRefreshToken, expectedSID, "logout"); err != nil {
+		writeAuthSessionError(c, err)
+		return
+	}
+	if err := model.ReleaseAllD2SOnlineLeases(logoutUserID); err != nil {
 		writeAuthSessionError(c, err)
 		return
 	}

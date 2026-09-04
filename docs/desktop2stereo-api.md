@@ -1,0 +1,88 @@
+# Desktop2Stereo API v1
+
+D2S 设备、授权、订单、账务和管理响应包含 `version`、`success` 和 `request_id`。失败响应
+的 `error.code` 是客户端判断依据，客户端不得解析自然语言消息。账号兼容入口直接复用
+new-api 原生响应格式。除设备码申请、兑换、公钥和支付回调外，接口需要 new-api Bearer
+access token。
+
+## 账号兼容入口
+
+- `POST /api/v1/auth/register`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `POST /api/v1/auth/refresh`
+- `POST /api/v1/auth/password-reset/confirm`
+
+发送邮箱验证码和请求密码重置继续复用 `/api/verification`、`/api/reset_password`。
+这些账号接口保持 new-api 契约，不承诺 D2S `version/request_id/error` 外层结构。
+
+## 设备码
+
+- `POST /api/v1/device/authorize`：提交 `device_hash`、`fingerprint_version`、`client_name`、
+  `platform`，返回设备码、用户码、验证地址、600 秒有效期和 5 秒轮询间隔。
+- `POST /api/v1/device/approve`：网页登录后提交 `user_code`。
+- `POST /api/v1/device/token`：启动器提交 `device_code`；待批准返回 HTTP 202 和
+  `authorization_pending`，批准后返回 access/refresh token，且只能兑换一次。
+- `POST /api/v1/device/cancel`：取消尚未批准的设备码。
+
+## 授权
+
+- `GET /api/v1/license/list`
+- `GET /api/v1/license/status`
+- `POST /api/v1/license/activate` 和 `/switch`
+- `POST /api/v1/license/change-mode`
+- `POST /api/v1/license/renew` 和 `/offline/issue`
+- `POST /api/v1/license/revoke/free`
+- `POST /api/v1/license/revoke/paid`
+- `POST /api/v1/license/offline/extend`
+- `POST /api/v1/license/online/heartbeat`
+- `POST /api/v1/license/online/logout`
+- `POST /api/v1/license/permanent/confirm`
+- `POST|GET /api/v1/license/manual-unbind`
+- `GET /api/v1/license/keys`
+
+设备指纹必须是客户端按平台规则计算的 64 位小写 SHA-256 摘要，并携带正整数指纹版本。
+服务器不会接收 MachineGuid、machine-id、IOPlatformUUID 等原始标识。
+
+切换永久模式必须提交 `confirmation: "PERMANENT"`。离线签发前必须先绑定当前设备并把
+模式切换为 `offline` 或 `permanent`。在线心跳首次返回随机租约令牌，后续心跳必须回传。
+
+## 订单、邀请和余额
+
+- `POST /api/v1/orders/preview`：服务器报价。
+- `POST /api/v1/orders/create`：再次报价并使用 `idempotency_key` 创建订单。
+- `GET /api/v1/orders/:id`
+- `GET /api/v1/invite/info`、`GET /api/v1/invite/records`
+- `GET /api/v1/balance/info`、`GET /api/v1/balance/transactions`
+- `POST /api/v1/withdrawal/request`、`GET /api/v1/withdrawal/status`
+
+`product` 支持 `license`、`paid_revoke` 和 `offline_extension`。金额全部使用最小货币单位。
+正式授权固定为 CN/CNY 9900、INTL/USD 2990；付费撤销按 1/2/3 次分别为
+CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置给出。
+
+## 支付事件桥
+
+`POST /api/v1/webhooks/:provider` 只接受已完成渠道原生验签的内部适配器请求。请求体：
+
+```json
+{
+  "event_id": "provider-event-id",
+  "order_id": "d2s-order-id",
+  "event_type": "paid",
+  "amount_minor": 2990,
+  "currency": "USD"
+}
+```
+
+将请求体原始字节以 `D2S_PAYMENT_BRIDGE_SECRET[_PROVIDER]` 计算 HMAC-SHA256，小写十六进制
+结果放入 `X-D2S-Signature`。支持 `paid`、`canceled`、`failed`、`chargeback`、`reversed`。
+事件以 `(provider,event_id)` 幂等，重复事件的订单、金额、币种、类型或摘要不一致时拒绝。
+
+## 管理 API
+
+- `GET /api/v1/admin/licenses`
+- `GET|PUT /api/v1/admin/withdrawals[/:id]`
+- `GET|PUT /api/v1/admin/unbind-requests[/:id]`
+- `PUT /api/v1/admin/users/:id/region`
+
+管理员写操作经过 new-api 的管理员审计中间件。区域只允许在余额为零、无待处理订单和提现时调整。

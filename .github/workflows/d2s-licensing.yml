@@ -1,0 +1,84 @@
+name: Desktop2Stereo licensing
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/d2s-licensing.yml'
+      - 'controller/d2s_*.go'
+      - 'model/d2s_*.go'
+      - 'router/d2s-*.go'
+      - 'service/d2s_*.go'
+      - 'go.mod'
+      - 'go.sum'
+  pull_request:
+    paths:
+      - '.github/workflows/d2s-licensing.yml'
+      - 'controller/d2s_*.go'
+      - 'model/d2s_*.go'
+      - 'router/d2s-*.go'
+      - 'service/d2s_*.go'
+      - 'go.mod'
+      - 'go.sum'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: SQLite and signing tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run D2S unit tests
+        run: go test ./model ./service -run '^TestD2S' -count=1
+
+  databases:
+    name: MySQL and PostgreSQL migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      GOWORK: 'off'
+      D2S_TEST_MYSQL_DSN: root:d2s_test@tcp(127.0.0.1:3306)/d2s_test?charset=utf8mb4&parseTime=True&loc=Local
+      D2S_TEST_POSTGRES_DSN: host=127.0.0.1 user=d2s password=d2s_test dbname=d2s_test port=5432 sslmode=disable TimeZone=UTC
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: d2s_test
+          MYSQL_DATABASE: d2s_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pd2s_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: d2s
+          POSTGRES_PASSWORD: d2s_test
+          POSTGRES_DB: d2s_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U d2s -d d2s_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Run real database migration matrix
+        run: go test ./model -run '^TestD2SSchemaConfiguredDatabases$' -count=1 -v

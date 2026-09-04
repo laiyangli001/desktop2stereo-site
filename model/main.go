@@ -364,6 +364,23 @@ func migrateDB() error {
 		&SystemTaskLock{},
 		&CasbinRule{},
 		&AuthzRole{},
+		&D2SUserProfile{},
+		&D2SLicense{},
+		&D2SDeviceBinding{},
+		&D2SLicenseEvent{},
+		&D2SDeviceCode{},
+		&D2SOfflineEntitlement{},
+		&D2SOnlineLease{},
+		&D2SFreeRevokeCooldown{},
+		&D2SPaidRevokeQuota{},
+		&D2SManualUnbindRequest{},
+		&D2SOrder{},
+		&D2SPaymentEvent{},
+		&D2SBalanceAccount{},
+		&D2SBalanceTransaction{},
+		&D2SInviteReward{},
+		&D2SWithdrawalRequest{},
+		&D2SSigningKey{},
 	)
 	if err != nil {
 		return err

@@ -1,140 +1,157 @@
-基于你的业务需求、现有资源以及 [`new-api`](https://github.com/QuantumNous/new-api) 项目的特点，我为你设计了一份完整的网站系统架构方案。
+# d2s.site 服务端部署与运维方案
 
-### 🏗️ 整体架构概览
+## 1. 文档定位
 
-整个系统遵循 **“国内核心部署、全球边缘加速”** 的原则，将核心业务（API网关、订单、数据库）部署在腾讯云，以确保稳定性和合规性；同时利用Cloudflare的全球网络来处理支付回调，保障关键业务链路的可靠性。
+本文是 `desktop2stereo-site` 的唯一部署基准，合并原 `d2s.site` 网站架构方案与
+Desktop2Stereo 授权服务部署要求。服务器端开发计划见
+[`13-cross-platform-licensing-server-implementation-plan.md`](13-cross-platform-licensing-server-implementation-plan.md)。
+
+生产原则是“腾讯云承载权威状态，Cloudflare 提供公网边缘防护和支付回调中转”：
+
+- PostgreSQL 中的账号、订单、账务和授权记录是唯一权威状态。
+- Redis 只用于会话、限流、缓存和多节点协调，不保存最终授权事实。
+- Cloudflare 不保存 D1 授权状态，也不直接修改订单或授权。
+- SQLite 仅用于本地开发；生产使用 PostgreSQL，MySQL 是受支持的替代方案。
+
+## 2. 生产拓扑
 
 ```mermaid
 flowchart TD
-    subgraph Users [用户]
-        U1[国内用户]
-        U2[海外用户]
-    end
-
-    subgraph CF [Cloudflare 边缘网络]
-        DNS[智能 DNS 解析<br>d2s.site]
-        WAF[WAF & DDoS 防护]
-        Worker[支付回调中转 Worker<br>（签名验证与转发）]
-    end
-
-    subgraph Tencent [腾讯云]
-        subgraph CVM [CVM 云服务器]
-            Docker[Docker Engine]
-            subgraph Containers [Docker Compose 容器]
-                NewAPI[new-api 主容器<br>端口: 3000]
-                PostgreSQL[(PostgreSQL<br>数据库)]
-                Redis[(Redis<br>缓存)]
-                Nginx[Nginx<br>反向代理]
-            end
-        end
-        SG[安全组]
-        CLB[负载均衡 CLB<br>（可选）]
-    end
-
-    subgraph Payment [第三方支付平台]
-        EPay[易支付 / 支付FM]
-    end
-
-    %% 用户访问流量
-    U1 -->|HTTP/HTTPS| DNS
-    U2 -->|HTTP/HTTPS| DNS
-    DNS -->|解析到腾讯云服务器公网IP| WAF
-    WAF -->|过滤后流量| CLB
-    CLB -->|转发| Nginx
-    Nginx -->|代理| NewAPI
-
-    %% 支付回调流量
-    EPay -->|发送回调| Worker
-    Worker -->|验证并转发| CLB
-    CLB -->|转发| Nginx
-    Nginx -->|代理| NewAPI
-
-    %% 服务间依赖
-    NewAPI --- PostgreSQL
-    NewAPI --- Redis
+    CN[国内用户] --> CF[Cloudflare DNS / CDN / WAF]
+    INTL[海外用户] --> CF
+    PAY[支付渠道] --> WORKER[Cloudflare Worker\n渠道验签与回调中转]
+    CF --> ORIGIN[腾讯云 CLB 或 Cloudflare Tunnel]
+    WORKER -->|渠道验签后 + 内部 HMAC| ORIGIN
+    ORIGIN --> NGINX[Nginx / HTTPS]
+    NGINX --> APP1[desktop2stereo-site 1]
+    NGINX --> APP2[desktop2stereo-site 2]
+    APP1 --> PG[(PostgreSQL)]
+    APP2 --> PG
+    APP1 --> REDIS[(Redis)]
+    APP2 --> REDIS
+    PG --> COS[腾讯云 COS 加密备份]
 ```
 
-### 🔧 组件详解
+首发可在一台腾讯云 CVM 上运行应用、Nginx、PostgreSQL 和 Redis，但数据库与 Redis
+端口不得暴露公网。业务增长后，将数据库迁到托管实例，并通过 CLB 扩展到至少两个应用
+容器。所有应用节点必须共享数据库、Redis、会话 Secret、授权签名私钥和支付桥 Secret。
 
-#### 1. 腾讯云：核心业务承载平台
+## 3. 域名、网络与 TLS
 
-所有核心业务，包括 `new-api` 网关、数据库、订单处理和用户管理，都运行在腾讯云上。
+- 正式域名：`d2s.site`，DNS 托管在 Cloudflare，并开启代理、WAF、DDoS 防护和限流。
+- TLS：Cloudflare 使用“完全（严格）”，源站安装可信证书或 Cloudflare Origin Certificate。
+- 源站：优先用 Cloudflare Tunnel 隐藏公网入口；如使用 CLB/CVM 公网 IP，仅开放 80/443，
+  且 80 只跳转 HTTPS。
+- 数据库 5432/3306 和 Redis 6379 只允许应用子网访问。
+- `100393.com` 只作为预留灾备或管理域名；启用前必须具备独立访问控制，不能绕过 WAF。
+- Nginx 只信任实际负载均衡/代理地址传入的客户端 IP；`TRUSTED_PROXIES` 不得配置为全网。
 
-*   **计算资源**：推荐使用一台或多台**腾讯云CVM（云服务器）**。根据 `new-api` 的官方建议，生产环境使用Docker Compose部署。
-*   **数据持久化**：
-    *   **数据库**：`new-api` 支持SQLite、MySQL和PostgreSQL。对于生产环境，**强烈建议使用PostgreSQL或MySQL**，并通过环境变量 `SQL_DSN` 进行配置。
-    *   **缓存**：`new-api` 支持Redis。配置Redis（通过 `REDIS_CONN_STRING` 环境变量）可以显著提升多实例部署时的Session管理和限流效率。
-*   **网络与安全**：
-    *   **安全组**：为CVM配置安全组规则，**仅对必要的端口（如80、443）开放公网访问**。数据库（5432/3306）和Redis（6379）端口应**仅允许内网或指定IP访问**。
-    *   **负载均衡（可选）**：若业务量较大，可在CVM前部署腾讯云**负载均衡（CLB）**，提升可用性。
+## 4. 支付回调链路
 
-#### 2. Cloudflare：全球边缘与支付回调安全网
+支付渠道回调地址指向 Cloudflare Worker。Worker 或源站渠道适配器必须先按渠道官方规则验证
+签名、时间戳和重放条件，再把规范化事件转发到：
 
-Cloudflare在这里扮演双重角色：全球CDN/安全防护，以及支付回调的“稳定中转站”。
+`POST https://d2s.site/api/v1/webhooks/{provider}`
 
-*   **DNS与流量管理**：
-    *   将 `d2s.site` 的DNS解析托管在Cloudflare。
-    *   利用Cloudflare的**智能DNS解析**功能，可以根据用户地理位置，将访问请求解析到最优的腾讯云节点IP。
-    *   开启Cloudflare的**代理（小黄云）** 功能，可以为你的源站IP提供隐藏和保护。
-*   **安全防护**：启用Cloudflare的**WAF（Web应用防火墙）** 和 **DDoS防护**，过滤恶意流量。
-*   **支付回调中转（核心）**：
-    *   创建一个**Cloudflare Worker**作为支付回调的“中间人”。
-    *   **工作流程**：
-        1.  在支付平台（如易支付/支付FM）的后台，将**回调地址（notifyUrl）** 配置为你的Worker地址。
-        2.  支付平台将回调请求发送给Worker。
-        3.  Worker执行**签名验证**，确保回调的真实性。
-        4.  验证通过后，Worker将请求**转发**给腾讯云上的 `new-api` 服务（通过公网或内网通道）。
-    *   **价值**：这个Worker层有效避免了支付回调请求在跨境网络中的丢包和延迟问题，确保了订单状态的准确同步。
+转发请求使用与渠道 Secret 分离的 `D2S_PAYMENT_BRIDGE_SECRET` 生成
+`X-D2S-Signature`。服务端再次校验订单、渠道、区域、金额和币种，并通过
+`(provider, provider_event_id)` 幂等处理。Worker 不能直接写数据库，也不能仅依靠来源 IP
+证明回调可信。建议再用 Cloudflare Access 服务令牌或 mTLS 限制桥接入口。
 
-#### 3. 域名与SSL证书
+必须在渠道沙箱覆盖：成功、重复、乱序、延迟、取消、伪造、金额不符、币种不符和拒付。
 
-*   **正式域名 `d2s.site`**：
-    *   作为面向用户的主域名，其DNS解析托管在Cloudflare。
-    *   在Cloudflare上为此域名启用**SSL/TLS（推荐使用“完全（严格）”模式）**，提供端到端的HTTPS加密。
-*   **备用域名 `100393.com`**：
-    *   目前未使用，但建议将其也托管在Cloudflare。
-    *   未来可以作为**内部管理后台**的专用域名，或作为 `d2s.site` 的备用、灾备域名，增加系统的灵活性。
+## 5. 必需配置
 
-### 🔄 关键数据流详解
+基础配置：
 
-#### 1. 用户访问流程（正常业务）
-用户通过 `https://d2s.site` 访问网站。
-1.  **DNS解析**：Cloudflare根据用户IP，将域名解析到腾讯云CVM的公网IP。
-2.  **流量清洗**：请求经过Cloudflare的WAF和DDoS防护层。
-3.  **反向代理**：请求到达腾讯云CVM，由Nginx反向代理接收。
-4.  **业务处理**：Nginx将请求转发给 `new-api` 容器（监听3000端口）。
-5.  **数据读写**：`new-api` 根据业务需求，读写PostgreSQL和Redis。
+- `SQL_DSN`：生产 PostgreSQL 或 MySQL 连接串。
+- `REDIS_CONN_STRING`：生产 Redis 连接串。
+- `SESSION_SECRET`：所有节点一致的高熵 Secret。
+- `SESSION_COOKIE_SECURE=true`。
+- `SESSION_COOKIE_TRUSTED_URL=https://d2s.site`。
+- `TRUSTED_PROXIES`：实际 CLB、Nginx 或 Tunnel 网络范围。
 
-#### 2. 支付回调流程（关键业务）
-用户完成支付后，支付平台（如易支付）发起回调。
-1.  **回调发起**：支付平台向配置的 `notifyUrl`（即你的Worker地址）发送HTTP请求。
-2.  **Worker验证**：Cloudflare Worker接收到请求，首先验证回调签名，确认其真实性。
-3.  **安全转发**：验证通过后，Worker将请求转发至腾讯云 `new-api` 的公网入口（或通过内网通道）。
-4.  **订单更新**：`new-api` 接收到回调，处理订单状态更新、用户额度充值等操作。
-5.  **结果返回**：`new-api` 处理成功后，向Worker返回成功响应，Worker再原样回传给支付平台。
+授权与商业配置：
 
-### 🛡️ 安全与高可用建议
+- `D2S_DEVICE_VERIFICATION_URI=https://d2s.site/device`。
+- `D2S_LICENSE_KEY_ID`。
+- `D2S_LICENSE_PRIVATE_KEY_B64`，内容为 P-256 PKCS#8 私钥的 Base64。
+- `D2S_PAYMENT_BRIDGE_SECRET`。
+- `D2S_OFFLINE_EXTENSION_CNY_MINOR`、`D2S_OFFLINE_EXTENSION_USD_MINOR`。
 
-*   **安全加固**：
-    *   所有面向公网的服务**必须使用HTTPS**。
-    *   在 `new-api` 后台配置**IP白名单**，仅允许可信IP（如你的Worker出口IP）访问支付回调接口。
-    *   定期更新 `new-api` 镜像、操作系统和数据库密码。
-*   **高可用设计**：
-    *   **数据库**：启用PostgreSQL或MySQL的自动备份，并将备份文件存储至腾讯云COS（对象存储）。
-    *   **容器**：在 `docker-compose.yml` 中为所有服务配置 `restart: always`，确保服务崩溃后能自动重启。
-    *   **监控告警**：接入腾讯云监控，对CVM的CPU、内存、磁盘和网络进行监控，并设置告警策略。
+同时在 new-api 管理设置中启用邮箱验证、SMTP、Turnstile、支付合规确认和实际使用的支付
+渠道。生产 Secret 只能进入腾讯云 Secret 管理、受限环境变量或编排系统 Secret，不能写入
+仓库、镜像、数据库、日志和客户端。
 
-### 📋 部署步骤概要
+## 6. 首次部署
 
-1.  **环境准备**：在腾讯云购买一台CVM，安装Docker和Docker Compose。
-2.  **部署 `new-api`**：
-    *   克隆项目 `git clone https://github.com/QuantumNous/new-api.git`。
-    *   编辑 `docker-compose.yml`，配置PostgreSQL和Redis服务，并设置好 `SQL_DSN`、`REDIS_CONN_STRING` 等环境变量。
-    *   运行 `docker-compose up -d` 启动服务。
-3.  **配置反向代理**：在CVM上安装Nginx，配置反向代理将 `d2s.site` 的请求转发至 `localhost:3000`。
-4.  **配置Cloudflare**：
-    *   将 `d2s.site` 的DNS托管至Cloudflare，并开启代理。
-    *   编写并部署支付回调中转Worker。
-5.  **配置支付**：在 `new-api` 后台填写支付平台（如易支付/支付FM）的API地址、商户ID、密钥等信息，并将回调地址设置为你的Worker地址。
+1. 创建腾讯云 CVM/VPC、安全组、PostgreSQL、Redis 和 COS 备份桶。
+2. 将 `d2s.site` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
+3. 克隆本仓库并从 `.env.example` 创建生产 Secret 配置。
+4. 构建当前源码，不能直接使用未包含 D2S 扩展的上游镜像：
 
-这套架构充分利用了腾讯云的稳定性和Cloudflare的全球网络，为你的业务提供了一个安全、可靠且具备扩展性的基础。
+   ```bash
+   docker compose build --pull
+   docker compose up -d
+   docker compose ps
+   ```
+
+5. 完成 new-api 初始化，启用邮箱验证、Turnstile 和支付渠道。
+6. 部署支付回调 Worker，配置渠道原生 Secret 和独立桥接 Secret。
+7. 执行健康检查：
+
+   ```bash
+   curl -fsS https://d2s.site/api/status
+   curl -fsS https://d2s.site/api/v1/license/keys
+   ```
+
+8. 用测试账号完成注册、邮箱验证、试用创建、设备码登录、绑定、离线签发、在线租约和沙箱
+   支付闭环后，才允许开放公网购买。
+
+首次启动通过 GORM 建表。每次升级前必须做数据库快照，在同版本影子库连续执行两次迁移并
+运行最小业务回归，再滚动生产节点。禁止多个不兼容版本同时执行结构变更。
+
+## 7. 发布与回滚
+
+- 镜像标签同时包含版本号和 Git SHA；禁止生产使用浮动 `latest`。
+- 先迁移影子库，再灰度一个应用节点，观察错误率、租约、回调和数据库指标。
+- 数据库变更优先采用向前兼容的 expand/contract；应用回滚不能依赖立即回滚表结构。
+- 回滚时保留支付事件和账务流水，不删除已接收回调；恢复后重新对账。
+- 发布前保存上一版本镜像、配置版本和数据库快照，并记录操作人及时间。
+
+## 8. 授权签名密钥轮换
+
+1. 生成新的 P-256 PKCS#8 私钥和唯一 `key_id`。
+2. 先将新公钥加入客户端“当前键 + 上一键”清单并发布客户端。
+3. 更新服务端 Secret 和 `D2S_LICENSE_KEY_ID`，滚动重启。
+4. 验证新签发凭证、旧凭证和篡改凭证。
+5. 旧公钥至少保留到所有旧离线凭证过期，再将旧键标记为 retired。
+
+私钥不得进入客户端。`d2s_signing_keys` 只保存公钥元数据；密钥读取或签名失败必须停止
+离线凭证签发并告警，不能降级为无签名授权。
+
+## 9. 监控、备份与灾难恢复
+
+至少监控并告警：
+
+- HTTP 5xx、P95/P99 延迟、登录和设备码失败率。
+- 在线租约冲突、离线签发失败、签名键异常和时钟偏差。
+- 回调签名失败、金额不符、重复事件不一致、订单过期、拒付和负余额。
+- PostgreSQL 连接、慢查询、复制延迟、磁盘容量；Redis 内存和淘汰。
+- CVM/容器 CPU、内存、磁盘、重启次数和证书有效期。
+
+PostgreSQL 每日全量备份并保留至少 30 天，关键表启用时间点恢复；备份加密后复制到 COS
+不同故障域。每季度执行恢复演练，恢复后核对用户、订单、支付事件、余额流水、授权事件和
+签发记录数量及关联完整性。日志需要脱敏，不能记录访问/刷新令牌、设备原始标识、私钥、
+支付密钥或完整支付资料。
+
+## 10. 上线门禁
+
+满足以下条件后才可标记生产可用：
+
+- SQLite、MySQL、PostgreSQL 新建库与重复迁移测试通过。
+- 全部 Go 测试、静态检查、镜像构建和敏感信息扫描通过。
+- 至少一个 CN 和一个 INTL 支付渠道完成沙箱回调矩阵；未实现渠道从页面移除。
+- 双实例并发激活、租约、幂等订单和回调测试通过。
+- 密钥轮换、备份恢复、故障回滚和监控告警演练有记录。
+- Windows、Linux、macOS 客户端与生产等价环境完成端到端授权验收。
