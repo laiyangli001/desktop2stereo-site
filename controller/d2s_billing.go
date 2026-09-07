@@ -269,13 +269,23 @@ func D2SAdminWithdrawals(c *gin.Context) {
 }
 
 func D2SAdminOrders(c *gin.Context) {
+	var parsedUserID *int
+	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
+		value, err := strconv.Atoi(userID)
+		if err != nil || value <= 0 {
+			d2sInvalidInput(c, "user_id must be a positive integer")
+			return
+		}
+		parsedUserID = &value
+	}
+
 	var rows []model.D2SOrder
 	query := model.DB.Order("created_at DESC").Limit(500)
 	if status := strings.TrimSpace(c.Query("status")); status != "" {
 		query = query.Where("status = ?", status)
 	}
-	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
-		query = query.Where("user_id = ?", userID)
+	if parsedUserID != nil {
+		query = query.Where("user_id = ?", *parsedUserID)
 	}
 	if err := query.Find(&rows).Error; err != nil {
 		d2sError(c, err)

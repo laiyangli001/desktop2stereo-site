@@ -170,6 +170,15 @@ func TestD2SAdminOrdersSupportsStatusAndUserFilters(t *testing.T) {
 	assert.Equal(t, "admin-order-paid", response.Data.Orders[0].ID)
 }
 
+func TestD2SAdminOrdersRejectsInvalidUserFilter(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?user_id=not-a-number", nil)
+	D2SAdminOrders(context)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestD2SAdminPaymentEventsSupportsOperationalFilters(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:d2s_admin_payment_events_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
