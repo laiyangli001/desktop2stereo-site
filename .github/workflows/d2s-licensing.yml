@@ -95,6 +95,22 @@ jobs:
             $script = Get-Content -Raw -Encoding UTF8 $path
             [void][scriptblock]::Create($script)
           }
+      - name: Run production readiness secret smoke test
+        shell: pwsh
+        run: |
+          $env:SQL_DSN = 'ci-placeholder'
+          $env:REDIS_CONN_STRING = 'ci-placeholder'
+          $env:SESSION_SECRET = 's' * 32
+          $env:D2S_LICENSE_KEY_ID = 'ci-key'
+          $env:D2S_PAYMENT_BRIDGE_SECRET = 'p' * 32
+          $env:D2S_LICENSE_PRIVATE_KEY_B64 = [Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32))
+          $env:D2S_OFFLINE_EXTENSION_CNY_MINOR = '3000'
+          $env:D2S_OFFLINE_EXTENSION_USD_MINOR = '500'
+          $env:D2S_DEVICE_VERIFICATION_URI = 'https://d2s.site/device'
+          $env:SESSION_COOKIE_TRUSTED_URL = 'https://d2s.site'
+          $env:TRUSTED_PROXIES = 'none'
+          $env:SESSION_COOKIE_SECURE = 'true'
+          ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp
 
   frontend:
     name: D2S frontend typecheck, test, and build
