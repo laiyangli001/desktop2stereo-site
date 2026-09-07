@@ -324,6 +324,16 @@ func D2SAdminPaymentEvents(c *gin.Context) {
 }
 
 func D2SAdminBalances(c *gin.Context) {
+	var parsedUserID *int
+	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
+		value, err := strconv.Atoi(userID)
+		if err != nil || value <= 0 {
+			d2sInvalidInput(c, "user_id must be a positive integer")
+			return
+		}
+		parsedUserID = &value
+	}
+
 	var rows []model.D2SBalanceAccount
 	query := model.DB.Order("updated_at DESC").Limit(500)
 	// Negative balances are the audit default; pass negative=false when an
@@ -331,8 +341,8 @@ func D2SAdminBalances(c *gin.Context) {
 	if c.Query("negative") != "false" {
 		query = query.Where("available_minor < 0")
 	}
-	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
-		query = query.Where("user_id = ?", userID)
+	if parsedUserID != nil {
+		query = query.Where("user_id = ?", *parsedUserID)
 	}
 	if err := query.Find(&rows).Error; err != nil {
 		d2sError(c, err)

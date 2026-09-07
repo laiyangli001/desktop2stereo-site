@@ -138,6 +138,15 @@ func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
 	assert.Len(t, allAccounts, 2)
 }
 
+func TestD2SAdminBalancesRejectsInvalidUserFilter(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/balances?user_id=not-a-number", nil)
+	D2SAdminBalances(context)
+
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
 func TestD2SAdminOrdersSupportsStatusAndUserFilters(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:d2s_admin_orders_filters_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
