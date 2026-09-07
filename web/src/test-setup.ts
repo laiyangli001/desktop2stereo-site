@@ -58,6 +58,18 @@ function hasStorageMethods(value: unknown): value is Storage {
   )
 }
 
+function isUsableStorage(storage: Storage): boolean {
+  const probeKey = `__vitest_storage_probe__${Math.random().toString(36).slice(2)}`
+  try {
+    storage.setItem(probeKey, '1')
+    storage.removeItem(probeKey)
+    storage.clear()
+    return true
+  } catch {
+    return false
+  }
+}
+
 function installTestStorage(name: 'localStorage' | 'sessionStorage'): void {
   const globalOwner = globalThis as unknown as Record<string, unknown>
   const windowOwner = window as unknown as Record<string, unknown>
@@ -65,7 +77,9 @@ function installTestStorage(name: 'localStorage' | 'sessionStorage'): void {
 
   try {
     const candidate = windowOwner[name]
-    if (hasStorageMethods(candidate)) storage = candidate
+    if (hasStorageMethods(candidate) && isUsableStorage(candidate)) {
+      storage = candidate
+    }
   } catch {
     storage = undefined
   }
