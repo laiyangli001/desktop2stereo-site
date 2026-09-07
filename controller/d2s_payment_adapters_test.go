@@ -72,6 +72,13 @@ func TestD2SPaymentWebhookRejectsBridgeFailures(t *testing.T) {
 	require.NoError(t, os.Unsetenv("D2S_PAYMENT_BRIDGE_SECRET"))
 	assert.Equal(t, http.StatusBadRequest, call(missingSecretBody, validD2SBridgeSignature(missingSecretBody, "bridge-test-secret")).Code)
 	require.NoError(t, os.Setenv("D2S_PAYMENT_BRIDGE_SECRET", "bridge-test-secret"))
+	require.NoError(t, os.Setenv("D2S_PAYMENT_BRIDGE_SECRET_STRIPE", "provider-specific-secret"))
+	t.Cleanup(func() { _ = os.Unsetenv("D2S_PAYMENT_BRIDGE_SECRET_STRIPE") })
+	assert.Equal(t, http.StatusBadRequest, call(missingSecretBody, validD2SBridgeSignature(missingSecretBody, "bridge-test-secret")).Code)
+	providerSecretBody := `{"event_id":"provider-event","order_id":"missing-provider-order","event_type":"paid","amount_minor":2990,"currency":"USD"}`
+	providerSecretResponse := call(providerSecretBody, validD2SBridgeSignature(providerSecretBody, "provider-specific-secret"))
+	assert.Equal(t, http.StatusNotFound, providerSecretResponse.Code)
+	require.NoError(t, os.Unsetenv("D2S_PAYMENT_BRIDGE_SECRET_STRIPE"))
 	assert.Equal(t, http.StatusBadRequest, call(`{"event_id":"evt","order_id":"order","event_type":"paid","amount_minor":2990,"currency":"USD"}`, "not-hex").Code)
 	assert.Equal(t, http.StatusBadRequest, call("not-json", validD2SBridgeSignature("not-json", "bridge-test-secret")).Code)
 	validBody := `{"event_id":"evt","order_id":"missing-order","event_type":"paid","amount_minor":2990,"currency":"USD"}`
