@@ -123,4 +123,38 @@ describe('LicenseCard', () => {
 
     expect(onConfirmPermanent).toHaveBeenCalledOnce()
   })
+
+  it('keeps controls uniquely addressable when multiple licenses are shown', () => {
+    render(
+      <>
+        <LicenseCard
+          license={activeBoundLicense}
+          actionPending={false}
+          onChangeMode={vi.fn()}
+          onConfirmPermanent={vi.fn()}
+          onFreeRevoke={vi.fn()}
+          onManualUnbind={vi.fn()}
+        />
+        <LicenseCard
+          license={{
+            ...activeBoundLicense,
+            id: 'license-2',
+            license_code: 'D2S-TEST-0002',
+          }}
+          actionPending={false}
+          onChangeMode={vi.fn()}
+          onConfirmPermanent={vi.fn()}
+          onFreeRevoke={vi.fn()}
+          onManualUnbind={vi.fn()}
+        />
+      </>
+    )
+
+    expect(
+      screen.getByRole('combobox', { name: 'Offline period D2S-TEST-0001' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('combobox', { name: 'Offline period D2S-TEST-0002' })
+    ).toBeInTheDocument()
+  })
 })
