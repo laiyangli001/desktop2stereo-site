@@ -160,6 +160,7 @@ describe('D2SAdminWorkspace', () => {
     expect(
       screen.getByText(/stripe-chargeback-1 · order-chargeback/)
     ).toBeInTheDocument()
+    expect(screen.getByText(/Processed at:/)).toBeInTheDocument()
     expect(
       screen.getByText(/Status: active · Mode: online/)
     ).toBeInTheDocument()

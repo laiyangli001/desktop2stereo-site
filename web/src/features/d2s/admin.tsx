@@ -23,6 +23,11 @@ import {
   setD2SUserRegion,
 } from './api'
 
+function formatPaymentEventDate(timestamp: number): string {
+  if (!timestamp) return '—'
+  return new Date(timestamp * 1000).toLocaleString()
+}
+
 function ReviewActions(props: {
   id: string
   kind: 'unbind' | 'withdrawal'
@@ -232,6 +237,10 @@ export function D2SAdminWorkspace() {
                     </div>
                     <div className='text-muted-foreground font-mono text-xs'>
                       {event.provider_event_id} · {event.order_id}
+                    </div>
+                    <div className='text-muted-foreground text-xs'>
+                      {t('Processed at')}:{' '}
+                      {formatPaymentEventDate(event.processed_at)}
                     </div>
                   </div>
                 ))}
