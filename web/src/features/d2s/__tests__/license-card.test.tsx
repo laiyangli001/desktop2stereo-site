@@ -79,6 +79,9 @@ describe('LicenseCard', () => {
     )
 
     expect(onManualUnbind).toHaveBeenCalledWith('Hardware replacement')
+    expect(screen.queryByRole('button', { name: 'Online mode' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Offline mode' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Free revoke' })).toBeNull()
   })
 
   it('disables duplicate manual-unbind requests while one is pending', () => {

@@ -124,27 +124,32 @@ export function LicenseCard(props: {
           {t('Offline access until')}:{' '}
           {formatDate(props.license.offline_valid_until)}
         </div>
-        {props.license.status === 'active' && props.license.device_hash && (
-          <div className='flex flex-wrap gap-2 sm:col-span-2'>
-            <Button
-              type='button'
-              size='sm'
-              variant={props.license.mode === 'online' ? 'default' : 'outline'}
-              disabled={props.actionPending}
-              onClick={() => props.onChangeMode('online', offlineDays)}
-            >
-              {t('Online mode')}
-            </Button>
-            <Button
-              type='button'
-              size='sm'
-              variant={props.license.mode === 'offline' ? 'default' : 'outline'}
-              disabled={props.actionPending}
-              onClick={() => props.onChangeMode('offline', offlineDays)}
-            >
-              {t('Offline mode')}
-            </Button>
-            {props.license.mode !== 'permanent' && (
+        {props.license.status === 'active' &&
+          props.license.device_hash &&
+          props.license.mode !== 'permanent' && (
+            <div className='flex flex-wrap gap-2 sm:col-span-2'>
+              <Button
+                type='button'
+                size='sm'
+                variant={
+                  props.license.mode === 'online' ? 'default' : 'outline'
+                }
+                disabled={props.actionPending}
+                onClick={() => props.onChangeMode('online', offlineDays)}
+              >
+                {t('Online mode')}
+              </Button>
+              <Button
+                type='button'
+                size='sm'
+                variant={
+                  props.license.mode === 'offline' ? 'default' : 'outline'
+                }
+                disabled={props.actionPending}
+                onClick={() => props.onChangeMode('offline', offlineDays)}
+              >
+                {t('Offline mode')}
+              </Button>
               <Button
                 type='button'
                 size='sm'
@@ -154,34 +159,33 @@ export function LicenseCard(props: {
               >
                 {t('Make permanent')}
               </Button>
-            )}
-            <label className='flex items-center gap-2 text-sm'>
-              <span>{t('Offline period')}</span>
-              <select
-                aria-label={t('Offline period')}
-                className='h-8 rounded-lg border bg-transparent px-2 text-sm'
+              <label className='flex items-center gap-2 text-sm'>
+                <span>{t('Offline period')}</span>
+                <select
+                  aria-label={t('Offline period')}
+                  className='h-8 rounded-lg border bg-transparent px-2 text-sm'
+                  disabled={props.actionPending}
+                  value={offlineDays}
+                  onChange={(event) =>
+                    setOfflineDays(Number(event.target.value) as 7 | 14 | 30)
+                  }
+                >
+                  <option value={7}>{t('7 days')}</option>
+                  <option value={14}>{t('14 days')}</option>
+                  <option value={30}>{t('30 days')}</option>
+                </select>
+              </label>
+              <Button
+                type='button'
+                size='sm'
+                variant='destructive'
                 disabled={props.actionPending}
-                value={offlineDays}
-                onChange={(event) =>
-                  setOfflineDays(Number(event.target.value) as 7 | 14 | 30)
-                }
+                onClick={props.onFreeRevoke}
               >
-                <option value={7}>{t('7 days')}</option>
-                <option value={14}>{t('14 days')}</option>
-                <option value={30}>{t('30 days')}</option>
-              </select>
-            </label>
-            <Button
-              type='button'
-              size='sm'
-              variant='destructive'
-              disabled={props.actionPending}
-              onClick={props.onFreeRevoke}
-            >
-              {t('Free revoke')}
-            </Button>
-          </div>
-        )}
+                {t('Free revoke')}
+              </Button>
+            </div>
+          )}
         {props.license.status === 'active' &&
           props.license.mode === 'permanent' &&
           props.license.device_hash && (
