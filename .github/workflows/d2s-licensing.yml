@@ -113,10 +113,13 @@ jobs:
         run: |
           Remove-Item Env:POSTGRES_PASSWORD -ErrorAction SilentlyContinue
           Remove-Item Env:REDIS_PASSWORD -ErrorAction SilentlyContinue
+          $PSNativeCommandUseErrorActionPreference = $false
           docker compose config --quiet
-          if ($LASTEXITCODE -eq 0) {
+          $composeExitCode = $LASTEXITCODE
+          if ($composeExitCode -eq 0) {
             throw 'Production Compose unexpectedly accepted missing database credentials.'
           }
+          Write-Host "Production Compose rejected missing credentials as expected (exit code $composeExitCode)."
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
       - name: Run complete Go test suite
