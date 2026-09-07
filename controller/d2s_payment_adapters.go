@@ -185,10 +185,22 @@ func processEpayD2SPayment(result *epay.VerifyRes, payload []byte) (bool, error)
 	if err := model.DB.Where("id = ?", result.ServiceTradeNo).First(&order).Error; err != nil {
 		return true, err
 	}
+	if !isEpayD2SProvider(order.Provider) {
+		return true, fmt.Errorf("Epay event cannot settle provider %q: %w", order.Provider, model.ErrD2SPaymentMismatch)
+	}
 	return processVerifiedD2SPayment(
 		order.Provider, result.TradeNo, result.ServiceTradeNo, eventType,
 		minorValue, "CNY", payload,
 	)
+}
+
+func isEpayD2SProvider(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "epay", "paymentfm", "alipay", "wechat":
+		return true
+	default:
+		return false
+	}
 }
 
 func processWaffoD2SPayment(result *core.PaymentNotificationResult, payload []byte) (bool, error) {

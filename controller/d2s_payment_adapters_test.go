@@ -227,6 +227,36 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	assert.ErrorIs(t, err, model.ErrD2SPaymentMismatch)
 }
 
+func TestEpayD2SAdapterRejectsNonEpayOrder(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_epay_cross_provider_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}, &model.D2SPaymentEvent{}))
+	require.NoError(t, db.Create(&model.D2SOrder{
+		ID: "epay-cross-provider-order", UserID: 1, Product: model.D2SOrderProductLicense,
+		Provider: "waffo", Region: model.D2SRegionCN, Currency: "CNY", AmountMinor: 2990,
+		GatewayMinor: 2990, Status: model.D2SOrderPending, CreatedAt: 1, ExpiresAt: 1801,
+	}).Error)
+
+	handled, err := processEpayD2SPayment(&epay.VerifyRes{
+		TradeNo: "epay-cross-provider-event", ServiceTradeNo: "epay-cross-provider-order",
+		Money: "29.90", TradeStatus: epay.StatusTradeSuccess,
+	}, []byte("cross-provider-payload"))
+
+	assert.True(t, handled)
+	assert.ErrorIs(t, err, model.ErrD2SPaymentMismatch)
+	var eventCount int64
+	require.NoError(t, db.Model(&model.D2SPaymentEvent{}).Count(&eventCount).Error)
+	assert.Zero(t, eventCount)
+}
+
 func TestD2SPaymentEventRejectsProviderRegionMismatch(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:d2s_provider_region_mismatch?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
