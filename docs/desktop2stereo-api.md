@@ -85,6 +85,7 @@ CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置�
 将请求体原始字节以 `D2S_PAYMENT_BRIDGE_SECRET[_PROVIDER]` 计算 HMAC-SHA256，小写十六进制
 结果放入 `X-D2S-Signature`。支持 `paid`、`canceled`、`failed`、`chargeback`、`reversed`。
 事件以 `(provider,event_id)` 幂等，重复事件的订单、金额、币种、类型或摘要不一致时拒绝。
+该入口同时受请求体大小限制和高危接口限流保护。
 
 当前服务端已在完成渠道官方验签后，将 Stripe、Creem、易支付（包括 `paymentfm`）、Waffo 和 Waffo Pancake
 的已规范化订单事件直接送入同一 D2S 事务处理器；普通 new-api 充值仍沿用原有回调逻辑。

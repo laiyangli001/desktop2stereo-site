@@ -27,7 +27,7 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		}
 
 		v1.GET("/license/keys", controller.D2SLicensePublicKeys)
-		v1.POST("/webhooks/:provider", anonymousRequestBodyLimit, controller.D2SPaymentWebhook)
+		v1.POST("/webhooks/:provider", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.D2SPaymentWebhook)
 		license := v1.Group("/license")
 		license.Use(middleware.UserAuth())
 		{
