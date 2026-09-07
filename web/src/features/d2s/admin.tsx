@@ -143,6 +143,9 @@ export function D2SAdminWorkspace() {
       if (!result.success) {
         toast.error(result.error?.message || t('Operation failed'))
       } else {
+        void queryClient.invalidateQueries({
+          queryKey: ['d2s-admin', 'licenses'],
+        })
         toast.success(t('Region updated'))
       }
     },

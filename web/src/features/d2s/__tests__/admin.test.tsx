@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { D2SAdminWorkspace } from '../admin'
@@ -185,6 +185,16 @@ describe('D2SAdminWorkspace', () => {
     expect(
       screen.getAllByRole('textbox', { name: 'Review note' })
     ).toHaveLength(2)
+
+    apiMocks.setD2SUserRegion.mockResolvedValue(response({}))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Region' }), {
+      target: { value: 'CN' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save region' }))
+    await waitFor(() => {
+      expect(apiMocks.setD2SUserRegion).toHaveBeenCalledWith(42, 'CN')
+      expect(apiMocks.getD2SAdminLicenses).toHaveBeenCalledTimes(2)
+    })
   })
 
   it('announces unavailable admin data instead of presenting an empty dashboard', async () => {
