@@ -177,6 +177,18 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	var partiallyRefundedEpayOrder model.D2SOrder
 	require.NoError(t, db.First(&partiallyRefundedEpayOrder, "id = ?", epayOrder.ID).Error)
 	assert.Equal(t, model.D2SOrderPaid, partiallyRefundedEpayOrder.Status)
+	fullRefund := &epay.VerifyRes{
+		TradeNo:        "epay-full-refund-event",
+		ServiceTradeNo: epayOrder.ID,
+		Money:          "29.90",
+		TradeStatus:    "TRADE_REFUND",
+	}
+	handled, err = processEpayD2SPayment(fullRefund, []byte("epay-full-refund-payload"))
+	assert.True(t, handled)
+	require.NoError(t, err)
+	var fullyRefundedEpayOrder model.D2SOrder
+	require.NoError(t, db.First(&fullyRefundedEpayOrder, "id = ?", epayOrder.ID).Error)
+	assert.Equal(t, model.D2SOrderChargeback, fullyRefundedEpayOrder.Status)
 
 	for index, provider := range []string{"paymentfm", "alipay", "wechat"} {
 		order := makeOrder("epay-method-"+provider, 910+index, provider, "CNY")
