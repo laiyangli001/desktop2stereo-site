@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -159,4 +160,41 @@ func TestD2SAdminReconciliationRejectsInvalidWindow(t *testing.T) {
 		assert.False(t, response.Success)
 		assert.Equal(t, "invalid_input", response.Error.Code)
 	}
+}
+
+func TestD2SInviteRecordsLimitResults(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_invite_records_limit_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SInviteReward{}))
+	for i := 1; i <= 501; i++ {
+		require.NoError(t, db.Create(&model.D2SInviteReward{
+			ID: "invite-reward-" + strconv.Itoa(i), InviterUserID: 901,
+			InviteeUserID: 1000 + i, OrderID: "invite-order-" + strconv.Itoa(i),
+			Currency: "USD", AmountMinor: 140, Status: "credited", CreatedAt: int64(i),
+		}).Error)
+	}
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/invite/records", nil)
+	context.Set("id", 901)
+	D2SInviteRecords(context)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Data struct {
+			Records []model.D2SInviteReward `json:"records"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data.Records, 500)
+	assert.Equal(t, "invite-reward-501", response.Data.Records[0].ID)
 }

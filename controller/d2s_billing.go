@@ -175,7 +175,7 @@ func D2SInviteInfo(c *gin.Context) {
 
 func D2SInviteRecords(c *gin.Context) {
 	var rows []model.D2SInviteReward
-	if err := model.DB.Where("inviter_user_id = ?", c.GetInt("id")).Order("created_at DESC").Find(&rows).Error; err != nil {
+	if err := model.DB.Where("inviter_user_id = ?", c.GetInt("id")).Order("created_at DESC").Limit(500).Find(&rows).Error; err != nil {
 		d2sError(c, err)
 		return
 	}
