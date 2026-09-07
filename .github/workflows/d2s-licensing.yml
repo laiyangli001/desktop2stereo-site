@@ -36,6 +36,7 @@ on:
       - 'docs/d2s-production-drill.md'
       - 'docs/desktop2stereo-api.md'
       - '.env.example'
+      - 'docker-compose.yml'
       - 'go.mod'
       - 'go.sum'
   pull_request:
@@ -72,6 +73,7 @@ on:
       - 'docs/d2s-production-drill.md'
       - 'docs/desktop2stereo-api.md'
       - '.env.example'
+      - 'docker-compose.yml'
       - 'go.mod'
       - 'go.sum'
 
