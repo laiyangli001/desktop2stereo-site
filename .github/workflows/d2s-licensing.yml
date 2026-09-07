@@ -103,6 +103,11 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run build
+      - name: Validate production Compose configuration
+        env:
+          POSTGRES_PASSWORD: ci-postgres-password
+          REDIS_PASSWORD: ci-redis-password
+        run: docker compose config --quiet
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
       - name: Run complete Go test suite

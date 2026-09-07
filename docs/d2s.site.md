@@ -146,6 +146,8 @@ PayPal/Paddle 在完成适配器前不开放。
 1. 创建腾讯云 CVM/VPC、安全组、PostgreSQL、Redis 和 COS 备份桶。
 2. 将 `d2s.site` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
 3. 克隆本仓库并从 `.env.example` 创建生产 Secret 配置。
+   至少设置 `POSTGRES_PASSWORD` 和 `REDIS_PASSWORD`；生产 Compose 不再提供数据库或 Redis
+   密码默认值，执行 `docker compose config` 可提前检查变量是否齐全。
 4. 先确认 Go 没有被旧的代理覆盖，并使用官方模块代理和校验服务；这不改变 `go.mod`，也不绕过模块校验：
 
    ```bash
