@@ -208,6 +208,20 @@ describe('D2SAdminWorkspace', () => {
       screen.getAllByRole('textbox', { name: 'Review note' })
     ).toHaveLength(2)
 
+    fireEvent.change(screen.getByRole('textbox', { name: 'Order status' }), {
+      target: { value: 'paid' },
+    })
+    fireEvent.change(screen.getByRole('textbox', { name: 'User ID' }), {
+      target: { value: '42' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Filter orders' }))
+    await waitFor(() => {
+      expect(apiMocks.getD2SAdminOrders).toHaveBeenCalledWith({
+        status: 'paid',
+        user_id: '42',
+      })
+    })
+
     apiMocks.setD2SUserRegion.mockResolvedValue(response({}))
     fireEvent.change(screen.getByRole('combobox', { name: 'Region' }), {
       target: { value: 'CN' },
