@@ -112,4 +112,22 @@ describe('D2SWorkspace purchase flow', () => {
     })
     expect(apiMocks.createD2SOrderCheckout).toHaveBeenCalledWith('order-1')
   })
+
+  it('never renders unsupported PayPal or Paddle checkout controls', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ providers: ['paypal', 'paddle', 'stripe'] })
+    )
+
+    renderWorkspace()
+
+    expect(
+      await screen.findByRole('button', { name: 'Pay with Stripe' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Pay with PayPal/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Pay with Paddle/i })
+    ).not.toBeInTheDocument()
+  })
 })
