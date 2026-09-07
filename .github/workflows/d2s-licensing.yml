@@ -31,6 +31,10 @@ on:
       - 'web/src/routeTree.gen.ts'
       - 'web/package.json'
       - 'web/bun.lock'
+      - 'docs/01-cross-platform-licensing-server-implementation-plan.md'
+      - 'docs/d2s.site.md'
+      - 'docs/d2s-production-drill.md'
+      - 'docs/desktop2stereo-api.md'
       - 'go.mod'
       - 'go.sum'
   pull_request:
@@ -62,6 +66,10 @@ on:
       - 'web/src/routeTree.gen.ts'
       - 'web/package.json'
       - 'web/bun.lock'
+      - 'docs/01-cross-platform-licensing-server-implementation-plan.md'
+      - 'docs/d2s.site.md'
+      - 'docs/d2s-production-drill.md'
+      - 'docs/desktop2stereo-api.md'
       - 'go.mod'
       - 'go.sum'
 
