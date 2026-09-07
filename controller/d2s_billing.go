@@ -87,16 +87,22 @@ func D2SOrderProviders(c *gin.Context) {
 		return
 	}
 	providers := make([]string, 0, 7)
+	seenProviders := make(map[string]struct{}, 7)
 	appendProvider := func(provider string) {
+		if _, seen := seenProviders[provider]; seen {
+			return
+		}
 		if provider == model.D2SProviderBalance {
 			if profile.Region != "" {
 				providers = append(providers, provider)
+				seenProviders[provider] = struct{}{}
 			}
 			return
 		}
 		region, ok := model.D2SProviderRegion(provider)
 		if ok && (profile.Region == "" || profile.Region == region) {
 			providers = append(providers, provider)
+			seenProviders[provider] = struct{}{}
 		}
 	}
 	appendProvider(model.D2SProviderBalance)

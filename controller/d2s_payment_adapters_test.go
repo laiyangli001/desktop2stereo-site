@@ -302,7 +302,7 @@ func TestD2SOrderProvidersExposesConfiguredPaymentFM(t *testing.T) {
 	operation_setting.EpayId = "epay-id"
 	operation_setting.EpayKey = "epay-key"
 	operation_setting.PayMethods = []map[string]string{
-		{"type": "paymentfm"}, {"type": "alipay"}, {"type": "wxpay"},
+		{"type": "paymentfm"}, {"type": "paymentfm"}, {"type": "alipay"}, {"type": "wxpay"},
 	}
 
 	recorder := httptest.NewRecorder()
@@ -316,8 +316,19 @@ func TestD2SOrderProvidersExposesConfiguredPaymentFM(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
 	assert.Contains(t, response.Data.Providers, "paymentfm")
+	assert.Equal(t, 1, countString(response.Data.Providers, "paymentfm"))
 	assert.Contains(t, response.Data.Providers, "alipay")
 	assert.Contains(t, response.Data.Providers, "wechat")
+}
+
+func countString(values []string, target string) int {
+	count := 0
+	for _, value := range values {
+		if value == target {
+			count++
+		}
+	}
+	return count
 }
 
 func TestStripeD2SPaymentEventMapsRefundAndDisputeStates(t *testing.T) {
