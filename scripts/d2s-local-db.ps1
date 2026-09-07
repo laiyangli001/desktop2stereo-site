@@ -26,6 +26,16 @@ function Get-ListeningProcessId([int]$Port) {
         Select-Object -First 1 -ExpandProperty OwningProcess)
 }
 
+function Assert-PortOwnedByDatabase([int]$Port, [string]$Name, [string[]]$AllowedExecutables) {
+    $processId = Get-ListeningProcessId $Port
+    if (!$processId) { return }
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
+    $executablePath = if ($process) { $process.ExecutablePath } else { $null }
+    if ($executablePath -notin $AllowedExecutables) {
+        throw "$Name port $Port is occupied by an unexpected process (pid $processId): $executablePath"
+    }
+}
+
 function Wait-ForPort([int]$Port) {
     for ($attempt = 0; $attempt -lt 30; $attempt++) {
         if (Get-ListeningProcessId $Port) { return }
@@ -54,6 +64,8 @@ function Invoke-LocalDatabaseInit {
     Assert-Installed
     Assert-SafeIdentifier $TestDatabase 'TestDatabase'
     Assert-SafeIdentifier $TestUser 'TestUser'
+    Assert-PortOwnedByDatabase $PostgreSQLPort 'PostgreSQL' @($postgresExe)
+    Assert-PortOwnedByDatabase $MySQLPort 'MySQL' @($mysqlExe)
     if (!(Get-ListeningProcessId $PostgreSQLPort) -or !(Get-ListeningProcessId $MySQLPort)) {
         throw 'Both local databases must be running before init'
     }
@@ -136,6 +148,8 @@ switch ($Action) {
         Assert-Installed
         if (!(Test-Path -LiteralPath (Join-Path $postgresData 'PG_VERSION'))) { throw "PostgreSQL data directory is not initialized: $postgresData" }
         if (!(Test-Path -LiteralPath (Join-Path $mysqlData 'mysql'))) { throw "MySQL data directory is not initialized: $mysqlData" }
+        Assert-PortOwnedByDatabase $PostgreSQLPort 'PostgreSQL' @($postgresExe)
+        Assert-PortOwnedByDatabase $MySQLPort 'MySQL' @($mysqlExe)
         if (!(Get-ListeningProcessId $PostgreSQLPort)) {
             & $postgresCtl -D $postgresData -l $postgresLog -o "-p $PostgreSQLPort -h 127.0.0.1" start
             if ($LASTEXITCODE -ne 0) { throw "PostgreSQL failed to start: $LASTEXITCODE" }
