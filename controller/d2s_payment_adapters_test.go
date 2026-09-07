@@ -152,8 +152,8 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 		require.NoError(t, db.Create(&model.User{Id: userID, Username: "adapter-user-" + strconv.Itoa(userID), Email: "adapter-" + strconv.Itoa(userID) + "@example.com", Password: "unused-hash", AffCode: "adapter-aff-" + strconv.Itoa(userID), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}).Error)
 		require.NoError(t, db.Create(&model.D2SUserProfile{UserID: userID, EmailVerified: true, CreatedAt: now, UpdatedAt: now}).Error)
 		region := model.D2SRegionINTL
-		if provider == "epay" || provider == "waffo" {
-			region = model.D2SRegionCN
+		if providerRegion, ok := model.D2SProviderRegion(provider); ok {
+			region = providerRegion
 		}
 		order := model.D2SOrder{ID: id, UserID: userID, Product: model.D2SOrderProductLicense, Provider: provider, Region: region, Currency: currency, AmountMinor: 2990, GatewayMinor: 2990, Status: model.D2SOrderPending, CreatedAt: now, ExpiresAt: now + 1800}
 		require.NoError(t, db.Create(&order).Error)
@@ -165,6 +165,21 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	handled, err := processEpayD2SPayment(epayResult, []byte("epay-payload"))
 	require.NoError(t, err)
 	assert.True(t, handled)
+
+	for index, provider := range []string{"paymentfm", "alipay", "wechat"} {
+		order := makeOrder("epay-method-"+provider, 910+index, provider, "CNY")
+		handled, err = processEpayD2SPayment(&epay.VerifyRes{
+			TradeNo:        "epay-method-event-" + provider,
+			ServiceTradeNo: order.ID,
+			Money:          "29.90",
+			TradeStatus:    epay.StatusTradeSuccess,
+		}, []byte("epay-method-payload-"+provider))
+		require.NoError(t, err)
+		assert.True(t, handled)
+		var settled model.D2SOrder
+		require.NoError(t, db.First(&settled, "id = ?", order.ID).Error)
+		assert.Equal(t, model.D2SOrderPaid, settled.Status)
+	}
 
 	epayCanceledOrder := makeOrder("epay-canceled-order", 905, "epay", "CNY")
 	handled, err = processEpayD2SPayment(&epay.VerifyRes{
