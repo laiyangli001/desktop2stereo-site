@@ -103,5 +103,7 @@ PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 - `PUT /api/v1/admin/users/:id/region`
 
 管理员写操作经过 new-api 的管理员审计中间件。区域只允许在余额为零、无待处理订单和提现时调整。
-对账报告还会标记 `paid_order_without_payment_event`、`paid_order_not_settled`、
+对账报告按订单创建时间和窗口内支付事件的订单引用共同确定范围，因此旧订单在窗口内发生
+退款/拒付时也会被纳入。报告会标记 `paid_order_without_payment_event`、
+`paid_order_not_settled`、`cancel_event_not_settled`、`reversal_not_settled`、
 `orphan_payment_event`、`payment_order_mismatch` 和 `pending_expired`，仅报告异常，不自动改账。

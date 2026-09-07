@@ -659,3 +659,27 @@ func TestD2SPaymentReconciliationReportsLocalAnomalies(t *testing.T) {
 	_, err = ReconcileD2SPayments(now, now)
 	assert.Error(t, err)
 }
+
+func TestD2SPaymentReconciliationIncludesOlderOrdersReferencedByEvents(t *testing.T) {
+	useD2STestDB(t)
+	const now = int64(2_000_700_000)
+	require.NoError(t, DB.Create(&D2SOrder{
+		ID: "reconcile-old-paid", UserID: 1, Product: D2SOrderProductLicense, Provider: "stripe",
+		Region: D2SRegionINTL, Currency: "USD", AmountMinor: 2990, GatewayMinor: 2990,
+		Status: D2SOrderPaid, CreatedAt: now - 86400, ExpiresAt: now + 1700,
+	}).Error)
+	require.NoError(t, DB.Create(&D2SPaymentEvent{
+		ID: "reconcile-reversal-event", Provider: "stripe", ProviderEventID: "reconcile-reversal",
+		OrderID: "reconcile-old-paid", EventType: "reversed", AmountMinor: 2990, Currency: "USD",
+		PayloadHash: "reconcile-reversal-hash", ProcessedAt: now + 10,
+	}).Error)
+
+	report, err := ReconcileD2SPayments(now, now+100)
+	require.NoError(t, err)
+	assert.Equal(t, 1, report.Orders)
+	assert.Equal(t, 1, report.PaymentEvents)
+	assert.Equal(t, 1, report.PaidOrders)
+	assert.Contains(t, report.Mismatches, D2SReconciliationMismatch{
+		OrderID: "reconcile-old-paid", ProviderEventID: "reconcile-reversal", Kind: "reversal_not_settled",
+	})
+}

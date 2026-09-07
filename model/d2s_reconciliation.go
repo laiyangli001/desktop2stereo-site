@@ -37,8 +37,10 @@ func ReconcileD2SPayments(startAt, endAt int64) (*D2SReconciliationReport, error
 	}
 	report := &D2SReconciliationReport{StartAt: startAt, EndAt: endAt, Orders: len(orders), Mismatches: make([]D2SReconciliationMismatch, 0)}
 	orderByID := make(map[string]D2SOrder, len(orders))
+	createdInWindow := make(map[string]bool, len(orders))
 	for _, order := range orders {
 		orderByID[order.ID] = order
+		createdInWindow[order.ID] = true
 		switch order.Status {
 		case D2SOrderPaid:
 			report.PaidOrders++
@@ -69,19 +71,38 @@ func ReconcileD2SPayments(startAt, endAt int64) (*D2SReconciliationReport, error
 				return nil, err
 			}
 			order = found
+			orderByID[order.ID] = order
+			report.Orders++
+			switch order.Status {
+			case D2SOrderPaid:
+				report.PaidOrders++
+			case D2SOrderChargeback:
+				report.ChargebackOrders++
+			}
 		}
 		if event.AmountMinor != order.GatewayMinor || event.Currency != order.Currency || event.Provider != order.Provider {
 			report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, ProviderEventID: event.ProviderEventID, Kind: "payment_order_mismatch"})
 		}
-		if event.EventType == "paid" && order.Status != D2SOrderPaid && order.Status != D2SOrderChargeback {
-			report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, ProviderEventID: event.ProviderEventID, Kind: "paid_order_not_settled"})
+		switch event.EventType {
+		case "paid":
+			if order.Status != D2SOrderPaid && order.Status != D2SOrderChargeback {
+				report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, ProviderEventID: event.ProviderEventID, Kind: "paid_order_not_settled"})
+			}
+		case "canceled", "failed":
+			if order.Status != D2SOrderCanceled {
+				report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, ProviderEventID: event.ProviderEventID, Kind: "cancel_event_not_settled"})
+			}
+		case "chargeback", "reversed":
+			if order.Status != D2SOrderChargeback {
+				report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, ProviderEventID: event.ProviderEventID, Kind: "reversal_not_settled"})
+			}
 		}
 		if event.EventType == "paid" && order.GatewayMinor > 0 {
 			paidExternalEvents[order.ID] = true
 		}
 	}
 	for _, order := range orders {
-		if order.Status == D2SOrderPaid && order.GatewayMinor > 0 && !paidExternalEvents[order.ID] {
+		if createdInWindow[order.ID] && order.Status == D2SOrderPaid && order.GatewayMinor > 0 && !paidExternalEvents[order.ID] {
 			report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, Kind: "paid_order_without_payment_event"})
 		}
 	}
