@@ -287,7 +287,9 @@ func D2SAdminOrders(c *gin.Context) {
 func D2SAdminBalances(c *gin.Context) {
 	var rows []model.D2SBalanceAccount
 	query := model.DB.Order("updated_at DESC").Limit(500)
-	if c.Query("negative") == "true" {
+	// Negative balances are the audit default; pass negative=false when an
+	// administrator explicitly needs the complete balance listing.
+	if c.Query("negative") != "false" {
 		query = query.Where("available_minor < 0")
 	}
 	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {

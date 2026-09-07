@@ -98,3 +98,41 @@ func TestD2SAdminSigningKeysMarksCurrentKey(t *testing.T) {
 	assert.False(t, current["old-admin-key"])
 	assert.True(t, service.IsD2SCurrentSigningKey("current-admin-key"))
 }
+
+func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_admin_balances_default_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SBalanceAccount{}))
+	require.NoError(t, db.Create(&model.D2SBalanceAccount{ID: "negative-balance", UserID: 801, Currency: "USD", AvailableMinor: -140}).Error)
+	require.NoError(t, db.Create(&model.D2SBalanceAccount{ID: "positive-balance", UserID: 802, Currency: "USD", AvailableMinor: 140}).Error)
+
+	call := func(path string) []model.D2SBalanceAccount {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodGet, path, nil)
+		D2SAdminBalances(context)
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		var response struct {
+			Data struct {
+				Accounts []model.D2SBalanceAccount `json:"accounts"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+		return response.Data.Accounts
+	}
+
+	defaultAccounts := call("/api/v1/admin/balances")
+	require.Len(t, defaultAccounts, 1)
+	assert.Equal(t, "negative-balance", defaultAccounts[0].ID)
+
+	allAccounts := call("/api/v1/admin/balances?negative=false")
+	assert.Len(t, allAccounts, 2)
+}
