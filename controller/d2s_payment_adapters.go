@@ -286,7 +286,7 @@ func processWaffoD2SRefund(notification *core.RefundNotification, payload []byte
 	if err != nil || minorValue <= 0 {
 		return true, fmt.Errorf("invalid Waffo refund amount %q: %w", result.RefundAmount, model.ErrD2SPaymentMismatch)
 	}
-	currency := strings.TrimSpace(result.UserCurrency)
+	currency := strings.ToUpper(strings.TrimSpace(result.UserCurrency))
 	if currency == "" {
 		currency = originalEvent.Currency
 	}

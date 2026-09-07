@@ -175,7 +175,7 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 			OrigPaymentRequestID: "waffo-event",
 			RefundAmount:         "29.90",
 			RefundStatus:         core.RefundStatusFullyRefunded,
-			UserCurrency:         "CNY",
+			UserCurrency:         "cny",
 		},
 	}
 	handled, err = processWaffoD2SRefund(refund, []byte("waffo-refund-payload"))
