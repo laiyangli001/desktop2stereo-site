@@ -73,6 +73,14 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: '1.4.0'
+      - name: Build embedded frontend for root Go package
+        working-directory: web
+        run: |
+          bun install --frozen-lockfile
+          bun run build
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
       - name: Run complete Go test suite
