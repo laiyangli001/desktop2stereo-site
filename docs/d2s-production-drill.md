@@ -20,6 +20,7 @@
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty
 `TRUSTED_PROXIES` configuration before the HTTP checks are considered sufficient.
+When HTTP checks are enabled, the script also rejects an `http://` `-BaseUrl`.
 
 ## 1. 数据库和双实例
 

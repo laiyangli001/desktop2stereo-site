@@ -54,6 +54,9 @@ if ($RequireSecrets) {
 
 if (-not $SkipHttp) {
     $normalizedBaseUrl = $BaseUrl.TrimEnd('/')
+    if ($normalizedBaseUrl -notmatch '^https://') {
+        throw "Production HTTP readiness checks require an HTTPS BaseUrl"
+    }
     $health = Invoke-WebRequest -Uri "$normalizedBaseUrl/api/status" -UseBasicParsing
     if ($health.StatusCode -ne 200) {
         throw "Health endpoint returned HTTP $($health.StatusCode)"
