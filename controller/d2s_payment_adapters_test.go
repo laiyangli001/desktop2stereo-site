@@ -27,11 +27,15 @@ import (
 )
 
 func stripeD2STestEvent(eventType stripe.EventType, object map[string]any) stripe.Event {
+	return stripeD2STestEventWithID("evt_d2s_test", eventType, object)
+}
+
+func stripeD2STestEventWithID(id string, eventType stripe.EventType, object map[string]any) stripe.Event {
 	raw, _ := json.Marshal(object)
 	var objectMap map[string]interface{}
 	_ = json.Unmarshal(raw, &objectMap)
 	return stripe.Event{
-		ID:   "evt_d2s_test",
+		ID:   id,
 		Type: eventType,
 		Data: &stripe.EventData{Raw: raw, Object: objectMap},
 	}
@@ -412,6 +416,64 @@ func TestStripeD2SOrderIDReadsMetadataForReversalEvents(t *testing.T) {
 		"metadata": map[string]string{"d2s_order_id": "d2s-order-123"},
 	})
 	assert.Equal(t, "d2s-order-123", stripeD2SOrderID(event))
+}
+
+func TestStripeD2SAdapterSettlesFullRefundThroughSharedTransaction(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_stripe_reversal_integration?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(
+		&model.User{}, &model.D2SUserProfile{}, &model.D2SLicense{},
+		&model.D2SLicenseEvent{}, &model.D2SOrder{}, &model.D2SPaymentEvent{},
+		&model.D2SBalanceAccount{}, &model.D2SBalanceTransaction{}, &model.D2SInviteReward{},
+	))
+	now := int64(2_000_950_000)
+	require.NoError(t, db.Create(&model.User{
+		Id: 1310, Username: "stripe-reversal", Email: "stripe-reversal@example.com",
+		Password: "unused-hash", Role: common.RoleCommonUser, Status: common.UserStatusEnabled,
+		Group: "default", AuthVersion: 1,
+	}).Error)
+	require.NoError(t, db.Create(&model.D2SUserProfile{
+		UserID: 1310, EmailVerified: true, CreatedAt: now, UpdatedAt: now,
+	}).Error)
+	require.NoError(t, db.Create(&model.D2SOrder{
+		ID: "stripe-reversal-order", UserID: 1310, Product: model.D2SOrderProductLicense,
+		Provider: "stripe", Region: model.D2SRegionINTL, Currency: "USD", AmountMinor: 2990,
+		GatewayMinor: 2990, Status: model.D2SOrderPending, CreatedAt: now, ExpiresAt: now + 1800,
+	}).Error)
+
+	paid := stripeD2STestEventWithID("evt_stripe_paid", stripe.EventTypeCheckoutSessionCompleted, map[string]any{
+		"client_reference_id": "stripe-reversal-order",
+		"payment_status":      "paid",
+		"amount_total":        "2990",
+		"currency":            "usd",
+	})
+	handled, err := processStripeD2SPayment(paid, []byte(`{"id":"evt_stripe_paid"}`))
+	require.NoError(t, err)
+	assert.True(t, handled)
+
+	refund := stripeD2STestEventWithID("evt_stripe_refund", "charge.refunded", map[string]any{
+		"metadata":        map[string]string{"d2s_order_id": "stripe-reversal-order"},
+		"amount_refunded": "2990",
+		"currency":        "usd",
+	})
+	handled, err = processStripeD2SPayment(refund, []byte(`{"id":"evt_stripe_refund"}`))
+	require.NoError(t, err)
+	assert.True(t, handled)
+
+	var order model.D2SOrder
+	require.NoError(t, db.First(&order, "id = ?", "stripe-reversal-order").Error)
+	assert.Equal(t, model.D2SOrderChargeback, order.Status)
+	var eventCount int64
+	require.NoError(t, db.Model(&model.D2SPaymentEvent{}).Where("order_id = ?", order.ID).Count(&eventCount).Error)
+	assert.EqualValues(t, 2, eventCount)
 }
 
 func TestCreemD2SReversalDetailsUsesCheckoutRequestID(t *testing.T) {
