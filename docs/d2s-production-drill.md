@@ -15,7 +15,7 @@
 先在应用节点执行：
 
 ```powershell
-.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -RequireSecrets
+.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
 ```
 
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
@@ -24,6 +24,9 @@
 It also validates positive integer offline-extension prices and Base64 private-key
 material, requires 32-character session and payment-bridge secrets, and rejects
 wildcard or whole-address-space trusted-proxy entries.
+Pass the channels enabled in the deployment to `-RequiredPaymentProviders`; each
+listed channel must have its own 32-character `D2S_PAYMENT_BRIDGE_SECRET_{PROVIDER}`
+value. The parameter does not require secrets for disabled channels.
 When HTTP checks are enabled, the script also rejects an `http://` `-BaseUrl`.
 
 ## 1. 数据库和双实例

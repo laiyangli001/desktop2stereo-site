@@ -135,6 +135,8 @@ jobs:
           $env:D2S_LICENSE_KEY_ID = 'ci-key'
           $bridgeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET'
           Set-Item "Env:$bridgeSecretName" ('p' * 32)
+          $env:D2S_PAYMENT_BRIDGE_SECRET_STRIPE = 'r' * 32
+          $env:D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE = 'w' * 32
           $privateKeyName = 'D2S_' + 'LICENSE_PRIVATE_KEY_B64'
           Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32)))
           $env:D2S_OFFLINE_EXTENSION_CNY_MINOR = '3000'
@@ -143,7 +145,7 @@ jobs:
           $env:SESSION_COOKIE_TRUSTED_URL = 'https://d2s.site'
           $env:TRUSTED_PROXIES = 'none'
           $env:SESSION_COOKIE_SECURE = 'true'
-          ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp
+          ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp -RequiredPaymentProviders stripe,waffo_pancake
 
   frontend:
     name: D2S frontend typecheck, test, and build

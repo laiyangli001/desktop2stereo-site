@@ -2,7 +2,8 @@
 param(
     [string]$BaseUrl = "https://d2s.site",
     [switch]$RequireSecrets,
-    [switch]$SkipHttp
+    [switch]$SkipHttp,
+    [string[]]$RequiredPaymentProviders = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +31,17 @@ function Assert-MinimumLengthEnvironmentVariable([string]$Name, [int]$MinimumLen
         throw "Required environment variable is shorter than $MinimumLength characters: $Name"
     }
     Write-Host "OK high-entropy secret length present: $Name"
+}
+
+function Assert-RequiredPaymentProviderSecrets([string[]]$Providers) {
+    $supportedProviders = @('stripe', 'creem', 'epay', 'paymentfm', 'alipay', 'wechat', 'waffo', 'waffo_pancake')
+    foreach ($provider in @($Providers | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })) {
+        if ($provider -notin $supportedProviders) {
+            throw "RequiredPaymentProviders contains an unsupported provider: $provider"
+        }
+        $environmentName = "D2S_PAYMENT_BRIDGE_SECRET_$($provider.ToUpperInvariant())"
+        Assert-MinimumLengthEnvironmentVariable $environmentName 32
+    }
 }
 
 function Assert-TrustedProxyConfiguration([string]$RawValue) {
@@ -90,6 +102,7 @@ if ($RequireSecrets) {
     Assert-NonEmptyEnvironmentVariable "SESSION_COOKIE_TRUSTED_URL"
     Assert-NonEmptyEnvironmentVariable "TRUSTED_PROXIES"
     Assert-TrustedProxyConfiguration ([Environment]::GetEnvironmentVariable("TRUSTED_PROXIES"))
+    Assert-RequiredPaymentProviderSecrets $RequiredPaymentProviders
 
     try {
         $privateKeyBytes = [Convert]::FromBase64String([Environment]::GetEnvironmentVariable("D2S_LICENSE_PRIVATE_KEY_B64"))
