@@ -255,8 +255,8 @@ export function D2SAdminWorkspace() {
                     }
                   />
                   <Input
-                    aria-label='event_type'
-                    placeholder='event_type'
+                    aria-label={t('Event type')}
+                    placeholder={t('Event type')}
                     value={eventFilters.event_type}
                     onChange={(event) =>
                       setEventFilters((current) => ({
@@ -266,8 +266,8 @@ export function D2SAdminWorkspace() {
                     }
                   />
                   <Input
-                    aria-label='order_id'
-                    placeholder='order_id'
+                    aria-label={t('Order ID')}
+                    placeholder={t('Order ID')}
                     value={eventFilters.order_id}
                     onChange={(event) =>
                       setEventFilters((current) => ({

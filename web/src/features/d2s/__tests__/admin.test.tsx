@@ -164,6 +164,12 @@ describe('D2SAdminWorkspace', () => {
     expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
     expect(
+      screen.getByRole('textbox', { name: 'Event type' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Order ID' })
+    ).toBeInTheDocument()
+    expect(
       screen.getByText(/Status: active · Mode: online/)
     ).toBeInTheDocument()
     expect(screen.getByText(/Device: 123456789012…/)).toBeInTheDocument()
