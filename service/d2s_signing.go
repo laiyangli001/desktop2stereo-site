@@ -68,6 +68,27 @@ func IsD2SCurrentSigningKey(keyID string) bool {
 	return strings.TrimSpace(keyID) == d2sConfiguredKeyID()
 }
 
+func parseD2SPrivateKey(raw []byte) (*ecdsa.PrivateKey, error) {
+	if block, _ := pem.Decode(raw); block != nil {
+		raw = block.Bytes
+	}
+	var key *ecdsa.PrivateKey
+	if parsed, err := x509.ParsePKCS8PrivateKey(raw); err == nil {
+		key, _ = parsed.(*ecdsa.PrivateKey)
+	}
+	if key == nil {
+		parsed, err := x509.ParseECPrivateKey(raw)
+		if err != nil {
+			return nil, ErrD2SSigningKeyInvalid
+		}
+		key = parsed
+	}
+	if key.Curve != elliptic.P256() {
+		return nil, fmt.Errorf("%w: expected P-256", ErrD2SSigningKeyInvalid)
+	}
+	return key, nil
+}
+
 func d2sSigningKey() (*ecdsa.PrivateKey, string, error) {
 	keyID := d2sConfiguredKeyID()
 	raw := strings.TrimSpace(os.Getenv("D2S_LICENSE_PRIVATE_KEY_PEM"))
@@ -76,29 +97,19 @@ func d2sSigningKey() (*ecdsa.PrivateKey, string, error) {
 		if err != nil {
 			return nil, "", fmt.Errorf("%w: base64 decode failed", ErrD2SSigningKeyInvalid)
 		}
-		raw = string(decoded)
+		key, err := parseD2SPrivateKey(decoded)
+		if err != nil {
+			return nil, "", err
+		}
+		return key, keyID, nil
 	}
 	if raw == "" {
 		return nil, "", ErrD2SSigningKeyMissing
 	}
 	raw = strings.ReplaceAll(raw, `\n`, "\n")
-	block, _ := pem.Decode([]byte(raw))
-	if block == nil {
-		return nil, "", ErrD2SSigningKeyInvalid
-	}
-	var key *ecdsa.PrivateKey
-	if parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes); err == nil {
-		key, _ = parsed.(*ecdsa.PrivateKey)
-	}
-	if key == nil {
-		parsed, err := x509.ParseECPrivateKey(block.Bytes)
-		if err != nil {
-			return nil, "", ErrD2SSigningKeyInvalid
-		}
-		key = parsed
-	}
-	if key.Curve != elliptic.P256() {
-		return nil, "", fmt.Errorf("%w: expected P-256", ErrD2SSigningKeyInvalid)
+	key, err := parseD2SPrivateKey([]byte(raw))
+	if err != nil {
+		return nil, "", err
 	}
 	return key, keyID, nil
 }

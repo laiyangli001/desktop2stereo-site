@@ -92,6 +92,22 @@ func TestD2SOfflineEntitlementIsValidES256JWS(t *testing.T) {
 	assert.True(t, ecdsa.Verify(&key.PublicKey, digest[:], r, s))
 }
 
+func TestD2SSigningKeyAcceptsBase64EncodedPKCS8DER(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	t.Setenv("D2S_LICENSE_PRIVATE_KEY_PEM", "")
+	t.Setenv("D2S_LICENSE_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(der))
+	t.Setenv("D2S_LICENSE_KEY_ID", "base64-der-key")
+
+	parsed, keyID, err := d2sSigningKey()
+	require.NoError(t, err)
+	assert.Equal(t, "base64-der-key", keyID)
+	assert.Equal(t, key.PublicKey.X, parsed.PublicKey.X)
+	assert.Equal(t, key.PublicKey.Y, parsed.PublicKey.Y)
+}
+
 func TestD2SRetireSigningKeyProtectsCurrentKey(t *testing.T) {
 	previousDB := model.DB
 	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()

@@ -99,7 +99,12 @@ if ($RequireSecrets) {
     if ($privateKeyBytes.Length -lt 32) {
         throw "D2S_LICENSE_PRIVATE_KEY_B64 does not contain a usable private key payload"
     }
-    Write-Host "OK signing private key is valid Base64"
+    $isPemPayload = $privateKeyBytes[0] -eq [byte][char]'-'
+    $isDerPayload = $privateKeyBytes[0] -eq 0x30
+    if (-not ($isPemPayload -or $isDerPayload)) {
+        throw "D2S_LICENSE_PRIVATE_KEY_B64 must contain a PEM or DER private key payload"
+    }
+    Write-Host "OK signing private key is valid Base64 with PEM/DER payload"
 
     $cookieSecure = [Environment]::GetEnvironmentVariable("SESSION_COOKIE_SECURE")
     if ($cookieSecure -ne "true") {
