@@ -7,6 +7,8 @@ on:
       - '.github/workflows/d2s-licensing.yml'
       - 'scripts/d2s-sensitive-scan.ps1'
       - 'scripts/d2s-go-deps.ps1'
+      - 'scripts/d2s-production-readiness.ps1'
+      - 'scripts/d2s-reconciliation.ps1'
       - 'controller/d2s_*.go'
       - 'controller/payment_webhook_availability*.go'
       - 'controller/topup*.go'
@@ -18,6 +20,8 @@ on:
       - 'web/src/features/d2s/**'
       - 'web/src/routes/_authenticated/d2s/**'
       - 'web/src/routes/_authenticated/d2s-admin/**'
+      - 'web/src/routes/device.tsx'
+      - 'web/src/routes/__tests__/device.test.tsx'
       - 'web/src/hooks/use-sidebar-data.ts'
       - 'web/src/routeTree.gen.ts'
       - 'web/package.json'
@@ -29,6 +33,8 @@ on:
       - '.github/workflows/d2s-licensing.yml'
       - 'scripts/d2s-sensitive-scan.ps1'
       - 'scripts/d2s-go-deps.ps1'
+      - 'scripts/d2s-production-readiness.ps1'
+      - 'scripts/d2s-reconciliation.ps1'
       - 'controller/d2s_*.go'
       - 'controller/payment_webhook_availability*.go'
       - 'controller/topup*.go'
@@ -40,6 +46,8 @@ on:
       - 'web/src/features/d2s/**'
       - 'web/src/routes/_authenticated/d2s/**'
       - 'web/src/routes/_authenticated/d2s-admin/**'
+      - 'web/src/routes/device.tsx'
+      - 'web/src/routes/__tests__/device.test.tsx'
       - 'web/src/hooks/use-sidebar-data.ts'
       - 'web/src/routeTree.gen.ts'
       - 'web/package.json'
@@ -67,14 +75,24 @@ jobs:
           cache: true
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
+      - name: Run Go static checks and root build
+        run: |
+          go vet ./controller ./model ./service ./router
+          go build ./...
       - name: Scan tracked files for sensitive material
         shell: pwsh
         run: ./scripts/d2s-sensitive-scan.ps1
       - name: Validate deployment PowerShell scripts
         shell: pwsh
         run: |
-          $script = Get-Content -Raw -Encoding UTF8 ./scripts/d2s-go-deps.ps1
-          [void][scriptblock]::Create($script)
+          foreach ($path in @(
+            './scripts/d2s-go-deps.ps1',
+            './scripts/d2s-production-readiness.ps1',
+            './scripts/d2s-reconciliation.ps1'
+          )) {
+            $script = Get-Content -Raw -Encoding UTF8 $path
+            [void][scriptblock]::Create($script)
+          }
 
   frontend:
     name: D2S frontend typecheck, test, and build
@@ -93,7 +111,7 @@ jobs:
       - name: Typecheck, build, and run D2S frontend tests
         run: |
           bun run build:check
-          bun run test -- src/features/d2s/__tests__
+          bun run test -- src/features/d2s/__tests__ src/routes/__tests__/device.test.tsx
 
   databases:
     name: MySQL and PostgreSQL migrations
