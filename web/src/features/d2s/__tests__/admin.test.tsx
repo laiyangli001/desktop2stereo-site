@@ -157,7 +157,7 @@ describe('D2SAdminWorkspace', () => {
     })
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
     expect(
-      screen.getByRole('textbox', { name: 'Order status' })
+      screen.getByRole('combobox', { name: 'Order status' })
     ).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'User ID' })).toBeInTheDocument()
     expect(
@@ -218,7 +218,7 @@ describe('D2SAdminWorkspace', () => {
       screen.getAllByRole('textbox', { name: 'Review note' })
     ).toHaveLength(2)
 
-    fireEvent.change(screen.getByRole('textbox', { name: 'Order status' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: 'Order status' }), {
       target: { value: 'paid' },
     })
     fireEvent.change(screen.getByRole('textbox', { name: 'User ID' }), {

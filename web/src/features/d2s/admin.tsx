@@ -206,9 +206,8 @@ export function D2SAdminWorkspace() {
                     })
                   }}
                 >
-                  <Input
+                  <select
                     aria-label={t('Order status')}
-                    placeholder={t('Order status')}
                     value={orderFilters.status}
                     onChange={(event) =>
                       setOrderFilters((current) => ({
@@ -216,7 +215,14 @@ export function D2SAdminWorkspace() {
                         status: event.target.value,
                       }))
                     }
-                  />
+                    className='h-9 rounded-lg border bg-transparent px-3 text-sm'
+                  >
+                    <option value=''>{t('All statuses')}</option>
+                    <option value='pending'>pending</option>
+                    <option value='paid'>paid</option>
+                    <option value='canceled'>canceled</option>
+                    <option value='chargeback'>chargeback</option>
+                  </select>
                   <Input
                     aria-label={t('User ID')}
                     placeholder={t('User ID')}
