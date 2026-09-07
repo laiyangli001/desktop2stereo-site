@@ -139,7 +139,7 @@ GORM 维护以下表：
 
 - 把 Stripe、Creem、易支付、Waffo 的官方验签结果接入 D2S 规范事件桥。
 - PayPal/Paddle 在实现适配器前从首发页面和文档中移除。
-- 已覆盖开放渠道的统一订单事务、幂等、金额/币种校验，以及 Stripe、Creem、Waffo、Waffo Pancake 的冲正回归；真实渠道沙箱矩阵和日终对账仍待执行。
+- 已覆盖开放渠道的统一订单事务、幂等、金额/币种校验，以及 Stripe、Creem、易支付（含 `TRADE_REFUND`）、Waffo、Waffo Pancake 的冲正回归；真实渠道沙箱矩阵和日终对账仍待执行。
 - 对所有开放渠道执行完整沙箱异常矩阵和日终对账。
 
 ### S4：用户与管理员网页

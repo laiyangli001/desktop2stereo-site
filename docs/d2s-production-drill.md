@@ -56,6 +56,9 @@ When HTTP checks are enabled, the script also rejects an `http://` `-BaseUrl`.
 | 全额退款/拒付 | 订单 `chargeback`，授权暂停，奖励冲正 |
 | 部分退款 | 按当前全额金额契约拒绝并进入人工对账 |
 
+易支付 V1 的 `TRADE_REFUND` 回调可能表示部分或全部退款；服务端将其送入统一金额校验，
+只有金额等于原支付金额时才会完成冲正，部分退款保留订单状态并进入人工对账。
+
 日终调用管理员对账接口，并与渠道结算文件逐笔比对：
 
 ```bash
