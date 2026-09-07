@@ -45,6 +45,17 @@ export type D2SBalanceAccount = {
   reserved_minor: number
 }
 
+export type D2SBalanceTransaction = {
+  id: string
+  user_id?: number
+  currency: string
+  kind: string
+  amount_minor: number
+  order_id?: string
+  reference_id?: string
+  created_at: number
+}
+
 export type D2SInviteInfo = {
   invite_code: string
   rewarded_invitees: number

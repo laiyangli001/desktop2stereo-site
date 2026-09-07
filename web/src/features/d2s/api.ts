@@ -2,6 +2,7 @@ import { api } from '@/lib/api'
 
 import type {
   D2SBalanceAccount,
+  D2SBalanceTransaction,
   D2SInviteInfo,
   D2SLicense,
   D2SOrder,
@@ -153,6 +154,13 @@ export async function getD2SBalance(): Promise<
   D2SResponse<{ accounts: D2SBalanceAccount[] }>
 > {
   const response = await api.get('/api/v1/balance/info')
+  return response.data
+}
+
+export async function getD2SBalanceTransactions(): Promise<
+  D2SResponse<{ transactions: D2SBalanceTransaction[] }>
+> {
+  const response = await api.get('/api/v1/balance/transactions')
   return response.data
 }
 

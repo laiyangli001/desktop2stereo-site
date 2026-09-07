@@ -16,6 +16,7 @@ import {
 
 import {
   getD2SBalance,
+  getD2SBalanceTransactions,
   getD2SInvite,
   getD2SLicenses,
   getD2SOrders,
@@ -251,6 +252,10 @@ export function D2SWorkspace() {
     queryKey: ['d2s', 'balance'],
     queryFn: getD2SBalance,
   })
+  const balanceTransactions = useQuery({
+    queryKey: ['d2s', 'balance-transactions'],
+    queryFn: getD2SBalanceTransactions,
+  })
   const invite = useQuery({
     queryKey: ['d2s', 'invite'],
     queryFn: getD2SInvite,
@@ -309,6 +314,7 @@ export function D2SWorkspace() {
     orders,
     checkoutProviders,
     balance,
+    balanceTransactions,
     invite,
     withdrawals,
     manualUnbinds,
@@ -317,6 +323,7 @@ export function D2SWorkspace() {
   const d2sDataFailed = d2sQueries.some((query) => query.isError)
 
   const accountRows = balance.data?.data?.accounts ?? []
+  const transactionRows = balanceTransactions.data?.data?.transactions ?? []
   const orderRows = orders.data?.data?.orders ?? []
   const withdrawalRows = withdrawals.data?.data?.withdrawals ?? []
   const purchasableLicenses = (licenses.data?.data?.licenses ?? []).filter(
@@ -454,6 +461,44 @@ export function D2SWorkspace() {
                   </div>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('Balance transactions')}</CardTitle>
+              <CardDescription>
+                {t('Recent currency ledger entries.')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {transactionRows.length === 0 ? (
+                <p className='text-muted-foreground'>
+                  {t('No balance transactions')}
+                </p>
+              ) : (
+                transactionRows.map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className='flex flex-wrap justify-between gap-2 border-b py-3 text-sm last:border-0'
+                  >
+                    <span>
+                      {transaction.kind}
+                      {transaction.order_id && ` · ${transaction.order_id}`}
+                    </span>
+                    <span>
+                      {transaction.amount_minor > 0 ? '+' : ''}
+                      {formatMoney(
+                        transaction.amount_minor,
+                        transaction.currency
+                      )}{' '}
+                      <span className='text-muted-foreground text-xs'>
+                        {formatDate(transaction.created_at)}
+                      </span>
+                    </span>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
 

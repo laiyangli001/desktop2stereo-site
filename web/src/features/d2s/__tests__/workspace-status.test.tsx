@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   createD2SWithdrawal: vi.fn(),
   freeRevokeD2SLicense: vi.fn(),
   getD2SBalance: vi.fn(),
+  getD2SBalanceTransactions: vi.fn(),
   getD2SCheckoutProviders: vi.fn(),
   getD2SInvite: vi.fn(),
   getD2SLicenses: vi.fn(),
@@ -43,10 +44,24 @@ describe('D2SWorkspace data status', () => {
     )
   })
 
-  it('renders Payment FM when the server advertises the configured provider', async () => {
+  it('renders configured Payment FM and balance ledger entries', async () => {
     apiMocks.getD2SBalance.mockResolvedValue({
       success: true,
       data: { accounts: [] },
+    })
+    apiMocks.getD2SBalanceTransactions.mockResolvedValue({
+      success: true,
+      data: {
+        transactions: [
+          {
+            id: 'ledger-1',
+            currency: 'USD',
+            kind: 'reserve',
+            amount_minor: -1000,
+            created_at: 1,
+          },
+        ],
+      },
     })
     apiMocks.getD2SCheckoutProviders.mockResolvedValue({
       success: true,
@@ -85,5 +100,7 @@ describe('D2SWorkspace data status', () => {
     expect(
       await screen.findByRole('button', { name: 'Pay with Payment FM' })
     ).toBeInTheDocument()
+    expect(screen.getByText(/reserve/)).toBeInTheDocument()
+    expect(screen.getByText(/USD -10\.00/)).toBeInTheDocument()
   })
 })
