@@ -7,6 +7,7 @@ import type {
   D2SInviteReward,
   D2SLicense,
   D2SOrder,
+  D2SPaymentEvent,
   D2SResponse,
   D2SWithdrawal,
   D2SSigningKey,
@@ -24,6 +25,11 @@ export type D2SModeRequest = {
 export async function getD2SAdminOrders(status = '') {
   const response = await api.get('/api/v1/admin/orders', { params: { status } })
   return response.data as D2SResponse<{ orders: D2SOrder[] }>
+}
+
+export async function getD2SAdminPaymentEvents() {
+  const response = await api.get('/api/v1/admin/payment-events')
+  return response.data as D2SResponse<{ events: D2SPaymentEvent[] }>
 }
 
 export async function getD2SAdminLicenses() {

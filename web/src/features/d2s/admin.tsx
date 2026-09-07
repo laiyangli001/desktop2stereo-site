@@ -12,6 +12,7 @@ import {
   getD2SAdminBalances,
   getD2SAdminLicenses,
   getD2SAdminOrders,
+  getD2SAdminPaymentEvents,
   getD2SAdminSigningKeys,
   getD2SAdminReconciliation,
   getD2SAdminUnbindRequests,
@@ -88,6 +89,10 @@ export function D2SAdminWorkspace() {
     queryKey: ['d2s-admin', 'orders'],
     queryFn: () => getD2SAdminOrders(),
   })
+  const paymentEvents = useQuery({
+    queryKey: ['d2s-admin', 'payment-events'],
+    queryFn: getD2SAdminPaymentEvents,
+  })
   const balances = useQuery({
     queryKey: ['d2s-admin', 'balances'],
     queryFn: () => getD2SAdminBalances(),
@@ -111,6 +116,7 @@ export function D2SAdminWorkspace() {
   const adminQueries = [
     licenses,
     orders,
+    paymentEvents,
     balances,
     withdrawals,
     unbinds,
@@ -207,6 +213,30 @@ export function D2SAdminWorkspace() {
                   <p className='text-muted-foreground'>
                     {t('No negative balances')}
                   </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('Payment events')}</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-2 text-sm'>
+                {(paymentEvents.data?.data?.events || []).map((event) => (
+                  <div
+                    key={event.id}
+                    className='space-y-1 border-b pb-2 last:border-0'
+                  >
+                    <div>
+                      {event.provider} · {event.event_type} · {event.currency}{' '}
+                      {event.amount_minor}
+                    </div>
+                    <div className='text-muted-foreground font-mono text-xs'>
+                      {event.provider_event_id} · {event.order_id}
+                    </div>
+                  </div>
+                ))}
+                {!paymentEvents.data?.data?.events?.length && (
+                  <p className='text-muted-foreground'>{t('No records')}</p>
                 )}
               </CardContent>
             </Card>

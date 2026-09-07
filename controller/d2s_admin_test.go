@@ -138,6 +138,45 @@ func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
 	assert.Len(t, allAccounts, 2)
 }
 
+func TestD2SAdminPaymentEventsSupportsOperationalFilters(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_admin_payment_events_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SPaymentEvent{}))
+	require.NoError(t, db.Create(&model.D2SPaymentEvent{
+		ID: "admin-event-1", Provider: "stripe", ProviderEventID: "stripe-chargeback-1",
+		OrderID: "admin-order-1", EventType: "chargeback", AmountMinor: 2990, Currency: "USD",
+		PayloadHash: "hash-1", ProcessedAt: 20,
+	}).Error)
+	require.NoError(t, db.Create(&model.D2SPaymentEvent{
+		ID: "admin-event-2", Provider: "creem", ProviderEventID: "creem-paid-1",
+		OrderID: "admin-order-2", EventType: "paid", AmountMinor: 2990, Currency: "USD",
+		PayloadHash: "hash-2", ProcessedAt: 10,
+	}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/payment-events?provider=STRIPE&event_type=CHARGEBACK", nil)
+	D2SAdminPaymentEvents(context)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Data struct {
+			Events []model.D2SPaymentEvent `json:"events"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data.Events, 1)
+	assert.Equal(t, "stripe-chargeback-1", response.Data.Events[0].ProviderEventID)
+}
+
 func TestD2SAdminReconciliationRejectsInvalidWindow(t *testing.T) {
 	for _, query := range []string{
 		"?start_at=200&end_at=200",

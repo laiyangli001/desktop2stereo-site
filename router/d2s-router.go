@@ -82,6 +82,7 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		{
 			admin.GET("/licenses", controller.D2SAdminLicenses)
 			admin.GET("/orders", controller.D2SAdminOrders)
+			admin.GET("/payment-events", controller.D2SAdminPaymentEvents)
 			admin.GET("/balances", controller.D2SAdminBalances)
 			admin.GET("/signing-keys", controller.D2SAdminSigningKeys)
 			admin.PUT("/signing-keys/:id", controller.D2SAdminSigningKeyReview)

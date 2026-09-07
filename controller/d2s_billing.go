@@ -284,6 +284,25 @@ func D2SAdminOrders(c *gin.Context) {
 	d2sSuccess(c, http.StatusOK, gin.H{"orders": rows})
 }
 
+func D2SAdminPaymentEvents(c *gin.Context) {
+	var rows []model.D2SPaymentEvent
+	query := model.DB.Order("processed_at DESC").Limit(500)
+	if provider := strings.TrimSpace(c.Query("provider")); provider != "" {
+		query = query.Where("provider = ?", strings.ToLower(provider))
+	}
+	if orderID := strings.TrimSpace(c.Query("order_id")); orderID != "" {
+		query = query.Where("order_id = ?", orderID)
+	}
+	if eventType := strings.TrimSpace(c.Query("event_type")); eventType != "" {
+		query = query.Where("event_type = ?", strings.ToLower(eventType))
+	}
+	if err := query.Find(&rows).Error; err != nil {
+		d2sError(c, err)
+		return
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"events": rows})
+}
+
 func D2SAdminBalances(c *gin.Context) {
 	var rows []model.D2SBalanceAccount
 	query := model.DB.Order("updated_at DESC").Limit(500)

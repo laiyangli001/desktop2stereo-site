@@ -8,6 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   getD2SAdminBalances: vi.fn(),
   getD2SAdminLicenses: vi.fn(),
   getD2SAdminOrders: vi.fn(),
+  getD2SAdminPaymentEvents: vi.fn(),
   getD2SAdminReconciliation: vi.fn(),
   getD2SAdminSigningKeys: vi.fn(),
   getD2SAdminUnbindRequests: vi.fn(),
@@ -63,6 +64,22 @@ describe('D2SAdminWorkspace', () => {
             provider: 'stripe',
             currency: 'USD',
             amount_minor: 2990,
+          },
+        ],
+      })
+    )
+    apiMocks.getD2SAdminPaymentEvents.mockResolvedValue(
+      response({
+        events: [
+          {
+            id: 'payment-event-1',
+            provider: 'stripe',
+            provider_event_id: 'stripe-chargeback-1',
+            order_id: 'order-chargeback',
+            event_type: 'chargeback',
+            amount_minor: 2990,
+            currency: 'USD',
+            processed_at: 1,
           },
         ],
       })
@@ -137,6 +154,12 @@ describe('D2SAdminWorkspace', () => {
       expect(screen.getAllByText(/order-chargeback/).length).toBeGreaterThan(0)
     })
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/stripe · chargeback · USD 2990/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/stripe-chargeback-1 · order-chargeback/)
+    ).toBeInTheDocument()
     expect(
       screen.getByText(/Status: active · Mode: online/)
     ).toBeInTheDocument()

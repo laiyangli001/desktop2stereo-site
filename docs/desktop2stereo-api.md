@@ -94,6 +94,7 @@ PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 
 - `GET /api/v1/admin/licenses`（每项包含当前用户区域 `region`；空字符串表示尚未锁定）
 - `GET /api/v1/admin/orders[?status=&user_id=]`（包含拒付/冲正后的订单状态）
+- `GET /api/v1/admin/payment-events[?provider=&order_id=&event_type=]`（逐笔支付事件与渠道事件号）
 - `GET /api/v1/admin/balances[?negative=true&user_id=]`（默认查看负余额）
 - `GET /api/v1/admin/signing-keys`（仅公开 JWK，不返回私钥）
 - `PUT /api/v1/admin/signing-keys/:id`（请求 `{"status":"retired"}`；当前活动键不可退休）

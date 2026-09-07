@@ -37,6 +37,17 @@ export type D2SOrder = {
   expires_at: number
 }
 
+export type D2SPaymentEvent = {
+  id: string
+  provider: string
+  provider_event_id: string
+  order_id: string
+  event_type: string
+  amount_minor: number
+  currency: string
+  processed_at: number
+}
+
 export type D2SBalanceAccount = {
   id: string
   user_id?: number
