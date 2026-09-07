@@ -35,6 +35,7 @@ on:
       - 'docs/d2s.site.md'
       - 'docs/d2s-production-drill.md'
       - 'docs/desktop2stereo-api.md'
+      - '.env.example'
       - 'go.mod'
       - 'go.sum'
   pull_request:
@@ -70,6 +71,7 @@ on:
       - 'docs/d2s.site.md'
       - 'docs/d2s-production-drill.md'
       - 'docs/desktop2stereo-api.md'
+      - '.env.example'
       - 'go.mod'
       - 'go.sum'
 
