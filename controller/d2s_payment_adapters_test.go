@@ -190,6 +190,27 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	require.NoError(t, db.First(&fullyRefundedEpayOrder, "id = ?", epayOrder.ID).Error)
 	assert.Equal(t, model.D2SOrderChargeback, fullyRefundedEpayOrder.Status)
 
+	epayClosedPaidOrder := makeOrder("epay-closed-paid-order", 909, "epay", "CNY")
+	handled, err = processEpayD2SPayment(&epay.VerifyRes{
+		TradeNo:        "epay-closed-paid-event",
+		ServiceTradeNo: epayClosedPaidOrder.ID,
+		Money:          "29.90",
+		TradeStatus:    epay.StatusTradeSuccess,
+	}, []byte("epay-closed-paid-payload"))
+	require.NoError(t, err)
+	assert.True(t, handled)
+	handled, err = processEpayD2SPayment(&epay.VerifyRes{
+		TradeNo:        "epay-closed-after-paid-event",
+		ServiceTradeNo: epayClosedPaidOrder.ID,
+		Money:          "29.90",
+		TradeStatus:    "TRADE_CLOSED",
+	}, []byte("epay-closed-after-paid-payload"))
+	assert.True(t, handled)
+	assert.ErrorIs(t, err, model.ErrD2SOrderState)
+	var closedPaidEpayOrder model.D2SOrder
+	require.NoError(t, db.First(&closedPaidEpayOrder, "id = ?", epayClosedPaidOrder.ID).Error)
+	assert.Equal(t, model.D2SOrderPaid, closedPaidEpayOrder.Status)
+
 	for index, provider := range []string{"paymentfm", "alipay", "wechat"} {
 		order := makeOrder("epay-method-"+provider, 910+index, provider, "CNY")
 		handled, err = processEpayD2SPayment(&epay.VerifyRes{
