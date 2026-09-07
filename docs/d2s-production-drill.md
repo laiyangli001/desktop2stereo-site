@@ -55,6 +55,16 @@ curl -H 'Authorization: Bearer <admin-token>' \
   'https://d2s.site/api/v1/admin/reconciliation'
 ```
 
+也可以用仓库脚本保存不可变的 JSON 报告；脚本不会打印或写入管理员令牌，也不会修改订单或
+账本：
+
+```powershell
+.\scripts\d2s-reconciliation.ps1 -AdminToken $env:D2S_ADMIN_TOKEN
+```
+
+如需重跑指定 UTC 窗口，同时传入 `-StartAt`、`-EndAt` 和唯一的 `-OutputPath`；脚本拒绝覆盖
+已有报告。
+
 ## 3. 密钥轮换
 
 1. 发布包含新公钥的客户端版本，记录客户端版本和新 `key_id`。
