@@ -378,6 +378,7 @@ export function D2SWorkspace() {
         | 'creem'
         | 'waffo_pancake'
         | 'waffo'
+        | 'paymentfm'
         | 'alipay'
         | 'wechat'
       product: D2SPurchaseProduct
@@ -532,6 +533,26 @@ export function D2SWorkspace() {
                   {externalPurchaseMutation.isPending
                     ? t('Creating checkout…')
                     : t('Pay with Alipay')}
+                </Button>
+              )}
+              {enabledCheckoutProviders.includes('paymentfm') && (
+                <Button
+                  type='button'
+                  variant='outline'
+                  disabled={
+                    externalPurchaseMutation.isPending || purchaseTargetMissing
+                  }
+                  onClick={() =>
+                    externalPurchaseMutation.mutate({
+                      provider: 'paymentfm',
+                      product: purchaseProduct,
+                      licenseID: purchaseLicenseID || undefined,
+                    })
+                  }
+                >
+                  {externalPurchaseMutation.isPending
+                    ? t('Creating checkout…')
+                    : t('Pay with Payment FM')}
                 </Button>
               )}
               {enabledCheckoutProviders.includes('wechat') && (

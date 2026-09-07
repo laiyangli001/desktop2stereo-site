@@ -115,6 +115,8 @@ func D2SOrderProviders(c *gin.Context) {
 	if isEpayTopUpEnabled() {
 		for _, method := range operation_setting.PayMethods {
 			switch method["type"] {
+			case "paymentfm":
+				appendProvider("paymentfm")
 			case "alipay":
 				appendProvider("alipay")
 			case "wxpay":

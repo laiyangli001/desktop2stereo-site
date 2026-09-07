@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -275,6 +276,48 @@ func TestD2SOrderProvidersHidesBalanceUntilRegionIsLocked(t *testing.T) {
 
 	assert.NotContains(t, providersFor(1201), model.D2SProviderBalance)
 	assert.Contains(t, providersFor(1202), model.D2SProviderBalance)
+}
+
+func TestD2SOrderProvidersExposesConfiguredPaymentFM(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_paymentfm_provider_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	model.DB, model.LOG_DB = db, db
+	t.Cleanup(func() { model.DB, model.LOG_DB = previousDB, previousLogDB })
+	require.NoError(t, db.AutoMigrate(&model.D2SUserProfile{}))
+	require.NoError(t, db.Create(&model.D2SUserProfile{UserID: 1203, Region: model.D2SRegionCN, RegionLockedAt: 2, CreatedAt: 1, UpdatedAt: 2}).Error)
+
+	confirmPaymentComplianceForTest(t)
+	originalPayAddress := operation_setting.PayAddress
+	originalEpayID := operation_setting.EpayId
+	originalEpayKey := operation_setting.EpayKey
+	originalPayMethods := operation_setting.PayMethods
+	t.Cleanup(func() {
+		operation_setting.PayAddress = originalPayAddress
+		operation_setting.EpayId = originalEpayID
+		operation_setting.EpayKey = originalEpayKey
+		operation_setting.PayMethods = originalPayMethods
+	})
+	operation_setting.PayAddress = "https://pay.example.com"
+	operation_setting.EpayId = "epay-id"
+	operation_setting.EpayKey = "epay-key"
+	operation_setting.PayMethods = []map[string]string{
+		{"type": "paymentfm"}, {"type": "alipay"}, {"type": "wxpay"},
+	}
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Set("id", 1203)
+	D2SOrderProviders(context)
+	var response struct {
+		Data struct {
+			Providers []string `json:"providers"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Contains(t, response.Data.Providers, "paymentfm")
+	assert.Contains(t, response.Data.Providers, "alipay")
+	assert.Contains(t, response.Data.Providers, "wechat")
 }
 
 func TestStripeD2SPaymentEventMapsRefundAndDisputeStates(t *testing.T) {

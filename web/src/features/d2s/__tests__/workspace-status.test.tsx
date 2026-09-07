@@ -42,4 +42,48 @@ describe('D2SWorkspace data status', () => {
       'Unable to load Desktop2Stereo data'
     )
   })
+
+  it('renders Payment FM when the server advertises the configured provider', async () => {
+    apiMocks.getD2SBalance.mockResolvedValue({
+      success: true,
+      data: { accounts: [] },
+    })
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue({
+      success: true,
+      data: { providers: ['paymentfm'] },
+    })
+    apiMocks.getD2SInvite.mockResolvedValue({
+      success: true,
+      data: { invite_code: 'invite-code', rewarded_invitees: 0 },
+    })
+    apiMocks.getD2SLicenses.mockResolvedValue({
+      success: true,
+      data: { licenses: [] },
+    })
+    apiMocks.getD2SManualUnbindRequests.mockResolvedValue({
+      success: true,
+      data: { requests: [] },
+    })
+    apiMocks.getD2SOrders.mockResolvedValue({
+      success: true,
+      data: { orders: [] },
+    })
+    apiMocks.getD2SWithdrawals.mockResolvedValue({
+      success: true,
+      data: { withdrawals: [] },
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <D2SWorkspace />
+      </QueryClientProvider>
+    )
+
+    expect(
+      await screen.findByRole('button', { name: 'Pay with Payment FM' })
+    ).toBeInTheDocument()
+  })
 })
