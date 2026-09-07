@@ -136,3 +136,27 @@ func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
 	allAccounts := call("/api/v1/admin/balances?negative=false")
 	assert.Len(t, allAccounts, 2)
 }
+
+func TestD2SAdminReconciliationRejectsInvalidWindow(t *testing.T) {
+	for _, query := range []string{
+		"?start_at=200&end_at=200",
+		"?start_at=0&end_at=200",
+		"?start_at=300&end_at=200",
+	} {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/reconciliation"+query, nil)
+		D2SAdminReconciliation(context)
+
+		assert.Equal(t, http.StatusBadRequest, recorder.Code)
+		var response struct {
+			Success bool `json:"success"`
+			Error   struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+		assert.False(t, response.Success)
+		assert.Equal(t, "invalid_input", response.Error.Code)
+	}
+}

@@ -361,6 +361,10 @@ func D2SAdminReconciliation(c *gin.Context) {
 		}
 		endAt = parsed
 	}
+	if startAt <= 0 || endAt <= startAt {
+		d2sInvalidInput(c, "end_at must be greater than start_at")
+		return
+	}
 	report, err := model.ReconcileD2SPayments(startAt, endAt)
 	if err != nil {
 		d2sError(c, err)
