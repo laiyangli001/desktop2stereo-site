@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { D2SWorkspace } from '..'
 
@@ -42,6 +42,10 @@ function renderWorkspace() {
 }
 
 describe('D2SWorkspace purchase flow', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     apiMocks.getD2SBalance.mockResolvedValue(
@@ -129,5 +133,38 @@ describe('D2SWorkspace purchase flow', () => {
     expect(
       screen.queryByRole('button', { name: /Pay with Paddle/i })
     ).not.toBeInTheDocument()
+  })
+
+  it('submits POST checkout parameters through a generated form', async () => {
+    const submit = vi
+      .spyOn(HTMLFormElement.prototype, 'submit')
+      .mockImplementation(() => undefined)
+    apiMocks.createD2SOrderCheckout.mockResolvedValue(
+      response({
+        checkout_url: 'https://payments.example/checkout',
+        method: 'POST',
+        params: { order_id: 'order-1', signature: 'test-signature' },
+      })
+    )
+
+    renderWorkspace()
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Pay with Stripe' })
+    )
+
+    await waitFor(() => expect(submit).toHaveBeenCalledOnce())
+    const form = document.querySelector(
+      'form[action="https://payments.example/checkout"]'
+    )
+    expect(form).not.toBeNull()
+    expect(form?.getAttribute('method')).toBe('POST')
+    expect(
+      (form?.querySelector('input[name="order_id"]') as HTMLInputElement)
+        ?.value
+    ).toBe('order-1')
+    expect(
+      (form?.querySelector('input[name="signature"]') as HTMLInputElement)
+        ?.value
+    ).toBe('test-signature')
   })
 })
