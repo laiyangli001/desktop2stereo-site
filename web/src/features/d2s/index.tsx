@@ -262,7 +262,11 @@ export function D2SWorkspace() {
   const modeMutation = useMutation({
     mutationFn: (request: Parameters<typeof changeD2SMode>[0]) =>
       changeD2SMode(request),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error?.message || t('Unable to update license mode'))
+        return
+      }
       void queryClient.invalidateQueries({ queryKey: ['d2s'] })
       toast.success(t('License mode updated'))
     },
@@ -271,7 +275,11 @@ export function D2SWorkspace() {
   const revokeMutation = useMutation({
     mutationFn: (request: Parameters<typeof freeRevokeD2SLicense>[0]) =>
       freeRevokeD2SLicense(request),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error?.message || t('Unable to revoke license'))
+        return
+      }
       void queryClient.invalidateQueries({ queryKey: ['d2s'] })
       toast.success(t('License revoked'))
     },
