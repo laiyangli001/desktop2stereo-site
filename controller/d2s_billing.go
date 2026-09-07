@@ -42,10 +42,14 @@ func D2SOrderPreview(c *gin.Context) {
 	d2sSuccess(c, http.StatusOK, quote)
 }
 
-func D2SOrderCreate(c *gin.Context) {
+func createD2SOrder(c *gin.Context, requiredProduct string) {
 	var request d2sOrderRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || strings.TrimSpace(request.IdempotencyKey) == "" {
 		d2sInvalidInput(c, "product, provider and idempotency_key are required")
+		return
+	}
+	if requiredProduct != "" && request.Product != requiredProduct {
+		d2sInvalidInput(c, "product must be "+requiredProduct)
 		return
 	}
 	now := time.Now().Unix()
@@ -61,6 +65,8 @@ func D2SOrderCreate(c *gin.Context) {
 	}
 	d2sSuccess(c, http.StatusCreated, order)
 }
+
+func D2SOrderCreate(c *gin.Context) { createD2SOrder(c, "") }
 
 func D2SOrderGet(c *gin.Context) {
 	var order model.D2SOrder
@@ -133,9 +139,13 @@ func D2SOrderProviders(c *gin.Context) {
 	d2sSuccess(c, http.StatusOK, gin.H{"providers": providers})
 }
 
-func D2SLicensePaidRevoke(c *gin.Context) { D2SOrderCreate(c) }
+func D2SLicensePaidRevoke(c *gin.Context) {
+	createD2SOrder(c, model.D2SOrderProductPaidRevoke)
+}
 
-func D2SLicenseOfflineExtend(c *gin.Context) { D2SOrderCreate(c) }
+func D2SLicenseOfflineExtend(c *gin.Context) {
+	createD2SOrder(c, model.D2SOrderProductOfflineExtension)
+}
 
 func D2SBalanceInfo(c *gin.Context) {
 	var accounts []model.D2SBalanceAccount
