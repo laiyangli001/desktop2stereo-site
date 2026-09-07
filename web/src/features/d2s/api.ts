@@ -4,6 +4,7 @@ import type {
   D2SBalanceAccount,
   D2SBalanceTransaction,
   D2SInviteInfo,
+  D2SInviteReward,
   D2SLicense,
   D2SOrder,
   D2SResponse,
@@ -166,6 +167,13 @@ export async function getD2SBalanceTransactions(): Promise<
 
 export async function getD2SInvite(): Promise<D2SResponse<D2SInviteInfo>> {
   const response = await api.get('/api/v1/invite/info')
+  return response.data
+}
+
+export async function getD2SInviteRecords(): Promise<
+  D2SResponse<{ records: D2SInviteReward[] }>
+> {
+  const response = await api.get('/api/v1/invite/records')
   return response.data
 }
 

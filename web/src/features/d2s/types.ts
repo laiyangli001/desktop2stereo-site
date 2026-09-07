@@ -61,6 +61,15 @@ export type D2SInviteInfo = {
   rewarded_invitees: number
 }
 
+export type D2SInviteReward = {
+  id: string
+  invitee_user_id: number
+  currency: string
+  amount_minor: number
+  status: string
+  created_at: number
+}
+
 export type D2SWithdrawal = {
   id: string
   user_id?: number

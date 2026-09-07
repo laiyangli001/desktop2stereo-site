@@ -5615,6 +5615,9 @@
     "Operation failed": "操作失败",
     "Region updated": "区域已更新",
     "Loading Desktop2Stereo data": "正在加载 Desktop2Stereo 数据",
-    "Unable to load Desktop2Stereo data": "无法加载 Desktop2Stereo 数据"
+    "Unable to load Desktop2Stereo data": "无法加载 Desktop2Stereo 数据",
+    "Reward history": "奖励记录",
+    "No invite rewards": "暂无邀请奖励",
+    "Invitee": "受邀用户"
   }
 }

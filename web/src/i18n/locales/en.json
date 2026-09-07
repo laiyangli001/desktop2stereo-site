@@ -5615,6 +5615,9 @@
     "Operation failed": "Operation failed",
     "Region updated": "Region updated",
     "Loading Desktop2Stereo data": "Loading Desktop2Stereo data",
-    "Unable to load Desktop2Stereo data": "Unable to load Desktop2Stereo data"
+    "Unable to load Desktop2Stereo data": "Unable to load Desktop2Stereo data",
+    "Reward history": "Reward history",
+    "No invite rewards": "No invite rewards",
+    "Invitee": "Invitee"
   }
 }

@@ -18,6 +18,7 @@ import {
   getD2SBalance,
   getD2SBalanceTransactions,
   getD2SInvite,
+  getD2SInviteRecords,
   getD2SLicenses,
   getD2SOrders,
   getD2SCheckoutProviders,
@@ -260,6 +261,10 @@ export function D2SWorkspace() {
     queryKey: ['d2s', 'invite'],
     queryFn: getD2SInvite,
   })
+  const inviteRecords = useQuery({
+    queryKey: ['d2s', 'invite-records'],
+    queryFn: getD2SInviteRecords,
+  })
   const withdrawals = useQuery({
     queryKey: ['d2s', 'withdrawals'],
     queryFn: getD2SWithdrawals,
@@ -316,6 +321,7 @@ export function D2SWorkspace() {
     balance,
     balanceTransactions,
     invite,
+    inviteRecords,
     withdrawals,
     manualUnbinds,
   ]
@@ -775,6 +781,35 @@ export function D2SWorkspace() {
                   <div>
                     {t('Rewarded accounts')}:{' '}
                     {invite.data?.data?.rewarded_invitees ?? 0}
+                  </div>
+                  <div className='border-t pt-2'>
+                    <div className='font-medium'>{t('Reward history')}</div>
+                    {(inviteRecords.data?.data?.records?.length ?? 0) === 0 ? (
+                      <p className='text-muted-foreground text-sm'>
+                        {t('No invite rewards')}
+                      </p>
+                    ) : (
+                      <div className='space-y-1 text-sm'>
+                        {inviteRecords.data?.data?.records.map((record) => (
+                          <div
+                            key={record.id}
+                            className='flex flex-wrap justify-between gap-2'
+                          >
+                            <span>
+                              {t('Invitee')} #{record.invitee_user_id} ·{' '}
+                              <StatusBadge value={record.status} />
+                            </span>
+                            <span>
+                              +
+                              {formatMoney(
+                                record.amount_minor,
+                                record.currency
+                              )}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

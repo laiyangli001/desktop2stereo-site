@@ -15,6 +15,7 @@ const apiMocks = vi.hoisted(() => ({
   getD2SBalanceTransactions: vi.fn(),
   getD2SCheckoutProviders: vi.fn(),
   getD2SInvite: vi.fn(),
+  getD2SInviteRecords: vi.fn(),
   getD2SLicenses: vi.fn(),
   getD2SManualUnbindRequests: vi.fn(),
   getD2SOrders: vi.fn(),
@@ -71,6 +72,21 @@ describe('D2SWorkspace data status', () => {
       success: true,
       data: { invite_code: 'invite-code', rewarded_invitees: 0 },
     })
+    apiMocks.getD2SInviteRecords.mockResolvedValue({
+      success: true,
+      data: {
+        records: [
+          {
+            id: 'reward-1',
+            invitee_user_id: 55,
+            currency: 'USD',
+            amount_minor: 140,
+            status: 'credited',
+            created_at: 1,
+          },
+        ],
+      },
+    })
     apiMocks.getD2SLicenses.mockResolvedValue({
       success: true,
       data: { licenses: [] },
@@ -102,5 +118,6 @@ describe('D2SWorkspace data status', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/reserve/)).toBeInTheDocument()
     expect(screen.getByText(/USD -10\.00/)).toBeInTheDocument()
+    expect(screen.getByText(/Invitee #55/)).toBeInTheDocument()
   })
 })
