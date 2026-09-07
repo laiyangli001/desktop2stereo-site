@@ -6,7 +6,8 @@ param(
     [long]$StartAt,
     [long]$EndAt,
     [string]$OutputPath,
-    [switch]$AllowHttp
+    [switch]$AllowHttp,
+    [switch]$FailOnMismatch
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,5 +52,9 @@ if (-not (Test-Path -LiteralPath $parent -PathType Container)) {
 }
 
 $response | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $resolvedOutput -Encoding UTF8
+$mismatches = @($response.data.mismatches)
 Write-Host "Reconciliation report saved: $resolvedOutput"
-Write-Host "Review mismatches before treating the day as settled: $($response.data.mismatches.Count)"
+Write-Host "Review mismatches before treating the day as settled: $($mismatches.Count)"
+if ($FailOnMismatch -and $mismatches.Count -gt 0) {
+    throw "Reconciliation report contains $($mismatches.Count) mismatch(es): $resolvedOutput"
+}

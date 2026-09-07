@@ -71,7 +71,8 @@ curl -H 'Authorization: Bearer <admin-token>' \
 ```
 
 如需重跑指定 UTC 窗口，同时传入 `-StartAt`、`-EndAt` 和唯一的 `-OutputPath`；脚本拒绝覆盖
-已有报告。
+已有报告。接入计划任务或告警时增加 `-FailOnMismatch`，脚本会先保存报告，再以失败状态退出，
+避免把存在差异的日期误判为已结算；默认不加该参数时保持人工复核流程。
 
 ## 3. 密钥轮换
 
