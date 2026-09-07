@@ -10,6 +10,7 @@ on:
       - 'scripts/d2s-production-readiness.ps1'
       - 'scripts/d2s-reconciliation.ps1'
       - 'scripts/d2s-local-db-install.ps1'
+      - 'scripts/d2s-local-db.ps1'
       - 'controller/d2s_*.go'
       - 'controller/payment_webhook_availability*.go'
       - 'controller/topup*.go'
