@@ -128,6 +128,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Typecheck, build, and run D2S frontend tests
         run: |
+          bun run lint
           bun run build:check
           bun run test -- src/features/d2s/__tests__ src/routes/__tests__/device.test.tsx
 
