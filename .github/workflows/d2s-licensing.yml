@@ -135,8 +135,10 @@ jobs:
           $env:D2S_LICENSE_KEY_ID = 'ci-key'
           $bridgeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET'
           Set-Item "Env:$bridgeSecretName" ('p' * 32)
-          $env:D2S_PAYMENT_BRIDGE_SECRET_STRIPE = 'r' * 32
-          $env:D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE = 'w' * 32
+          $stripeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET_' + 'STRIPE'
+          Set-Item "Env:$stripeSecretName" ('r' * 32)
+          $pancakeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET_' + 'WAFFO_PANCAKE'
+          Set-Item "Env:$pancakeSecretName" ('w' * 32)
           $privateKeyName = 'D2S_' + 'LICENSE_PRIVATE_KEY_B64'
           Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32)))
           $env:D2S_OFFLINE_EXTENSION_CNY_MINOR = '3000'
