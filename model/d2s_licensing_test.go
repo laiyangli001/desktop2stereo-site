@@ -562,7 +562,7 @@ func TestD2SFullBalanceOrderSettlesAtomically(t *testing.T) {
 	require.NoError(t, DB.Model(&D2SUserProfile{}).Where("user_id = ?", user.Id).Updates(map[string]any{"region": D2SRegionCN, "region_locked_at": now}).Error)
 	account := D2SBalanceAccount{ID: "balance-account", UserID: user.Id, Currency: "CNY", AvailableMinor: 9900, UpdatedAt: now}
 	require.NoError(t, DB.Create(&account).Error)
-	quote, err := QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", "epay", now)
+	quote, err := QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", D2SProviderBalance, now)
 	require.NoError(t, err)
 
 	order, err := CreateD2SOrder(user.Id, quote, 9900, "balance-order", now)
@@ -576,7 +576,7 @@ func TestD2SFullBalanceOrderSettlesAtomically(t *testing.T) {
 	assert.Len(t, transactions, 2)
 }
 
-func TestD2SFullBalanceOrderCannotEstablishRegion(t *testing.T) {
+func TestD2SExternalProviderCannotUseFullBalancePayment(t *testing.T) {
 	useD2STestDB(t)
 	user := createD2STestUser(t, "d2s-balance-region")
 	const now = int64(2_000_410_000)
@@ -587,6 +587,8 @@ func TestD2SFullBalanceOrderCannotEstablishRegion(t *testing.T) {
 	quote, err := QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", "stripe", now)
 	require.NoError(t, err)
 	_, err = CreateD2SOrder(user.Id, quote, 2990, "balance-region-order", now+1)
+	assert.ErrorIs(t, err, ErrD2SOrderInvalid)
+	_, err = QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", D2SProviderBalance, now+1)
 	assert.ErrorIs(t, err, ErrD2SRegionMismatch)
 }
 

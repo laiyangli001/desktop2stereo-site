@@ -186,6 +186,9 @@ func CreateD2SOrder(userID int, quote *D2SOrderQuote, balanceMinor int64, idempo
 	if quote.Provider == D2SProviderBalance && balanceMinor != quote.AmountMinor {
 		return nil, ErrD2SOrderInvalid
 	}
+	if quote.Provider != D2SProviderBalance && balanceMinor == quote.AmountMinor {
+		return nil, ErrD2SOrderInvalid
+	}
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
