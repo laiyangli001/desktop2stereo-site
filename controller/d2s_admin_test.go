@@ -138,6 +138,38 @@ func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
 	assert.Len(t, allAccounts, 2)
 }
 
+func TestD2SAdminOrdersSupportsStatusAndUserFilters(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_admin_orders_filters_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}))
+	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-paid", UserID: 901, Status: model.D2SOrderPaid, CreatedAt: 3}).Error)
+	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-pending", UserID: 901, Status: model.D2SOrderPending, CreatedAt: 2}).Error)
+	require.NoError(t, db.Create(&model.D2SOrder{ID: "other-user-paid", UserID: 902, Status: model.D2SOrderPaid, CreatedAt: 1}).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?status=paid&user_id=901", nil)
+	D2SAdminOrders(context)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Data struct {
+			Orders []model.D2SOrder `json:"orders"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Len(t, response.Data.Orders, 1)
+	assert.Equal(t, "admin-order-paid", response.Data.Orders[0].ID)
+}
+
 func TestD2SAdminPaymentEventsSupportsOperationalFilters(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open("file:d2s_admin_payment_events_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
