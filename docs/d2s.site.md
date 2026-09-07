@@ -121,6 +121,10 @@ PayPal/Paddle 在完成适配器前不开放。
 - `D2S_PAYMENT_BRIDGE_SECRET`。
 - `D2S_OFFLINE_EXTENSION_CNY_MINOR`、`D2S_OFFLINE_EXTENSION_USD_MINOR`。
 
+部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本还会校验离线延长
+价格为正整数、签名私钥配置为有效 Base64，并拒绝 `0.0.0.0/0`、`::/0`、`*` 或 `all` 这类
+全网信任代理配置；`TRUSTED_PROXIES=none` 只能单独使用。
+
 同时在 new-api 管理设置中启用邮箱验证、SMTP、Turnstile、支付合规确认和实际使用的支付
 渠道。生产 Secret 只能进入腾讯云 Secret 管理、受限环境变量或编排系统 Secret，不能写入
 仓库、镜像、数据库、日志和客户端。

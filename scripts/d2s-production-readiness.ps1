@@ -15,6 +15,55 @@ function Assert-NonEmptyEnvironmentVariable([string]$Name) {
     Write-Host "OK secret/config present: $Name"
 }
 
+function Assert-PositiveIntegerEnvironmentVariable([string]$Name) {
+    $value = [Environment]::GetEnvironmentVariable($Name)
+    $parsed = 0L
+    if (-not [Int64]::TryParse($value, [Globalization.NumberStyles]::Integer, [Globalization.CultureInfo]::InvariantCulture, [ref]$parsed) -or $parsed -le 0) {
+        throw "Required environment variable must be a positive integer: $Name"
+    }
+    Write-Host "OK positive integer config present: $Name"
+}
+
+function Assert-TrustedProxyConfiguration([string]$RawValue) {
+    $entries = @($RawValue.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($entries.Count -eq 0) {
+        throw "TRUSTED_PROXIES must contain an explicit value"
+    }
+    if ($entries -contains "none") {
+        if ($entries.Count -ne 1) {
+            throw "TRUSTED_PROXIES=none must be used alone"
+        }
+        Write-Host "OK trusted proxies explicitly disabled"
+        return
+    }
+
+    foreach ($entry in $entries) {
+        if ($entry -in @('*', 'all', '0.0.0.0/0', '::/0') -or $entry -match '/0$') {
+            throw "TRUSTED_PROXIES must not trust the entire address space: $entry"
+        }
+        $parts = $entry.Split('/')
+        if ($parts.Count -gt 2) {
+            throw "TRUSTED_PROXIES contains an invalid IP or CIDR: $entry"
+        }
+        try {
+            $address = [Net.IPAddress]::Parse($parts[0])
+        } catch {
+            throw "TRUSTED_PROXIES contains an invalid IP or CIDR: $entry"
+        }
+        if ($parts.Count -eq 2) {
+            $prefix = 0
+            if (-not [Int32]::TryParse($parts[1], [Globalization.NumberStyles]::Integer, [Globalization.CultureInfo]::InvariantCulture, [ref]$prefix)) {
+                throw "TRUSTED_PROXIES contains an invalid CIDR prefix: $entry"
+            }
+            $maxPrefix = if ($address.AddressFamily -eq [Net.Sockets.AddressFamily]::InterNetwork) { 32 } else { 128 }
+            if ($prefix -lt 1 -or $prefix -gt $maxPrefix) {
+                throw "TRUSTED_PROXIES contains an invalid CIDR prefix: $entry"
+            }
+        }
+    }
+    Write-Host "OK trusted proxy configuration contains $($entries.Count) explicit address(es)"
+}
+
 @(
     "SQL_DSN",
     "REDIS_CONN_STRING",
@@ -24,14 +73,23 @@ function Assert-NonEmptyEnvironmentVariable([string]$Name) {
 ) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
 
 if ($RequireSecrets) {
-    @(
-        "D2S_LICENSE_PRIVATE_KEY_B64",
-        "D2S_OFFLINE_EXTENSION_CNY_MINOR",
-        "D2S_OFFLINE_EXTENSION_USD_MINOR",
-        "D2S_DEVICE_VERIFICATION_URI",
-        "SESSION_COOKIE_TRUSTED_URL",
-        "TRUSTED_PROXIES"
-    ) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
+    Assert-NonEmptyEnvironmentVariable "D2S_LICENSE_PRIVATE_KEY_B64"
+    Assert-PositiveIntegerEnvironmentVariable "D2S_OFFLINE_EXTENSION_CNY_MINOR"
+    Assert-PositiveIntegerEnvironmentVariable "D2S_OFFLINE_EXTENSION_USD_MINOR"
+    Assert-NonEmptyEnvironmentVariable "D2S_DEVICE_VERIFICATION_URI"
+    Assert-NonEmptyEnvironmentVariable "SESSION_COOKIE_TRUSTED_URL"
+    Assert-NonEmptyEnvironmentVariable "TRUSTED_PROXIES"
+    Assert-TrustedProxyConfiguration ([Environment]::GetEnvironmentVariable("TRUSTED_PROXIES"))
+
+    try {
+        $privateKeyBytes = [Convert]::FromBase64String([Environment]::GetEnvironmentVariable("D2S_LICENSE_PRIVATE_KEY_B64"))
+    } catch {
+        throw "D2S_LICENSE_PRIVATE_KEY_B64 must be valid Base64"
+    }
+    if ($privateKeyBytes.Length -lt 32) {
+        throw "D2S_LICENSE_PRIVATE_KEY_B64 does not contain a usable private key payload"
+    }
+    Write-Host "OK signing private key is valid Base64"
 
     $cookieSecure = [Environment]::GetEnvironmentVariable("SESSION_COOKIE_SECURE")
     if ($cookieSecure -ne "true") {
