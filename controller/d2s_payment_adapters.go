@@ -160,6 +160,11 @@ func processEpayD2SPayment(result *epay.VerifyRes, payload []byte) (bool, error)
 	switch result.TradeStatus {
 	case epay.StatusTradeSuccess:
 		eventType = "paid"
+	case "TRADE_REFUND":
+		// Epay V1 does not distinguish partial and full refunds in the
+		// callback payload. Route the event through the shared full-amount
+		// guard; partial refunds are rejected for reconciliation.
+		eventType = "reversed"
 	case "TRADE_CLOSED":
 		eventType = "canceled"
 	default:
