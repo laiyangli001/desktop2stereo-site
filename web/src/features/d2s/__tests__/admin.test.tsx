@@ -142,4 +142,16 @@ describe('D2SAdminWorkspace', () => {
       screen.getAllByRole('textbox', { name: 'Review note' })
     ).toHaveLength(2)
   })
+
+  it('announces unavailable admin data instead of presenting an empty dashboard', async () => {
+    for (const query of Object.values(apiMocks)) {
+      query.mockRejectedValue(new Error('admin API unavailable'))
+    }
+
+    renderAdminWorkspace()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Unable to load Desktop2Stereo admin data'
+    )
+  })
 })

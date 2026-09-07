@@ -108,6 +108,17 @@ export function D2SAdminWorkspace() {
     queryKey: ['d2s-admin', 'reconciliation'],
     queryFn: getD2SAdminReconciliation,
   })
+  const adminQueries = [
+    licenses,
+    orders,
+    balances,
+    withdrawals,
+    unbinds,
+    keys,
+    reconciliation,
+  ]
+  const adminDataLoading = adminQueries.some((query) => query.isPending)
+  const adminDataFailed = adminQueries.some((query) => query.isError)
   const regionMutation = useMutation({
     mutationFn: ({ userID, region }: { userID: number; region: string }) =>
       setD2SUserRegion(userID, region),
@@ -140,6 +151,16 @@ export function D2SAdminWorkspace() {
       </SectionPageLayout.Title>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
+          {adminDataLoading && (
+            <p role='status' className='text-muted-foreground text-sm'>
+              {t('Loading Desktop2Stereo admin data')}
+            </p>
+          )}
+          {adminDataFailed && (
+            <p role='alert' className='text-destructive text-sm'>
+              {t('Unable to load Desktop2Stereo admin data')}
+            </p>
+          )}
           <div className='grid gap-4 lg:grid-cols-2'>
             <Card>
               <CardHeader>
