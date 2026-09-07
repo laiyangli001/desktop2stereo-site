@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { D2SWorkspace } from '..'
@@ -47,6 +47,10 @@ describe('D2SWorkspace data status', () => {
   })
 
   it('renders configured Payment FM and balance ledger entries', async () => {
+    apiMocks.confirmD2SPermanent.mockResolvedValue({
+      success: true,
+      data: { changed: true },
+    })
     apiMocks.getD2SBalance.mockResolvedValue({
       success: true,
       data: { accounts: [] },
@@ -90,7 +94,22 @@ describe('D2SWorkspace data status', () => {
     })
     apiMocks.getD2SLicenses.mockResolvedValue({
       success: true,
-      data: { licenses: [] },
+      data: {
+        licenses: [
+          {
+            id: 'license-1',
+            license_code: 'D2S-TEST-1',
+            kind: 'paid',
+            status: 'active',
+            mode: 'online',
+            device_hash: 'a'.repeat(64),
+            fingerprint_version: 1,
+            offline_period_days: 7,
+            offline_valid_until: 0,
+            expires_at: 0,
+          },
+        ],
+      },
     })
     apiMocks.getD2SManualUnbindRequests.mockResolvedValue({
       success: true,
@@ -120,5 +139,17 @@ describe('D2SWorkspace data status', () => {
     expect(screen.getByText(/reserve/)).toBeInTheDocument()
     expect(screen.getByText(/USD -10\.00/)).toBeInTheDocument()
     expect(screen.getByText(/Invitee #55/)).toBeInTheDocument()
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Make permanent' }))
+    await waitFor(() => {
+      expect(apiMocks.confirmD2SPermanent).toHaveBeenCalledWith({
+        license_id: 'license-1',
+        device_hash: 'a'.repeat(64),
+        confirmation: 'PERMANENT',
+      })
+    })
+    expect(confirmSpy).toHaveBeenCalledWith('Confirm permanent binding')
+    confirmSpy.mockRestore()
   })
 })
