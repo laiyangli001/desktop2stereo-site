@@ -40,10 +40,21 @@ if ($RequireSecrets) {
     Write-Host "OK secure session cookie enabled"
 
     $trustedUrl = [Environment]::GetEnvironmentVariable("SESSION_COOKIE_TRUSTED_URL")
-    if ($trustedUrl -notmatch '^https://[^\s/]+(?:/[^\s]*)?$') {
-        throw "Production readiness requires an HTTPS SESSION_COOKIE_TRUSTED_URL"
+    $trustedOrigins = @($trustedUrl.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if ($trustedOrigins.Count -eq 0) {
+        throw "Production readiness requires at least one HTTPS SESSION_COOKIE_TRUSTED_URL origin"
     }
-    Write-Host "OK trusted session URL uses HTTPS"
+    foreach ($origin in $trustedOrigins) {
+        try {
+            $uri = [Uri]$origin
+        } catch {
+            throw "Production readiness requires valid HTTPS SESSION_COOKIE_TRUSTED_URL origins"
+        }
+        if ($uri.Scheme -ne "https" -or [string]::IsNullOrWhiteSpace($uri.Host) -or $uri.AbsolutePath -ne "/" -or $uri.Query -or $uri.Fragment) {
+            throw "SESSION_COOKIE_TRUSTED_URL must contain HTTPS origins without paths, queries, or fragments"
+        }
+    }
+    Write-Host "OK trusted session URL origins use HTTPS ($($trustedOrigins.Count) configured)"
 
     $deviceURI = [Environment]::GetEnvironmentVariable("D2S_DEVICE_VERIFICATION_URI")
     if ($deviceURI -notmatch '^https://[^\s/]+(?:/[^\s]*)?$') {
