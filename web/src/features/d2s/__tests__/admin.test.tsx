@@ -186,8 +186,12 @@ describe('D2SAdminWorkspace', () => {
     expect(screen.getByText(/Device: 123456789012…/)).toBeInTheDocument()
     expect(screen.getByText(/reversal_not_settled/)).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('INTL')
-    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
-    const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
+    const approveButtons = screen.getAllByRole('button', {
+      name: /^Approve /,
+    })
+    const rejectButtons = screen.getAllByRole('button', {
+      name: /^Reject /,
+    })
     expect(approveButtons).toHaveLength(2)
     expect(rejectButtons).toHaveLength(2)
     expect(approveButtons).toEqual(
@@ -196,6 +200,12 @@ describe('D2SAdminWorkspace', () => {
     expect(rejectButtons).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: 'button' })])
     )
+    expect(
+      screen.getByRole('button', { name: 'Approve withdrawal-1' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Reject unbind-1' })
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retire' })).toHaveAttribute(
       'type',
       'button'

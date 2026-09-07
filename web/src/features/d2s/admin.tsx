@@ -63,6 +63,7 @@ function ReviewActions(props: {
       <Button
         type='button'
         size='sm'
+        aria-label={`${t('Approve')} ${props.id}`}
         disabled={mutation.isPending}
         onClick={() =>
           mutation.mutate(props.kind === 'withdrawal' ? 'paid' : 'approved')
@@ -74,6 +75,7 @@ function ReviewActions(props: {
         type='button'
         size='sm'
         variant='destructive'
+        aria-label={`${t('Reject')} ${props.id}`}
         disabled={mutation.isPending}
         onClick={() => mutation.mutate('rejected')}
       >
