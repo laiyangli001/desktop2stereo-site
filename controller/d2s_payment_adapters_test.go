@@ -220,6 +220,17 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	var lowercaseRefundedOrder model.D2SOrder
 	require.NoError(t, db.First(&lowercaseRefundedOrder, "id = ?", lowercaseCurrencyOrder.ID).Error)
 	assert.Equal(t, model.D2SOrderChargeback, lowercaseRefundedOrder.Status)
+
+	creemOrder := makeOrder("creem-reversal-order", 908, "creem", "USD")
+	handled, err = processVerifiedD2SPayment("creem", "creem-paid-event", creemOrder.ID, "paid", 2990, "USD", []byte("creem-paid-payload"))
+	require.NoError(t, err)
+	assert.True(t, handled)
+	handled, err = processCreemD2SReversal([]byte(`{"id":"creem-refund-event","eventType":"refund.created","object":{"refund_amount":2990,"refund_currency":"usd","checkout":{"request_id":"creem-reversal-order"}}}`))
+	require.NoError(t, err)
+	assert.True(t, handled)
+	var reversedCreemOrder model.D2SOrder
+	require.NoError(t, db.First(&reversedCreemOrder, "id = ?", creemOrder.ID).Error)
+	assert.Equal(t, model.D2SOrderChargeback, reversedCreemOrder.Status)
 	handled, err = processWaffoPancakeD2SPayment(&service.WaffoPancakeWebhookEvent{
 		EventID:   "pancake-pending-event",
 		EventType: "checkout.created",
