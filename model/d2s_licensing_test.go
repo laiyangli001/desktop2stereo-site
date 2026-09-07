@@ -306,7 +306,7 @@ func TestD2SOrderIdempotencyRejectsChangedRequest(t *testing.T) {
 
 	quote, err := QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", "stripe", now)
 	require.NoError(t, err)
-	first, err := CreateD2SOrder(user.Id, quote, 0, "same-request", now)
+	first, err := CreateD2SOrder(user.Id, quote, 0, "  same-request  ", now)
 	require.NoError(t, err)
 
 	_, err = CreateD2SOrder(user.Id, quote, 1, "same-request", now+1)
@@ -315,6 +315,7 @@ func TestD2SOrderIdempotencyRejectsChangedRequest(t *testing.T) {
 	repeated, err := CreateD2SOrder(user.Id, quote, 0, "same-request", now+2)
 	require.NoError(t, err)
 	assert.Equal(t, first.ID, repeated.ID)
+	assert.Equal(t, "same-request", repeated.IdempotencyKey)
 }
 
 func TestD2SChargebackSuspendsLicenseAndIsIdempotent(t *testing.T) {

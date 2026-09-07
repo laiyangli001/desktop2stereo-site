@@ -180,7 +180,8 @@ func d2sBalanceAccountTx(tx *gorm.DB, userID int, currency string, now int64) (*
 }
 
 func CreateD2SOrder(userID int, quote *D2SOrderQuote, balanceMinor int64, idempotencyKey string, now int64) (*D2SOrder, error) {
-	if quote == nil || strings.TrimSpace(idempotencyKey) == "" || len(idempotencyKey) > 128 || balanceMinor < 0 || balanceMinor > quote.AmountMinor {
+	idempotencyKey = strings.TrimSpace(idempotencyKey)
+	if quote == nil || idempotencyKey == "" || len(idempotencyKey) > 128 || balanceMinor < 0 || balanceMinor > quote.AmountMinor {
 		return nil, ErrD2SOrderInvalid
 	}
 	if quote.Provider == D2SProviderBalance && balanceMinor != quote.AmountMinor {
