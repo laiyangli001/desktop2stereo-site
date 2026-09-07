@@ -328,6 +328,18 @@ func processWaffoPancakeD2SRefund(event *service.WaffoPancakeWebhookEvent, paylo
 	if event == nil || event.NormalizedEventType() != "refund.succeeded" {
 		return false, nil
 	}
+	switch event.Data.RefundStatus {
+	case core.RefundStatusFailed, core.RefundStatusInProgress:
+		return false, nil
+	case core.RefundStatusPartiallyRefunded:
+		return true, fmt.Errorf("partial Waffo Pancake refund requires reconciliation: %w", model.ErrD2SPaymentMismatch)
+	case "":
+		// Older webhook payloads may omit RefundStatus; the exact amount check
+		// in ProcessD2SPaymentEvent remains the final guard in that case.
+	case core.RefundStatusFullyRefunded:
+	default:
+		return false, nil
+	}
 	orderID := strings.TrimSpace(event.Data.OrderMerchantExternalID)
 	eventID := strings.TrimSpace(event.EventID)
 	if eventID == "" {

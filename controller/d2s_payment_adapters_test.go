@@ -444,6 +444,20 @@ func TestWaffoD2SRefundRejectsPartialRefund(t *testing.T) {
 	assert.ErrorIs(t, err, model.ErrD2SPaymentMismatch)
 }
 
+func TestWaffoPancakeD2SRefundRejectsPartialRefund(t *testing.T) {
+	event := &service.WaffoPancakeWebhookEvent{
+		EventType: "refund.succeeded",
+		Data: service.WaffoPancakeWebhookData{
+			RefundStatus: core.RefundStatusPartiallyRefunded,
+		},
+	}
+
+	handled, err := processWaffoPancakeD2SRefund(event, []byte(`{"eventType":"refund.succeeded"}`))
+
+	assert.True(t, handled)
+	assert.ErrorIs(t, err, model.ErrD2SPaymentMismatch)
+}
+
 func TestD2SCheckoutRejectsStripeOutsideINTL(t *testing.T) {
 	_, err := createD2SStripeCheckout(&model.D2SOrder{
 		Provider:     "stripe",
