@@ -61,6 +61,7 @@ function ReviewActions(props: {
         placeholder={t('Review note')}
       />
       <Button
+        type='button'
         size='sm'
         disabled={mutation.isPending}
         onClick={() =>
@@ -70,6 +71,7 @@ function ReviewActions(props: {
         {t('Approve')}
       </Button>
       <Button
+        type='button'
         size='sm'
         variant='destructive'
         disabled={mutation.isPending}
@@ -377,6 +379,7 @@ export function D2SAdminWorkspace() {
                   )}
                   {!key.is_current && key.status !== 'retired' && (
                     <Button
+                      type='button'
                       size='sm'
                       variant='destructive'
                       disabled={signingKeyMutation.isPending}
@@ -499,6 +502,7 @@ function RegionRow(props: {
         <option value='INTL'>INTL</option>
       </select>
       <Button
+        type='button'
         size='sm'
         onClick={() => props.onSave(region)}
         disabled={!props.license.user_id || !region}

@@ -179,9 +179,24 @@ describe('D2SAdminWorkspace', () => {
     expect(screen.getByText(/Device: 123456789012…/)).toBeInTheDocument()
     expect(screen.getByText(/reversal_not_settled/)).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('INTL')
-    expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: 'Reject' })).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'Retire' })).toBeInTheDocument()
+    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
+    const rejectButtons = screen.getAllByRole('button', { name: 'Reject' })
+    expect(approveButtons).toHaveLength(2)
+    expect(rejectButtons).toHaveLength(2)
+    expect(approveButtons).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'button' })])
+    )
+    expect(rejectButtons).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'button' })])
+    )
+    expect(screen.getByRole('button', { name: 'Retire' })).toHaveAttribute(
+      'type',
+      'button'
+    )
+    expect(screen.getByRole('button', { name: 'Save region' })).toHaveAttribute(
+      'type',
+      'button'
+    )
     expect(
       screen.getAllByRole('textbox', { name: 'Review note' })
     ).toHaveLength(2)
