@@ -20,6 +20,7 @@ on:
       - 'service/waffo_pancake.go'
       - 'service/d2s_*.go'
       - 'web/src/features/d2s/**'
+      - 'web/src/i18n/locales/**'
       - 'web/src/routes/_authenticated/d2s/**'
       - 'web/src/routes/_authenticated/d2s-admin/**'
       - 'web/src/routes/device.tsx'
