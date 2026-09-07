@@ -218,10 +218,10 @@ export function D2SAdminWorkspace() {
                     className='h-9 rounded-lg border bg-transparent px-3 text-sm'
                   >
                     <option value=''>{t('All statuses')}</option>
-                    <option value='pending'>pending</option>
-                    <option value='paid'>paid</option>
-                    <option value='canceled'>canceled</option>
-                    <option value='chargeback'>chargeback</option>
+                    <option value='pending'>{t('Pending')}</option>
+                    <option value='paid'>{t('Paid')}</option>
+                    <option value='canceled'>{t('Canceled')}</option>
+                    <option value='chargeback'>{t('Chargeback')}</option>
                   </select>
                   <Input
                     aria-label={t('User ID')}
