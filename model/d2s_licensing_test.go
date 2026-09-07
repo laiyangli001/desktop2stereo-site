@@ -383,6 +383,51 @@ func TestD2SPaymentEventLifecycleMatrix(t *testing.T) {
 	}
 }
 
+func TestD2SPaymentEventSharedValidationAcrossOpenProviders(t *testing.T) {
+	tests := []struct {
+		provider string
+		region   string
+		currency string
+	}{
+		{provider: "epay", region: D2SRegionCN, currency: "CNY"},
+		{provider: "paymentfm", region: D2SRegionCN, currency: "CNY"},
+		{provider: "alipay", region: D2SRegionCN, currency: "CNY"},
+		{provider: "wechat", region: D2SRegionCN, currency: "CNY"},
+		{provider: "waffo", region: D2SRegionCN, currency: "CNY"},
+		{provider: "stripe", region: D2SRegionINTL, currency: "USD"},
+		{provider: "creem", region: D2SRegionINTL, currency: "USD"},
+		{provider: "waffo_pancake", region: D2SRegionINTL, currency: "USD"},
+	}
+
+	for index, test := range tests {
+		t.Run(test.provider, func(t *testing.T) {
+			useD2STestDB(t)
+			user := createD2STestUser(t, fmt.Sprintf("d2s-provider-validation-%d", index))
+			const now = int64(2_000_710_000)
+			_, err := EnsureD2SProfileAndTrial(user.Id, now)
+			require.NoError(t, err)
+			order := D2SOrder{
+				ID: "shared-validation-" + test.provider, UserID: user.Id,
+				Product: D2SOrderProductLicense, Provider: test.provider,
+				Region: test.region, Currency: test.currency, AmountMinor: 2990,
+				GatewayMinor: 2990, Status: D2SOrderPending, CreatedAt: now, ExpiresAt: now + 1800,
+			}
+			require.NoError(t, DB.Create(&order).Error)
+
+			_, err = ProcessD2SPaymentEvent(test.provider, "shared-validation-paid", order.ID, "paid", 2990, test.currency, "shared-validation-payload", now+1)
+			require.NoError(t, err)
+			_, err = ProcessD2SPaymentEvent(test.provider, "shared-validation-paid", order.ID, "paid", 2990, test.currency, "shared-validation-payload", now+2)
+			require.NoError(t, err)
+			_, err = ProcessD2SPaymentEvent(test.provider, "shared-validation-paid", order.ID, "paid", 2991, test.currency, "shared-validation-payload", now+3)
+			assert.ErrorIs(t, err, ErrD2SPaymentMismatch)
+
+			var stored D2SOrder
+			require.NoError(t, DB.First(&stored, "id = ?", order.ID).Error)
+			assert.Equal(t, D2SOrderPaid, stored.Status)
+		})
+	}
+}
+
 func TestD2SProviderRegionExcludesUnsupportedLaunchProviders(t *testing.T) {
 	_, ok := D2SProviderRegion("paypal")
 	assert.False(t, ok)
