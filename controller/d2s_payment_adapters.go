@@ -364,5 +364,8 @@ func processWaffoPancakeD2SRefund(event *service.WaffoPancakeWebhookEvent, paylo
 	if err != nil || !exists {
 		return exists, err
 	}
-	return processVerifiedD2SPayment("waffo_pancake", eventID, orderID, "reversed", minorValue, event.Data.Currency, payload)
+	return processVerifiedD2SPayment(
+		"waffo_pancake", eventID, orderID, "reversed", minorValue,
+		strings.ToUpper(strings.TrimSpace(event.Data.Currency)), payload,
+	)
 }

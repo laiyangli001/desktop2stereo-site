@@ -209,6 +209,17 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	var refundedPancakeOrder model.D2SOrder
 	require.NoError(t, db.First(&refundedPancakeOrder, "id = ?", pancakeOrder.ID).Error)
 	assert.Equal(t, model.D2SOrderChargeback, refundedPancakeOrder.Status)
+
+	lowercaseCurrencyOrder := makeOrder("pancake-lowercase-refund-order", 907, "waffo_pancake", "USD")
+	handled, err = processWaffoPancakeD2SPayment(&service.WaffoPancakeWebhookEvent{EventID: "pancake-lowercase-paid-event", EventType: "order.completed", Data: service.WaffoPancakeWebhookData{OrderMerchantExternalID: lowercaseCurrencyOrder.ID, Currency: "usd", Amount: "29.90"}}, []byte("pancake-lowercase-paid-payload"))
+	require.NoError(t, err)
+	assert.True(t, handled)
+	handled, err = processWaffoPancakeD2SRefund(&service.WaffoPancakeWebhookEvent{EventID: "pancake-lowercase-refund-event", EventType: "refund.succeeded", Data: service.WaffoPancakeWebhookData{OrderMerchantExternalID: lowercaseCurrencyOrder.ID, Currency: "usd", Amount: "29.90"}}, []byte("pancake-lowercase-refund-payload"))
+	require.NoError(t, err)
+	assert.True(t, handled)
+	var lowercaseRefundedOrder model.D2SOrder
+	require.NoError(t, db.First(&lowercaseRefundedOrder, "id = ?", lowercaseCurrencyOrder.ID).Error)
+	assert.Equal(t, model.D2SOrderChargeback, lowercaseRefundedOrder.Status)
 	handled, err = processWaffoPancakeD2SPayment(&service.WaffoPancakeWebhookEvent{
 		EventID:   "pancake-pending-event",
 		EventType: "checkout.created",
