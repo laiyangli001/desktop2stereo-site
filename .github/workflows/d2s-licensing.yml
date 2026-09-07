@@ -120,6 +120,7 @@ jobs:
             throw 'Production Compose unexpectedly accepted missing database credentials.'
           }
           Write-Host "Production Compose rejected missing credentials as expected (exit code $composeExitCode)."
+          exit 0
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
       - name: Run complete Go test suite
