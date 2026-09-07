@@ -131,6 +131,9 @@ export function LicenseCard(props: {
               <Button
                 type='button'
                 size='sm'
+                aria-label={`${t('Online mode')} ${
+                  props.license.license_code
+                }`}
                 variant={
                   props.license.mode === 'online' ? 'default' : 'outline'
                 }
@@ -142,6 +145,9 @@ export function LicenseCard(props: {
               <Button
                 type='button'
                 size='sm'
+                aria-label={`${t('Offline mode')} ${
+                  props.license.license_code
+                }`}
                 variant={
                   props.license.mode === 'offline' ? 'default' : 'outline'
                 }
@@ -154,6 +160,9 @@ export function LicenseCard(props: {
                 type='button'
                 size='sm'
                 variant='outline'
+                aria-label={`${t('Make permanent')} ${
+                  props.license.license_code
+                }`}
                 disabled={props.actionPending}
                 onClick={props.onConfirmPermanent}
               >
@@ -181,6 +190,9 @@ export function LicenseCard(props: {
                 type='button'
                 size='sm'
                 variant='destructive'
+                aria-label={`${t('Free revoke')} ${
+                  props.license.license_code
+                }`}
                 disabled={props.actionPending}
                 onClick={props.onFreeRevoke}
               >

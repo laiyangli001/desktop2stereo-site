@@ -35,7 +35,9 @@ describe('LicenseCard', () => {
       screen.getByRole('combobox', { name: 'Offline period D2S-TEST-0001' }),
       { target: { value: '30' } }
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Offline mode' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Offline mode D2S-TEST-0001' })
+    )
 
     expect(onChangeMode).toHaveBeenCalledWith('offline', 30)
   })
@@ -52,8 +54,12 @@ describe('LicenseCard', () => {
       />
     )
 
-    expect(screen.queryByRole('button', { name: 'Offline mode' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Free revoke' })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Offline mode D2S-TEST-0001' })
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Free revoke D2S-TEST-0001' })
+    ).toBeNull()
   })
 
   it('exposes a reason field for permanent-license manual unbind', () => {
@@ -82,9 +88,15 @@ describe('LicenseCard', () => {
     )
 
     expect(onManualUnbind).toHaveBeenCalledWith('Hardware replacement')
-    expect(screen.queryByRole('button', { name: 'Online mode' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Offline mode' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Free revoke' })).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Online mode D2S-TEST-0001' })
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Offline mode D2S-TEST-0001' })
+    ).toBeNull()
+    expect(
+      screen.queryByRole('button', { name: 'Free revoke D2S-TEST-0001' })
+    ).toBeNull()
   })
 
   it('disables duplicate manual-unbind requests while one is pending', () => {
@@ -119,7 +131,9 @@ describe('LicenseCard', () => {
       />
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Make permanent' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Make permanent D2S-TEST-0001' })
+    )
 
     expect(onConfirmPermanent).toHaveBeenCalledOnce()
   })
