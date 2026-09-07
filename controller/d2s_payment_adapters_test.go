@@ -404,7 +404,7 @@ func TestStripeD2SOrderIDReadsMetadataForReversalEvents(t *testing.T) {
 }
 
 func TestCreemD2SReversalDetailsUsesCheckoutRequestID(t *testing.T) {
-	payload := []byte(`{"id":"refund_123","eventType":"refund.created","object":{"refund_amount":2990,"refund_currency":"USD","checkout":{"request_id":"d2s-order-123"},"transaction":{"order":"creem-order-123"}}}`)
+	payload := []byte(`{"id":"refund_123","eventType":"refund.created","object":{"refund_amount":2990,"refund_currency":"usd","checkout":{"request_id":"d2s-order-123"},"transaction":{"order":"creem-order-123"}}}`)
 
 	handled, eventID, orderID, eventType, amountMinor, currency, err := creemD2SReversalFields(payload)
 

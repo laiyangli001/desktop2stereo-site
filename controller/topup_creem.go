@@ -274,10 +274,10 @@ func creemD2SReversalFields(payload []byte) (bool, string, string, string, int64
 	}
 
 	amountMinor := event.Object.Amount
-	currency := event.Object.Currency
+	currency := strings.ToUpper(strings.TrimSpace(event.Object.Currency))
 	if event.EventType == "refund.created" {
 		amountMinor = event.Object.RefundAmount
-		currency = event.Object.RefundCurrency
+		currency = strings.ToUpper(strings.TrimSpace(event.Object.RefundCurrency))
 	}
 	if amountMinor <= 0 || strings.TrimSpace(currency) == "" {
 		return true, eventID, orderID, event.EventType, amountMinor, currency, fmt.Errorf("invalid Creem reversal amount or currency: %w", model.ErrD2SPaymentMismatch)
