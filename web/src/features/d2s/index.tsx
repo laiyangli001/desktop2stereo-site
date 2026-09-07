@@ -162,7 +162,9 @@ export function LicenseCard(props: {
               <label className='flex items-center gap-2 text-sm'>
                 <span>{t('Offline period')}</span>
                 <select
-                  aria-label={t('Offline period')}
+                  aria-label={`${t('Offline period')} ${
+                    props.license.license_code
+                  }`}
                   className='h-8 rounded-lg border bg-transparent px-2 text-sm'
                   disabled={props.actionPending}
                   value={offlineDays}
@@ -199,7 +201,9 @@ export function LicenseCard(props: {
               <label className='grid gap-1 text-sm'>
                 <span>{t('Manual unbind reason')}</span>
                 <input
-                  aria-label={t('Manual unbind reason')}
+                  aria-label={`${t('Manual unbind reason')} ${
+                    props.license.license_code
+                  }`}
                   className='h-9 rounded-lg border bg-transparent px-3'
                   value={manualReason}
                   onChange={(event) => setManualReason(event.target.value)}

@@ -31,9 +31,10 @@ describe('LicenseCard', () => {
       />
     )
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Offline period' }), {
-      target: { value: '30' },
-    })
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Offline period D2S-TEST-0001' }),
+      { target: { value: '30' } }
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Offline mode' }))
 
     expect(onChangeMode).toHaveBeenCalledWith('offline', 30)
@@ -69,7 +70,9 @@ describe('LicenseCard', () => {
     )
 
     fireEvent.change(
-      screen.getByRole('textbox', { name: 'Manual unbind reason' }),
+      screen.getByRole('textbox', {
+        name: 'Manual unbind reason D2S-TEST-0001',
+      }),
       {
         target: { value: 'Hardware replacement' },
       }
