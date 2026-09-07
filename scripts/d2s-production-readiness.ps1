@@ -84,6 +84,18 @@ function Assert-TrustedProxyConfiguration([string]$RawValue) {
     Write-Host "OK trusted proxy configuration contains $($entries.Count) explicit address(es)"
 }
 
+function Assert-ProductionBaseUrl([string]$Value) {
+    try {
+        $uri = [Uri]$Value
+    } catch {
+        throw "Production readiness requires a valid HTTPS BaseUrl"
+    }
+    if ($uri.Scheme -ne "https" -or [string]::IsNullOrWhiteSpace($uri.Host) -or $uri.AbsolutePath -ne "/" -or $uri.Query -or $uri.Fragment -or $uri.UserInfo) {
+        throw "Production readiness requires an HTTPS BaseUrl origin without credentials, paths, queries, or fragments"
+    }
+    Write-Host "OK production BaseUrl uses HTTPS origin: $($uri.Host)"
+}
+
 @(
     "SQL_DSN",
     "REDIS_CONN_STRING",
@@ -91,6 +103,8 @@ function Assert-TrustedProxyConfiguration([string]$RawValue) {
     "D2S_LICENSE_KEY_ID",
     "D2S_PAYMENT_BRIDGE_SECRET"
 ) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
+
+Assert-ProductionBaseUrl $BaseUrl
 
 if ($RequireSecrets) {
     Assert-MinimumLengthEnvironmentVariable "SESSION_SECRET" 32
@@ -151,9 +165,6 @@ if ($RequireSecrets) {
 
 if (-not $SkipHttp) {
     $normalizedBaseUrl = $BaseUrl.TrimEnd('/')
-    if ($normalizedBaseUrl -notmatch '^https://') {
-        throw "Production HTTP readiness checks require an HTTPS BaseUrl"
-    }
     $health = Invoke-WebRequest -Uri "$normalizedBaseUrl/api/status" -UseBasicParsing
     if ($health.StatusCode -ne 200) {
         throw "Health endpoint returned HTTP $($health.StatusCode)"

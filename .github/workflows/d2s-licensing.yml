@@ -168,6 +168,23 @@ jobs:
           $env:TRUSTED_PROXIES = 'none'
           $env:SESSION_COOKIE_SECURE = 'true'
           ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp -RequiredPaymentProviders stripe,waffo_pancake
+      - name: Reject malformed production BaseUrl
+        shell: pwsh
+        run: |
+          $env:SQL_DSN = 'ci-placeholder'
+          $env:REDIS_CONN_STRING = 'ci-placeholder'
+          $env:SESSION_SECRET = 's' * 32
+          $env:D2S_LICENSE_KEY_ID = 'ci-key'
+          $env:D2S_PAYMENT_BRIDGE_SECRET = 'p' * 32
+          try {
+            ./scripts/d2s-production-readiness.ps1 -BaseUrl 'https://user:password@example.com/?unsafe=1' -SkipHttp
+            throw 'Malformed BaseUrl was accepted.'
+          } catch {
+            if ($_.Exception.Message -notlike '*HTTPS BaseUrl origin*') {
+              throw
+            }
+            Write-Host 'Malformed production BaseUrl rejected as expected.'
+          }
 
   frontend:
     name: D2S frontend typecheck, test, and build
