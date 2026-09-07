@@ -24,6 +24,14 @@ function Assert-PositiveIntegerEnvironmentVariable([string]$Name) {
     Write-Host "OK positive integer config present: $Name"
 }
 
+function Assert-MinimumLengthEnvironmentVariable([string]$Name, [int]$MinimumLength) {
+    $value = [Environment]::GetEnvironmentVariable($Name)
+    if ($value.Length -lt $MinimumLength) {
+        throw "Required environment variable is shorter than $MinimumLength characters: $Name"
+    }
+    Write-Host "OK high-entropy secret length present: $Name"
+}
+
 function Assert-TrustedProxyConfiguration([string]$RawValue) {
     $entries = @($RawValue.Split(',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
     if ($entries.Count -eq 0) {
@@ -73,6 +81,8 @@ function Assert-TrustedProxyConfiguration([string]$RawValue) {
 ) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
 
 if ($RequireSecrets) {
+    Assert-MinimumLengthEnvironmentVariable "SESSION_SECRET" 32
+    Assert-MinimumLengthEnvironmentVariable "D2S_PAYMENT_BRIDGE_SECRET" 32
     Assert-NonEmptyEnvironmentVariable "D2S_LICENSE_PRIVATE_KEY_B64"
     Assert-PositiveIntegerEnvironmentVariable "D2S_OFFLINE_EXTENSION_CNY_MINOR"
     Assert-PositiveIntegerEnvironmentVariable "D2S_OFFLINE_EXTENSION_USD_MINOR"
