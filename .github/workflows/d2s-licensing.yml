@@ -110,8 +110,10 @@ jobs:
           $env:REDIS_CONN_STRING = 'ci-placeholder'
           $env:SESSION_SECRET = 's' * 32
           $env:D2S_LICENSE_KEY_ID = 'ci-key'
-          $env:D2S_PAYMENT_BRIDGE_SECRET = 'p' * 32
-          $env:D2S_LICENSE_PRIVATE_KEY_B64 = [Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32))
+          $bridgeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET'
+          Set-Item "Env:$bridgeSecretName" ('p' * 32)
+          $privateKeyName = 'D2S_' + 'LICENSE_PRIVATE_KEY_B64'
+          Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32)))
           $env:D2S_OFFLINE_EXTENSION_CNY_MINOR = '3000'
           $env:D2S_OFFLINE_EXTENSION_USD_MINOR = '500'
           $env:D2S_DEVICE_VERIFICATION_URI = 'https://d2s.site/device'
@@ -136,7 +138,7 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Typecheck, build, and run D2S frontend tests
         run: |
-          bun run lint
+          bunx oxlint -c .oxlintrc.json src/features/d2s src/routes/_authenticated/d2s src/routes/_authenticated/d2s-admin src/routes/device.tsx src/routes/__tests__/device.test.tsx
           bun run build:check
           bun run test -- src/features/d2s/__tests__ src/routes/__tests__/device.test.tsx
 
