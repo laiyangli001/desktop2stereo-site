@@ -5609,6 +5609,8 @@
     "Loading Desktop2Stereo admin data": "正在載入 Desktop2Stereo 管理資料",
     "Unable to load Desktop2Stereo admin data": "無法載入 Desktop2Stereo 管理資料",
     "Operation failed": "操作失敗",
-    "Region updated": "區域已更新"
+    "Region updated": "區域已更新",
+    "Loading Desktop2Stereo data": "正在載入 Desktop2Stereo 資料",
+    "Unable to load Desktop2Stereo data": "無法載入 Desktop2Stereo 資料"
   }
 }

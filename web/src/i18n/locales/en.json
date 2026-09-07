@@ -5609,6 +5609,8 @@
     "Loading Desktop2Stereo admin data": "Loading Desktop2Stereo admin data",
     "Unable to load Desktop2Stereo admin data": "Unable to load Desktop2Stereo admin data",
     "Operation failed": "Operation failed",
-    "Region updated": "Region updated"
+    "Region updated": "Region updated",
+    "Loading Desktop2Stereo data": "Loading Desktop2Stereo data",
+    "Unable to load Desktop2Stereo data": "Unable to load Desktop2Stereo data"
   }
 }

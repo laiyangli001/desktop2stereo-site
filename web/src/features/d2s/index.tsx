@@ -296,6 +296,17 @@ export function D2SWorkspace() {
     queryKey: ['d2s', 'manual-unbind'],
     queryFn: getD2SManualUnbindRequests,
   })
+  const d2sQueries = [
+    licenses,
+    orders,
+    checkoutProviders,
+    balance,
+    invite,
+    withdrawals,
+    manualUnbinds,
+  ]
+  const d2sDataLoading = d2sQueries.some((query) => query.isPending)
+  const d2sDataFailed = d2sQueries.some((query) => query.isError)
 
   const accountRows = balance.data?.data?.accounts ?? []
   const orderRows = orders.data?.data?.orders ?? []
@@ -399,6 +410,16 @@ export function D2SWorkspace() {
       <SectionPageLayout.Title>{t('Desktop2Stereo')}</SectionPageLayout.Title>
       <SectionPageLayout.Content>
         <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
+          {d2sDataLoading && (
+            <p role='status' className='text-muted-foreground text-sm'>
+              {t('Loading Desktop2Stereo data')}
+            </p>
+          )}
+          {d2sDataFailed && (
+            <p role='alert' className='text-destructive text-sm'>
+              {t('Unable to load Desktop2Stereo data')}
+            </p>
+          )}
           <Card>
             <CardHeader>
               <CardTitle>{t('Balance')}</CardTitle>
