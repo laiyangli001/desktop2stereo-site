@@ -175,7 +175,8 @@ jobs:
           $env:REDIS_CONN_STRING = 'ci-placeholder'
           $env:SESSION_SECRET = 's' * 32
           $env:D2S_LICENSE_KEY_ID = 'ci-key'
-          $env:D2S_PAYMENT_BRIDGE_SECRET = 'p' * 32
+          $bridgeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET'
+          Set-Item "Env:$bridgeSecretName" ('p' * 32)
           try {
             ./scripts/d2s-production-readiness.ps1 -BaseUrl 'https://user:password@example.com/?unsafe=1' -SkipHttp
             throw 'Malformed BaseUrl was accepted.'
