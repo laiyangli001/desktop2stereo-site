@@ -683,3 +683,30 @@ func TestD2SPaymentReconciliationIncludesOlderOrdersReferencedByEvents(t *testin
 		OrderID: "reconcile-old-paid", ProviderEventID: "reconcile-reversal", Kind: "reversal_not_settled",
 	})
 }
+
+func TestD2SAdditionalReversalEventsAreRecordedAfterChargeback(t *testing.T) {
+	useD2STestDB(t)
+	const now = int64(2_000_800_000)
+	require.NoError(t, DB.Create(&D2SOrder{
+		ID: "reversal-chain-order", UserID: 1, Product: D2SOrderProductLicense, Provider: "stripe",
+		Region: D2SRegionINTL, Currency: "USD", AmountMinor: 2990, GatewayMinor: 2990,
+		Status: D2SOrderPaid, CreatedAt: now - 100, ExpiresAt: now + 1700,
+	}).Error)
+	require.NoError(t, DB.Create(&D2SPaymentEvent{
+		ID: "reversal-chain-paid", Provider: "stripe", ProviderEventID: "reversal-chain-paid",
+		OrderID: "reversal-chain-order", EventType: "paid", AmountMinor: 2990, Currency: "USD",
+		PayloadHash: "paid-hash", ProcessedAt: now - 90,
+	}).Error)
+
+	_, err := ProcessD2SPaymentEvent("stripe", "reversal-chain-refund", "reversal-chain-order", "reversed", 2990, "USD", "refund-hash", now)
+	require.NoError(t, err)
+	_, err = ProcessD2SPaymentEvent("stripe", "reversal-chain-dispute", "reversal-chain-order", "chargeback", 2990, "USD", "dispute-hash", now+1)
+	require.NoError(t, err)
+
+	var order D2SOrder
+	require.NoError(t, DB.First(&order, "id = ?", "reversal-chain-order").Error)
+	assert.Equal(t, D2SOrderChargeback, order.Status)
+	var eventCount int64
+	require.NoError(t, DB.Model(&D2SPaymentEvent{}).Where("order_id = ?", order.ID).Count(&eventCount).Error)
+	assert.EqualValues(t, 3, eventCount)
+}

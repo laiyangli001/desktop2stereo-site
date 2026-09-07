@@ -540,6 +540,9 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 			}
 			return settleD2SReservedBalanceTx(tx, &order, true, now)
 		case "canceled", "failed":
+			if order.Status == D2SOrderCanceled {
+				return nil
+			}
 			if order.Status != D2SOrderPending {
 				return ErrD2SOrderState
 			}
@@ -549,6 +552,9 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 			order.Status = D2SOrderCanceled
 			return settleD2SReservedBalanceTx(tx, &order, false, now)
 		case "chargeback", "reversed":
+			if order.Status == D2SOrderChargeback {
+				return nil
+			}
 			if order.Status != D2SOrderPaid {
 				return ErrD2SOrderState
 			}
