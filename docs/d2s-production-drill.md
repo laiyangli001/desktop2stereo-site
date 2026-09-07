@@ -6,7 +6,8 @@
 
 ## 0. 前置条件
 
-- PostgreSQL、Redis、Cloudflare、Nginx/CLB、两个应用实例和支付回调 Worker 已准备。
+- PostgreSQL、Redis、Cloudflare、Nginx/CLB、两个应用实例和支付回调 Worker 已准备；两个实例
+  使用相同的渠道专用桥接 Secret（`D2S_PAYMENT_BRIDGE_SECRET_{PROVIDER}`）。
 - 所有 Secret 从腾讯云 Secret 管理或编排系统注入，执行过程不打印值。
 - 准备一份 PostgreSQL 快照、上一版本镜像和本次 Git SHA。
 - 至少准备一个 CN 渠道和一个 INTL 渠道的沙箱账号；PayPal/Paddle 不得出现在测试矩阵。

@@ -92,8 +92,9 @@ flowchart TD
 
 `POST https://d2s.site/api/v1/webhooks/{provider}`
 
-转发请求使用与渠道 Secret 分离的 `D2S_PAYMENT_BRIDGE_SECRET` 生成
-`X-D2S-Signature`。服务端再次校验订单、渠道、区域、金额和币种，并通过
+转发请求使用与渠道 Secret 分离的 `D2S_PAYMENT_BRIDGE_SECRET[_PROVIDER]` 生成
+`X-D2S-Signature`；例如 Stripe 使用 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`。服务端优先使用
+渠道专用 Secret，未配置时才回退到全局 Secret，再次校验订单、渠道、区域、金额和币种，并通过
 `(provider, provider_event_id)` 幂等处理。Worker 不能直接写数据库，也不能仅依靠来源 IP
 证明回调可信。建议再用 Cloudflare Access 服务令牌或 mTLS 限制桥接入口。
 
@@ -124,7 +125,11 @@ PayPal/Paddle 在完成适配器前不开放。
 - `D2S_LICENSE_KEY_ID`。
 - `D2S_LICENSE_PRIVATE_KEY_B64`，内容为 P-256 PKCS#8 DER 私钥的 Base64；运行时也兼容
   Base64 编码的 PEM，以便平滑迁移既有部署。
-- `D2S_PAYMENT_BRIDGE_SECRET`。
+- `D2S_PAYMENT_BRIDGE_SECRET`；推荐按渠道配置 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`、
+  `D2S_PAYMENT_BRIDGE_SECRET_CREEM`、`D2S_PAYMENT_BRIDGE_SECRET_EPAY`、
+  `D2S_PAYMENT_BRIDGE_SECRET_PAYMENTFM`、`D2S_PAYMENT_BRIDGE_SECRET_ALIPAY`、
+  `D2S_PAYMENT_BRIDGE_SECRET_WECHAT`、`D2S_PAYMENT_BRIDGE_SECRET_WAFFO` 和
+  `D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE`，渠道专用值优先于全局值。
 - `D2S_OFFLINE_EXTENSION_CNY_MINOR`、`D2S_OFFLINE_EXTENSION_USD_MINOR`。
 
 部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本还会校验离线延长
@@ -171,7 +176,8 @@ PayPal/Paddle 在完成适配器前不开放。
    ```
 
 6. 完成 new-api 初始化，启用邮箱验证、Turnstile 和支付渠道。
-7. 部署支付回调 Worker，配置渠道原生 Secret 和独立桥接 Secret。
+7. 部署支付回调 Worker，配置渠道原生 Secret 和独立桥接 Secret；优先使用每渠道独立的
+   `D2S_PAYMENT_BRIDGE_SECRET_{PROVIDER}`，仅在兼容旧部署时使用全局 Secret 回退。
 8. 执行健康检查：
 
    ```bash
