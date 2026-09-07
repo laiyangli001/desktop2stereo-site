@@ -161,6 +161,8 @@ describe('D2SAdminWorkspace', () => {
       screen.getByText(/stripe-chargeback-1 · order-chargeback/)
     ).toBeInTheDocument()
     expect(screen.getByText(/Processed at:/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
     expect(
       screen.getByText(/Status: active · Mode: online/)
     ).toBeInTheDocument()

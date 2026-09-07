@@ -84,6 +84,12 @@ function ReviewActions(props: {
 export function D2SAdminWorkspace() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [eventFilters, setEventFilters] = useState({
+    provider: '',
+    order_id: '',
+    event_type: '',
+  })
+  const [activeEventFilters, setActiveEventFilters] = useState(eventFilters)
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: ['d2s-admin'] })
   const licenses = useQuery({
@@ -95,8 +101,8 @@ export function D2SAdminWorkspace() {
     queryFn: () => getD2SAdminOrders(),
   })
   const paymentEvents = useQuery({
-    queryKey: ['d2s-admin', 'payment-events'],
-    queryFn: getD2SAdminPaymentEvents,
+    queryKey: ['d2s-admin', 'payment-events', activeEventFilters],
+    queryFn: () => getD2SAdminPaymentEvents(activeEventFilters),
   })
   const balances = useQuery({
     queryKey: ['d2s-admin', 'balances'],
@@ -225,7 +231,71 @@ export function D2SAdminWorkspace() {
               <CardHeader>
                 <CardTitle>{t('Payment events')}</CardTitle>
               </CardHeader>
-              <CardContent className='space-y-2 text-sm'>
+              <CardContent className='space-y-3 text-sm'>
+                <form
+                  className='grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto_auto]'
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    setActiveEventFilters({
+                      provider: eventFilters.provider.trim(),
+                      order_id: eventFilters.order_id.trim(),
+                      event_type: eventFilters.event_type.trim(),
+                    })
+                  }}
+                >
+                  <Input
+                    aria-label={t('Provider')}
+                    placeholder={t('Provider')}
+                    value={eventFilters.provider}
+                    onChange={(event) =>
+                      setEventFilters((current) => ({
+                        ...current,
+                        provider: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    aria-label='event_type'
+                    placeholder='event_type'
+                    value={eventFilters.event_type}
+                    onChange={(event) =>
+                      setEventFilters((current) => ({
+                        ...current,
+                        event_type: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    aria-label='order_id'
+                    placeholder='order_id'
+                    value={eventFilters.order_id}
+                    onChange={(event) =>
+                      setEventFilters((current) => ({
+                        ...current,
+                        order_id: event.target.value,
+                      }))
+                    }
+                  />
+                  <Button type='submit' size='sm'>
+                    {t('Filter')}
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => {
+                      const emptyFilters = {
+                        provider: '',
+                        order_id: '',
+                        event_type: '',
+                      }
+                      setEventFilters(emptyFilters)
+                      setActiveEventFilters(emptyFilters)
+                    }}
+                  >
+                    {t('Clear')}
+                  </Button>
+                </form>
                 {(paymentEvents.data?.data?.events || []).map((event) => (
                   <div
                     key={event.id}

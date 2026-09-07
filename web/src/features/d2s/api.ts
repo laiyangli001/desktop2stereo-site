@@ -27,8 +27,14 @@ export async function getD2SAdminOrders(status = '') {
   return response.data as D2SResponse<{ orders: D2SOrder[] }>
 }
 
-export async function getD2SAdminPaymentEvents() {
-  const response = await api.get('/api/v1/admin/payment-events')
+export async function getD2SAdminPaymentEvents(filters?: {
+  provider?: string
+  order_id?: string
+  event_type?: string
+}) {
+  const response = await api.get('/api/v1/admin/payment-events', {
+    params: filters,
+  })
   return response.data as D2SResponse<{ events: D2SPaymentEvent[] }>
 }
 
