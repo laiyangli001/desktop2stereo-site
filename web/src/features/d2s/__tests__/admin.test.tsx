@@ -137,7 +137,9 @@ describe('D2SAdminWorkspace', () => {
       response({
         orders: 1,
         payment_events: 1,
+        paid_orders: 0,
         chargeback_orders: 1,
+        pending_expired: 0,
         mismatches: [
           {
             order_id: 'order-chargeback',
@@ -154,6 +156,8 @@ describe('D2SAdminWorkspace', () => {
       expect(screen.getAllByText(/order-chargeback/).length).toBeGreaterThan(0)
     })
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
+    expect(screen.getByText(/Paid orders: 0/)).toBeInTheDocument()
+    expect(screen.getByText(/Pending expired: 0/)).toBeInTheDocument()
     expect(
       screen.getByText(/stripe · chargeback · USD 2990/)
     ).toBeInTheDocument()

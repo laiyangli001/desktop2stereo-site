@@ -394,9 +394,13 @@ export function D2SAdminWorkspace() {
             <CardHeader>
               <CardTitle>{t('Daily reconciliation')}</CardTitle>
             </CardHeader>
-            <CardContent className='grid gap-2 text-sm sm:grid-cols-4'>
+            <CardContent className='grid gap-2 text-sm sm:grid-cols-3 lg:grid-cols-6'>
               <span>
                 {t('Orders')}: {reconciliation.data?.data?.orders ?? 0}
+              </span>
+              <span>
+                {t('Paid orders')}:{' '}
+                {reconciliation.data?.data?.paid_orders ?? 0}
               </span>
               <span>
                 {t('Payment events')}:{' '}
@@ -410,8 +414,12 @@ export function D2SAdminWorkspace() {
                 {t('Mismatches')}:{' '}
                 {reconciliation.data?.data?.mismatches.length ?? 0}
               </span>
+              <span className='text-destructive'>
+                {t('Pending expired')}:{' '}
+                {reconciliation.data?.data?.pending_expired ?? 0}
+              </span>
               {(reconciliation.data?.data?.mismatches.length ?? 0) > 0 && (
-                <div className='space-y-2 border-t pt-3 sm:col-span-4'>
+                <div className='space-y-2 border-t pt-3 sm:col-span-3 lg:col-span-6'>
                   <div className='font-medium'>
                     {t('Reconciliation details')}
                   </div>
