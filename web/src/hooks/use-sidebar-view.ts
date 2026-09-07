@@ -51,21 +51,10 @@ export function useSidebarView(): ResolvedSidebarView {
   const rootSidebarData = useSidebarData()
   const configFilteredRoot = useSidebarConfig(rootSidebarData.navGroups)
 
-  const rootNavGroups = useMemo<NavGroup[]>(() => {
-    const role = userRole ?? ROLE.GUEST
-    const isAdmin = role >= ROLE.ADMIN
-    return configFilteredRoot
-      .filter((group) => (group.id === 'admin' ? isAdmin : true))
-      .map((group) => {
-        const items = group.items.filter(
-          (item) =>
-            (item.requiredRoles === undefined ||
-              item.requiredRoles.includes(role)) &&
-            (item.requiredRole === undefined || role >= item.requiredRole)
-        )
-        return items.length === group.items.length ? group : { ...group, items }
-      })
-  }, [configFilteredRoot, userRole])
+  const rootNavGroups = useMemo(
+    () => filterSidebarNavGroupsByRole(configFilteredRoot, userRole),
+    [configFilteredRoot, userRole]
+  )
 
   const view = resolveSidebarView(pathname)
 
@@ -82,4 +71,23 @@ export function useSidebarView(): ResolvedSidebarView {
     view: null,
     navGroups: rootNavGroups,
   }
+}
+
+export function filterSidebarNavGroupsByRole(
+  navGroups: NavGroup[],
+  userRole?: number
+): NavGroup[] {
+  const role = userRole ?? ROLE.GUEST
+  const isAdmin = role >= ROLE.ADMIN
+  return navGroups
+    .filter((group) => (group.id === 'admin' ? isAdmin : true))
+    .map((group) => {
+      const items = group.items.filter(
+        (item) =>
+          (item.requiredRoles === undefined ||
+            item.requiredRoles.includes(role)) &&
+          (item.requiredRole === undefined || role >= item.requiredRole)
+      )
+      return items.length === group.items.length ? group : { ...group, items }
+    })
 }
