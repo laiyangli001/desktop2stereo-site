@@ -108,6 +108,15 @@ jobs:
           POSTGRES_PASSWORD: ci-postgres-password
           REDIS_PASSWORD: ci-redis-password
         run: docker compose config --quiet
+      - name: Verify production Compose requires database credentials
+        shell: pwsh
+        run: |
+          Remove-Item Env:POSTGRES_PASSWORD -ErrorAction SilentlyContinue
+          Remove-Item Env:REDIS_PASSWORD -ErrorAction SilentlyContinue
+          docker compose config --quiet
+          if ($LASTEXITCODE -eq 0) {
+            throw 'Production Compose unexpectedly accepted missing database credentials.'
+          }
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
       - name: Run complete Go test suite
