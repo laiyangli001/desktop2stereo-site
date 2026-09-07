@@ -6,6 +6,7 @@ import { D2SWorkspace } from '..'
 
 const apiMocks = vi.hoisted(() => ({
   changeD2SMode: vi.fn(),
+  confirmD2SPermanent: vi.fn(),
   createD2SManualUnbind: vi.fn(),
   createD2SOrder: vi.fn(),
   createD2SOrderCheckout: vi.fn(),

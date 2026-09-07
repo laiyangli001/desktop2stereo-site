@@ -216,6 +216,15 @@ export async function changeD2SMode(
   return response.data
 }
 
+export async function confirmD2SPermanent(request: {
+  license_id: string
+  device_hash: string
+  confirmation: 'PERMANENT'
+}): Promise<D2SResponse<unknown>> {
+  const response = await api.post('/api/v1/license/permanent/confirm', request)
+  return response.data
+}
+
 export async function freeRevokeD2SLicense(request: {
   license_id: string
   device_hash: string

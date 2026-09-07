@@ -25,6 +25,7 @@ describe('LicenseCard', () => {
         license={activeBoundLicense}
         actionPending={false}
         onChangeMode={onChangeMode}
+        onConfirmPermanent={vi.fn()}
         onFreeRevoke={vi.fn()}
         onManualUnbind={vi.fn()}
       />
@@ -44,6 +45,7 @@ describe('LicenseCard', () => {
         license={{ ...activeBoundLicense, device_hash: undefined }}
         actionPending={false}
         onChangeMode={vi.fn()}
+        onConfirmPermanent={vi.fn()}
         onFreeRevoke={vi.fn()}
         onManualUnbind={vi.fn()}
       />
@@ -60,6 +62,7 @@ describe('LicenseCard', () => {
         license={{ ...activeBoundLicense, mode: 'permanent' }}
         actionPending={false}
         onChangeMode={vi.fn()}
+        onConfirmPermanent={vi.fn()}
         onFreeRevoke={vi.fn()}
         onManualUnbind={onManualUnbind}
       />
@@ -85,6 +88,7 @@ describe('LicenseCard', () => {
         actionPending={false}
         manualUnbindStatus='pending'
         onChangeMode={vi.fn()}
+        onConfirmPermanent={vi.fn()}
         onFreeRevoke={vi.fn()}
         onManualUnbind={vi.fn()}
       />
@@ -94,5 +98,23 @@ describe('LicenseCard', () => {
     expect(
       screen.getByRole('button', { name: 'Request manual unbind' })
     ).toBeDisabled()
+  })
+
+  it('exposes permanent binding as an explicit action', () => {
+    const onConfirmPermanent = vi.fn()
+    render(
+      <LicenseCard
+        license={activeBoundLicense}
+        actionPending={false}
+        onChangeMode={vi.fn()}
+        onConfirmPermanent={onConfirmPermanent}
+        onFreeRevoke={vi.fn()}
+        onManualUnbind={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Make permanent' }))
+
+    expect(onConfirmPermanent).toHaveBeenCalledOnce()
   })
 })

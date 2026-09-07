@@ -24,6 +24,7 @@ import {
   getD2SCheckoutProviders,
   getD2SWithdrawals,
   changeD2SMode,
+  confirmD2SPermanent,
   freeRevokeD2SLicense,
   previewD2SOrder,
   createD2SOrder,
@@ -84,6 +85,7 @@ export function LicenseCard(props: {
   license: D2SLicense
   actionPending: boolean
   onChangeMode: (mode: 'online' | 'offline', offlineDays: number) => void
+  onConfirmPermanent: () => void
   onFreeRevoke: () => void
   onManualUnbind: (reason: string) => void
   manualUnbindStatus?: string
@@ -142,6 +144,17 @@ export function LicenseCard(props: {
             >
               {t('Offline mode')}
             </Button>
+            {props.license.mode !== 'permanent' && (
+              <Button
+                type='button'
+                size='sm'
+                variant='outline'
+                disabled={props.actionPending}
+                onClick={props.onConfirmPermanent}
+              >
+                {t('Make permanent')}
+              </Button>
+            )}
             <label className='flex items-center gap-2 text-sm'>
               <span>{t('Offline period')}</span>
               <select
@@ -281,6 +294,24 @@ export function D2SWorkspace() {
       toast.success(t('License mode updated'))
     },
     onError: () => toast.error(t('Unable to update license mode')),
+  })
+  const permanentMutation = useMutation({
+    mutationFn: (request: { license_id: string; device_hash: string }) =>
+      confirmD2SPermanent({
+        ...request,
+        confirmation: 'PERMANENT',
+      }),
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(
+          result.error?.message || t('Unable to make license permanent')
+        )
+        return
+      }
+      void queryClient.invalidateQueries({ queryKey: ['d2s'] })
+      toast.success(t('License permanently bound'))
+    },
+    onError: () => toast.error(t('Unable to make license permanent')),
   })
   const revokeMutation = useMutation({
     mutationFn: (request: Parameters<typeof freeRevokeD2SLicense>[0]) =>
@@ -723,6 +754,7 @@ export function D2SWorkspace() {
                   license={license}
                   actionPending={
                     modeMutation.isPending ||
+                    permanentMutation.isPending ||
                     revokeMutation.isPending ||
                     manualUnbindMutation.isPending
                   }
@@ -733,6 +765,18 @@ export function D2SWorkspace() {
                       device_hash: license.device_hash,
                       mode,
                       offline_period_days: offlineDays,
+                    })
+                  }}
+                  onConfirmPermanent={() => {
+                    if (
+                      !license.device_hash ||
+                      !window.confirm(t('Confirm permanent binding'))
+                    ) {
+                      return
+                    }
+                    permanentMutation.mutate({
+                      license_id: license.id,
+                      device_hash: license.device_hash,
                     })
                   }}
                   onFreeRevoke={() => {
