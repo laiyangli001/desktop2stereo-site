@@ -237,6 +237,17 @@ func TestD2SDeviceCodeIsSingleUse(t *testing.T) {
 	assert.ErrorIs(t, err, ErrD2SDeviceCodeConsumed)
 }
 
+func TestD2SDeviceCodeRejectsMetadataExceedingColumnLimits(t *testing.T) {
+	useD2STestDB(t)
+	deviceHash := strings.Repeat("b", 64)
+
+	_, _, err := CreateD2SDeviceCode(deviceHash, 1, strings.Repeat("n", 129), "windows", 2_000_100_000)
+	assert.ErrorIs(t, err, ErrD2SDeviceCodeInvalid)
+
+	_, _, err = CreateD2SDeviceCode(deviceHash, 1, "Windows launcher", strings.Repeat("p", 33), 2_000_100_000)
+	assert.ErrorIs(t, err, ErrD2SDeviceCodeInvalid)
+}
+
 func TestD2SExpiredRuntimeArtifactsAreCleaned(t *testing.T) {
 	useD2STestDB(t)
 	const now = int64(2_000_250_000)

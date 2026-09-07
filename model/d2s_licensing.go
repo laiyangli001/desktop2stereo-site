@@ -726,7 +726,9 @@ func DeleteExpiredD2SRuntimeArtifacts(now int64) error {
 
 func CreateD2SDeviceCode(deviceHash string, fingerprintVersion int, clientName, platform string, now int64) (*D2SDeviceCode, string, error) {
 	deviceHash = strings.ToLower(strings.TrimSpace(deviceHash))
-	if !validateD2SDeviceHash(deviceHash) || fingerprintVersion <= 0 {
+	clientName = strings.TrimSpace(clientName)
+	platform = strings.TrimSpace(platform)
+	if !validateD2SDeviceHash(deviceHash) || fingerprintVersion <= 0 || len(clientName) > 128 || len(platform) > 32 {
 		return nil, "", ErrD2SDeviceCodeInvalid
 	}
 	if now <= 0 {
@@ -744,7 +746,7 @@ func CreateD2SDeviceCode(deviceHash string, fingerprintVersion int, clientName, 
 	row := &D2SDeviceCode{
 		ID: uuid.NewString(), DeviceCodeHash: hashD2SSecret(deviceSecret), UserCode: userCode,
 		DeviceHash: deviceHash, FingerprintVersion: fingerprintVersion,
-		ClientName: strings.TrimSpace(clientName), Platform: strings.TrimSpace(platform),
+		ClientName: clientName, Platform: platform,
 		Status: D2SDeviceCodePending, CreatedAt: now, ExpiresAt: now + 600,
 	}
 	return row, deviceSecret, DB.Create(row).Error
