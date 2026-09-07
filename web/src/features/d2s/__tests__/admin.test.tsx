@@ -156,6 +156,13 @@ describe('D2SAdminWorkspace', () => {
       expect(screen.getAllByText(/order-chargeback/).length).toBeGreaterThan(0)
     })
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Order status' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'User ID' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Filter orders' })
+    ).toBeInTheDocument()
     expect(screen.getByText(/Paid orders: 0/)).toBeInTheDocument()
     expect(screen.getByText(/Pending expired: 0/)).toBeInTheDocument()
     expect(

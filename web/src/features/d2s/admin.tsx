@@ -92,6 +92,11 @@ export function D2SAdminWorkspace() {
     event_type: '',
   })
   const [activeEventFilters, setActiveEventFilters] = useState(eventFilters)
+  const [orderFilters, setOrderFilters] = useState({
+    status: '',
+    user_id: '',
+  })
+  const [activeOrderFilters, setActiveOrderFilters] = useState(orderFilters)
   const refresh = () =>
     void queryClient.invalidateQueries({ queryKey: ['d2s-admin'] })
   const licenses = useQuery({
@@ -99,8 +104,8 @@ export function D2SAdminWorkspace() {
     queryFn: getD2SAdminLicenses,
   })
   const orders = useQuery({
-    queryKey: ['d2s-admin', 'orders'],
-    queryFn: () => getD2SAdminOrders(),
+    queryKey: ['d2s-admin', 'orders', activeOrderFilters],
+    queryFn: () => getD2SAdminOrders(activeOrderFilters),
   })
   const paymentEvents = useQuery({
     queryKey: ['d2s-admin', 'payment-events', activeEventFilters],
@@ -188,7 +193,56 @@ export function D2SAdminWorkspace() {
               <CardHeader>
                 <CardTitle>{t('Orders and chargebacks')}</CardTitle>
               </CardHeader>
-              <CardContent className='space-y-2 text-sm'>
+              <CardContent className='space-y-3 text-sm'>
+                <form
+                  className='grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]'
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    setActiveOrderFilters({
+                      status: orderFilters.status.trim(),
+                      user_id: orderFilters.user_id.trim(),
+                    })
+                  }}
+                >
+                  <Input
+                    aria-label={t('Order status')}
+                    placeholder={t('Order status')}
+                    value={orderFilters.status}
+                    onChange={(event) =>
+                      setOrderFilters((current) => ({
+                        ...current,
+                        status: event.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    aria-label={t('User ID')}
+                    placeholder={t('User ID')}
+                    inputMode='numeric'
+                    value={orderFilters.user_id}
+                    onChange={(event) =>
+                      setOrderFilters((current) => ({
+                        ...current,
+                        user_id: event.target.value,
+                      }))
+                    }
+                  />
+                  <Button type='submit' size='sm'>
+                    {t('Filter orders')}
+                  </Button>
+                  <Button
+                    type='button'
+                    size='sm'
+                    variant='outline'
+                    onClick={() => {
+                      const emptyFilters = { status: '', user_id: '' }
+                      setOrderFilters(emptyFilters)
+                      setActiveOrderFilters(emptyFilters)
+                    }}
+                  >
+                    {t('Clear order filter')}
+                  </Button>
+                </form>
                 {(orders.data?.data?.orders || []).map((order) => (
                   <div
                     key={order.id}

@@ -22,8 +22,13 @@ export type D2SModeRequest = {
   offline_period_days: number
 }
 
-export async function getD2SAdminOrders(status = '') {
-  const response = await api.get('/api/v1/admin/orders', { params: { status } })
+export async function getD2SAdminOrders(filters?: {
+  status?: string
+  user_id?: string
+}) {
+  const response = await api.get('/api/v1/admin/orders', {
+    params: filters,
+  })
   return response.data as D2SResponse<{ orders: D2SOrder[] }>
 }
 
