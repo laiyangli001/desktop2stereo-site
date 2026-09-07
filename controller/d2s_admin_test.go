@@ -150,9 +150,9 @@ func TestD2SAdminOrdersSupportsStatusAndUserFilters(t *testing.T) {
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
 	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}))
-	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-paid", UserID: 901, Status: model.D2SOrderPaid, CreatedAt: 3}).Error)
-	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-pending", UserID: 901, Status: model.D2SOrderPending, CreatedAt: 2}).Error)
-	require.NoError(t, db.Create(&model.D2SOrder{ID: "other-user-paid", UserID: 902, Status: model.D2SOrderPaid, CreatedAt: 1}).Error)
+	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-paid", UserID: 901, Status: model.D2SOrderPaid, IdempotencyKey: "admin-paid-key", CreatedAt: 3}).Error)
+	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-pending", UserID: 901, Status: model.D2SOrderPending, IdempotencyKey: "admin-pending-key", CreatedAt: 2}).Error)
+	require.NoError(t, db.Create(&model.D2SOrder{ID: "other-user-paid", UserID: 902, Status: model.D2SOrderPaid, IdempotencyKey: "other-paid-key", CreatedAt: 1}).Error)
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
