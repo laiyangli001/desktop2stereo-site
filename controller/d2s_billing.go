@@ -269,6 +269,16 @@ func D2SAdminWithdrawals(c *gin.Context) {
 }
 
 func D2SAdminOrders(c *gin.Context) {
+	status := strings.ToLower(strings.TrimSpace(c.Query("status")))
+	if status != "" {
+		switch status {
+		case model.D2SOrderPending, model.D2SOrderPaid, model.D2SOrderCanceled, model.D2SOrderChargeback:
+		default:
+			d2sInvalidInput(c, "status must be pending, paid, canceled, or chargeback")
+			return
+		}
+	}
+
 	var parsedUserID *int
 	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
 		value, err := strconv.Atoi(userID)
@@ -281,7 +291,7 @@ func D2SAdminOrders(c *gin.Context) {
 
 	var rows []model.D2SOrder
 	query := model.DB.Order("created_at DESC").Limit(500)
-	if status := strings.TrimSpace(c.Query("status")); status != "" {
+	if status != "" {
 		query = query.Where("status = ?", status)
 	}
 	if parsedUserID != nil {
