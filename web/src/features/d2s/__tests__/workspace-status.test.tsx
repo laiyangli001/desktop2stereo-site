@@ -141,7 +141,9 @@ describe('D2SWorkspace data status', () => {
     expect(screen.getByText(/Invitee #55/)).toBeInTheDocument()
 
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
-    fireEvent.click(screen.getByRole('button', { name: 'Make permanent' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Make permanent D2S-TEST-1' })
+    )
     await waitFor(() => {
       expect(apiMocks.confirmD2SPermanent).toHaveBeenCalledWith({
         license_id: 'license-1',
