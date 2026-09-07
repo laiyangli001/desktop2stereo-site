@@ -75,6 +75,8 @@ jobs:
           cache: true
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
+      - name: Run complete Go test suite
+        run: go test ./... -count=1
       - name: Run Go static checks and root build
         run: |
           go vet ./controller ./model ./service ./router
