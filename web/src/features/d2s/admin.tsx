@@ -55,7 +55,7 @@ function ReviewActions(props: {
   return (
     <div className='flex min-w-52 gap-2'>
       <Input
-        aria-label={t('Review note')}
+        aria-label={`${t('Review note')} ${props.id}`}
         value={note}
         onChange={(event) => setNote(event.target.value)}
         placeholder={t('Review note')}
@@ -554,7 +554,7 @@ function RegionRow(props: {
         </div>
       </div>
       <select
-        aria-label={t('Region')}
+        aria-label={`${t('Region')} ${props.license.license_code}`}
         value={region}
         onChange={(event) => setRegion(event.target.value)}
         className='h-8 rounded-lg border bg-transparent px-2 text-sm'
@@ -566,6 +566,7 @@ function RegionRow(props: {
       <Button
         type='button'
         size='sm'
+        aria-label={`${t('Save region')} ${props.license.license_code}`}
         onClick={() => props.onSave(region)}
         disabled={!props.license.user_id || !region}
       >

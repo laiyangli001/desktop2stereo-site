@@ -185,7 +185,9 @@ describe('D2SAdminWorkspace', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/Device: 123456789012…/)).toBeInTheDocument()
     expect(screen.getByText(/reversal_not_settled/)).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('INTL')
+    expect(
+      screen.getByRole('combobox', { name: 'Region D2S-ADMIN-1' })
+    ).toHaveValue('INTL')
     const approveButtons = screen.getAllByRole('button', {
       name: /^Approve /,
     })
@@ -210,12 +212,11 @@ describe('D2SAdminWorkspace', () => {
       'type',
       'button'
     )
-    expect(screen.getByRole('button', { name: 'Save region' })).toHaveAttribute(
-      'type',
-      'button'
-    )
     expect(
-      screen.getAllByRole('textbox', { name: 'Review note' })
+      screen.getByRole('button', { name: 'Save region D2S-ADMIN-1' })
+    ).toHaveAttribute('type', 'button')
+    expect(
+      screen.getAllByRole('textbox', { name: /^Review note / })
     ).toHaveLength(2)
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Order status' }), {
@@ -233,10 +234,15 @@ describe('D2SAdminWorkspace', () => {
     })
 
     apiMocks.setD2SUserRegion.mockResolvedValue(response({}))
-    fireEvent.change(screen.getByRole('combobox', { name: 'Region' }), {
-      target: { value: 'CN' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Save region' }))
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Region D2S-ADMIN-1' }),
+      {
+        target: { value: 'CN' },
+      }
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save region D2S-ADMIN-1' })
+    )
     await waitFor(() => {
       expect(apiMocks.setD2SUserRegion).toHaveBeenCalledWith(42, 'CN')
       expect(apiMocks.getD2SAdminLicenses).toHaveBeenCalledTimes(2)
