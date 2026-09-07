@@ -27,8 +27,29 @@ if ($RequireSecrets) {
     @(
         "D2S_LICENSE_PRIVATE_KEY_B64",
         "D2S_OFFLINE_EXTENSION_CNY_MINOR",
-        "D2S_OFFLINE_EXTENSION_USD_MINOR"
+        "D2S_OFFLINE_EXTENSION_USD_MINOR",
+        "D2S_DEVICE_VERIFICATION_URI",
+        "SESSION_COOKIE_TRUSTED_URL",
+        "TRUSTED_PROXIES"
     ) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
+
+    $cookieSecure = [Environment]::GetEnvironmentVariable("SESSION_COOKIE_SECURE")
+    if ($cookieSecure -ne "true") {
+        throw "Production readiness requires SESSION_COOKIE_SECURE=true"
+    }
+    Write-Host "OK secure session cookie enabled"
+
+    $trustedUrl = [Environment]::GetEnvironmentVariable("SESSION_COOKIE_TRUSTED_URL")
+    if ($trustedUrl -notmatch '^https://[^\s/]+(?:/[^\s]*)?$') {
+        throw "Production readiness requires an HTTPS SESSION_COOKIE_TRUSTED_URL"
+    }
+    Write-Host "OK trusted session URL uses HTTPS"
+
+    $deviceURI = [Environment]::GetEnvironmentVariable("D2S_DEVICE_VERIFICATION_URI")
+    if ($deviceURI -notmatch '^https://[^\s/]+(?:/[^\s]*)?$') {
+        throw "Production readiness requires an HTTPS D2S_DEVICE_VERIFICATION_URI"
+    }
+    Write-Host "OK device verification URI uses HTTPS"
 }
 
 if (-not $SkipHttp) {

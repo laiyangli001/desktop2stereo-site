@@ -17,6 +17,10 @@
 .\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -RequireSecrets
 ```
 
+`-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
+`SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty
+`TRUSTED_PROXIES` configuration before the HTTP checks are considered sufficient.
+
 ## 1. 数据库和双实例
 
 1. 在影子库执行两次迁移，并确认第二次没有破坏性变化：
