@@ -385,6 +385,21 @@ func TestCreemD2SReversalRejectsMissingAmount(t *testing.T) {
 	assert.ErrorIs(t, err, model.ErrD2SPaymentMismatch)
 }
 
+func TestCreemD2SPaidFieldsNormalizeProviderValues(t *testing.T) {
+	event := &CreemWebhookEvent{}
+	event.Id = "  creem-event  "
+	event.Object.RequestId = "  d2s-order  "
+	event.Object.Order.AmountPaid = 2990
+	event.Object.Order.Currency = " usd "
+
+	eventID, orderID, amountMinor, currency := creemD2SPaidFields(event)
+
+	assert.Equal(t, "creem-event", eventID)
+	assert.Equal(t, "d2s-order", orderID)
+	assert.EqualValues(t, 2990, amountMinor)
+	assert.Equal(t, "USD", currency)
+}
+
 func TestWaffoD2SRefundRejectsPartialRefund(t *testing.T) {
 	notification := &core.RefundNotification{
 		EventType: core.EventRefund,

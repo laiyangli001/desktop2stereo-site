@@ -296,6 +296,14 @@ func processCreemD2SReversal(payload []byte) (bool, error) {
 	}[eventType], amountMinor, currency, payload)
 }
 
+func creemD2SPaidFields(event *CreemWebhookEvent) (string, string, int64, string) {
+	if event == nil {
+		return "", "", 0, ""
+	}
+	return strings.TrimSpace(event.Id), strings.TrimSpace(event.Object.RequestId),
+		int64(event.Object.Order.AmountPaid), strings.ToUpper(strings.TrimSpace(event.Object.Order.Currency))
+}
+
 func CreemWebhook(c *gin.Context) {
 	if !isCreemWebhookEnabled() {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 被拒绝 reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
@@ -376,7 +384,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent, payload [
 	}
 
 	// 获取引用ID（这是我们创建订单时传递的request_id）
-	referenceId := event.Object.RequestId
+	eventID, referenceId, amountMinor, currency := creemD2SPaidFields(event)
 	if referenceId == "" {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 缺少 request_id event_id=%s order_id=%s", event.Id, event.Object.Order.Id))
 		c.AbortWithStatus(http.StatusBadRequest)
@@ -384,8 +392,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent, payload [
 	}
 
 	if handled, err := processVerifiedD2SPayment(
-		"creem", event.Id, referenceId, "paid", int64(event.Object.Order.AmountPaid),
-		event.Object.Order.Currency, payload,
+		"creem", eventID, referenceId, "paid", amountMinor, currency, payload,
 	); handled {
 		if err != nil {
 			logD2SProviderError(c.Request.Context(), "creem", err)
