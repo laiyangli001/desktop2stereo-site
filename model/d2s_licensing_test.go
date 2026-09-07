@@ -432,10 +432,15 @@ func TestD2SPaymentEventSharedValidationAcrossOpenProviders(t *testing.T) {
 			require.NoError(t, err)
 			_, err = ProcessD2SPaymentEvent(test.provider, "shared-validation-paid", order.ID, "paid", 2991, test.currency, "shared-validation-payload", now+3)
 			assert.ErrorIs(t, err, ErrD2SPaymentMismatch)
+			_, err = ProcessD2SPaymentEvent(test.provider, "shared-validation-reversal", order.ID, "reversed", 2990, test.currency, "shared-validation-reversal-payload", now+4)
+			require.NoError(t, err)
 
 			var stored D2SOrder
 			require.NoError(t, DB.First(&stored, "id = ?", order.ID).Error)
-			assert.Equal(t, D2SOrderPaid, stored.Status)
+			assert.Equal(t, D2SOrderChargeback, stored.Status)
+			var eventCount int64
+			require.NoError(t, DB.Model(&D2SPaymentEvent{}).Where("order_id = ?", order.ID).Count(&eventCount).Error)
+			assert.EqualValues(t, 2, eventCount)
 		})
 	}
 }
