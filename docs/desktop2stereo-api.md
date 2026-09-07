@@ -57,7 +57,7 @@ access token。
 - `GET /api/v1/orders`：返回当前账号最近 100 笔订单。
 - `GET /api/v1/orders/providers`：返回当前已配置并满足合规开关的 Checkout 渠道；前端不得展示未返回的渠道。
 - `GET /api/v1/orders/:id`
-- `POST /api/v1/orders/:id/checkout`：为已创建的 Stripe、Creem、Waffo、Waffo Pancake 或易支付订单生成 Checkout 信息；服务端再次校验订单归属、状态、过期时间、渠道和网关金额。Creem 还要求已配置与服务器报价完全匹配的 USD 商品，Waffo/Waffo Pancake 使用服务器价格快照；易支付返回服务端签名的 `POST` 地址和参数，客户端不得自行改写。
+- `POST /api/v1/orders/:id/checkout`：为已创建的 Stripe、Creem、Waffo、Waffo Pancake 或易支付订单生成 Checkout 信息；服务端再次校验订单归属、状态、过期时间、渠道和网关金额。易支付 provider 包括 `alipay`、`wechat` 和可配置的 `paymentfm`，其中 `wechat` 映射到网关的 `wxpay` 参数；Creem 还要求已配置与服务器报价完全匹配的 USD 商品，Waffo/Waffo Pancake 使用服务器价格快照；易支付返回服务端签名的 `POST` 地址和参数，客户端不得自行改写。
 - `GET /api/v1/invite/info`、`GET /api/v1/invite/records`
 - `GET /api/v1/balance/info`、`GET /api/v1/balance/transactions`
 - `POST /api/v1/withdrawal/request`、`GET /api/v1/withdrawal/status`
@@ -86,7 +86,7 @@ CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置�
 结果放入 `X-D2S-Signature`。支持 `paid`、`canceled`、`failed`、`chargeback`、`reversed`。
 事件以 `(provider,event_id)` 幂等，重复事件的订单、金额、币种、类型或摘要不一致时拒绝。
 
-当前服务端已在完成渠道官方验签后，将 Stripe、Creem、易支付、Waffo 和 Waffo Pancake
+当前服务端已在完成渠道官方验签后，将 Stripe、Creem、易支付（包括 `paymentfm`）、Waffo 和 Waffo Pancake
 的已规范化订单事件直接送入同一 D2S 事务处理器；普通 new-api 充值仍沿用原有回调逻辑。
 PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 
