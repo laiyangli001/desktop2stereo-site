@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -456,11 +457,11 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	}
 
 	signature := c.GetHeader("X-Waffo-Signature")
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo Pancake webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(bodyBytes)))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo Pancake webhook 收到请求 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(bodyBytes)))
 
 	event, err := service.VerifyConfiguredWaffoPancakeWebhook(string(bodyBytes), signature)
 	if err != nil {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Waffo Pancake webhook 验签失败 path=%q client_ip=%s signature=%q body=%q error=%q", c.Request.RequestURI, c.ClientIP(), signature, string(bodyBytes), err.Error()))
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Waffo Pancake webhook 验签失败 path=%q client_ip=%s error=%q %s", c.Request.RequestURI, c.ClientIP(), err.Error(), d2sWebhookPayloadInfo(bodyBytes)))
 		c.String(http.StatusUnauthorized, "invalid signature")
 		return
 	}
@@ -475,7 +476,41 @@ func WaffoPancakeWebhook(c *gin.Context) {
 	}
 
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo Pancake webhook 验签成功 event_type=%s event_id=%s order_id=%s client_ip=%s", event.NormalizedEventType(), event.ID, event.Data.OrderID, c.ClientIP()))
+	if event.NormalizedEventType() == "refund.failed" {
+		c.String(http.StatusOK, "OK")
+		return
+	}
+	if event.NormalizedEventType() == "refund.succeeded" {
+		if handled, err := processWaffoPancakeD2SRefund(event, bodyBytes); handled {
+			if err != nil {
+				logD2SProviderError(c.Request.Context(), "waffo_pancake", err)
+				if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+					c.String(http.StatusBadRequest, "invalid D2S refund event")
+					return
+				}
+				c.String(http.StatusInternalServerError, "D2S refund processing failed")
+				return
+			}
+			c.String(http.StatusOK, "OK")
+			return
+		}
+		c.String(http.StatusOK, "OK")
+		return
+	}
 	if event.NormalizedEventType() != "order.completed" {
+		c.String(http.StatusOK, "OK")
+		return
+	}
+	if handled, err := processWaffoPancakeD2SPayment(event, bodyBytes); handled {
+		if err != nil {
+			logD2SProviderError(c.Request.Context(), "waffo_pancake", err)
+			if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+				c.String(http.StatusBadRequest, "invalid D2S payment event")
+				return
+			}
+			c.String(http.StatusInternalServerError, "D2S payment processing failed")
+			return
+		}
 		c.String(http.StatusOK, "OK")
 		return
 	}

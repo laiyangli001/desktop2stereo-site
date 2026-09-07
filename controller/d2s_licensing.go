@@ -61,6 +61,10 @@ func d2sError(c *gin.Context, err error) {
 		status, code = http.StatusBadRequest, "invalid_device_code"
 	case errors.Is(err, service.ErrD2SSigningKeyMissing), errors.Is(err, service.ErrD2SSigningKeyInvalid):
 		status, code = http.StatusServiceUnavailable, "signing_key_unavailable"
+	case errors.Is(err, service.ErrD2SSigningKeyCurrent):
+		status, code = http.StatusConflict, "signing_key_current"
+	case errors.Is(err, service.ErrD2SSigningKeyNotFound):
+		status, code = http.StatusNotFound, "signing_key_not_found"
 	case errors.Is(err, model.ErrD2SRegionMismatch):
 		status, code = http.StatusConflict, "region_mismatch"
 	case errors.Is(err, model.ErrD2SPriceNotConfigured):
@@ -75,12 +79,16 @@ func d2sError(c *gin.Context, err error) {
 		status, code = http.StatusTooManyRequests, "paid_revoke_limit"
 	case errors.Is(err, model.ErrD2SPaidRevokePending):
 		status, code = http.StatusConflict, "paid_revoke_pending"
+	case errors.Is(err, model.ErrD2SManualUnbindPending):
+		status, code = http.StatusConflict, "manual_unbind_pending"
 	case errors.Is(err, model.ErrD2SInsufficientBalance):
 		status, code = http.StatusPaymentRequired, "insufficient_balance"
 	case errors.Is(err, model.ErrD2SWithdrawalNotAllowed):
 		status, code = http.StatusForbidden, "withdrawal_not_allowed"
 	case errors.Is(err, model.ErrD2SPaymentMismatch):
 		status, code = http.StatusBadRequest, "payment_mismatch"
+	case errors.Is(err, model.ErrD2SCheckoutUnavailable):
+		status, code = http.StatusServiceUnavailable, "checkout_unavailable"
 	}
 	c.JSON(status, gin.H{
 		"version": 1, "success": false, "request_id": d2sRequestID(c),
@@ -347,21 +355,8 @@ func D2SManualUnbindCreate(c *gin.Context) {
 		d2sInvalidInput(c, "license_id and reason are required")
 		return
 	}
-	license, err := model.GetD2SLicense(c.GetInt("id"), request.LicenseID, nil)
+	row, err := model.CreateD2SManualUnbind(c.GetInt("id"), request.LicenseID, request.Reason, request.ProofRef, time.Now().Unix())
 	if err != nil {
-		d2sError(c, err)
-		return
-	}
-	if license.Mode != model.D2SLicenseModePermanent {
-		d2sError(c, model.ErrD2SLicenseUnavailable)
-		return
-	}
-	now := time.Now().Unix()
-	row := model.D2SManualUnbindRequest{
-		ID: uuid.NewString(), LicenseID: license.ID, UserID: license.UserID, Reason: strings.TrimSpace(request.Reason),
-		ProofRef: strings.TrimSpace(request.ProofRef), Status: "pending", CreatedAt: now, UpdatedAt: now,
-	}
-	if err := model.DB.Create(&row).Error; err != nil {
 		d2sError(c, err)
 		return
 	}
@@ -387,5 +382,28 @@ func D2SAdminLicenses(c *gin.Context) {
 		d2sError(c, err)
 		return
 	}
-	d2sSuccess(c, http.StatusOK, gin.H{"licenses": rows})
+	userIDs := make([]int, 0, len(rows))
+	for _, row := range rows {
+		userIDs = append(userIDs, row.UserID)
+	}
+	profiles := make(map[int]string, len(userIDs))
+	if len(userIDs) > 0 {
+		var profileRows []model.D2SUserProfile
+		if err := model.DB.Where("user_id IN ?", userIDs).Find(&profileRows).Error; err != nil {
+			d2sError(c, err)
+			return
+		}
+		for _, profile := range profileRows {
+			profiles[profile.UserID] = profile.Region
+		}
+	}
+	type adminLicense struct {
+		model.D2SLicense
+		Region string `json:"region"`
+	}
+	result := make([]adminLicense, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, adminLicense{D2SLicense: row, Region: profiles[row.UserID]})
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"licenses": result})
 }

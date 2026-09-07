@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 15
     env:
       GOWORK: 'off'
+      GOPROXY: 'https://proxy.golang.org,direct'
+      GOSUMDB: 'sum.golang.org'
 
     steps:
       - name: Checkout

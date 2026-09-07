@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -13,7 +14,10 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type d2sOrderRequest struct {
@@ -65,6 +69,60 @@ func D2SOrderGet(c *gin.Context) {
 		return
 	}
 	d2sSuccess(c, http.StatusOK, order)
+}
+
+func D2SOrderList(c *gin.Context) {
+	var orders []model.D2SOrder
+	if err := model.DB.Where("user_id = ?", c.GetInt("id")).Order("created_at DESC").Limit(100).Find(&orders).Error; err != nil {
+		d2sError(c, err)
+		return
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"orders": orders})
+}
+
+func D2SOrderProviders(c *gin.Context) {
+	var profile model.D2SUserProfile
+	if err := model.DB.Where("user_id = ?", c.GetInt("id")).First(&profile).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		d2sError(c, err)
+		return
+	}
+	providers := make([]string, 0, 7)
+	appendProvider := func(provider string) {
+		if provider == model.D2SProviderBalance {
+			if profile.Region != "" {
+				providers = append(providers, provider)
+			}
+			return
+		}
+		region, ok := model.D2SProviderRegion(provider)
+		if ok && (profile.Region == "" || profile.Region == region) {
+			providers = append(providers, provider)
+		}
+	}
+	appendProvider(model.D2SProviderBalance)
+	if isStripeTopUpEnabled() {
+		appendProvider("stripe")
+	}
+	if isCreemTopUpEnabled() {
+		appendProvider("creem")
+	}
+	if isWaffoPancakeTopUpEnabled() {
+		appendProvider("waffo_pancake")
+	}
+	if isWaffoTopUpEnabled() {
+		appendProvider("waffo")
+	}
+	if isEpayTopUpEnabled() {
+		for _, method := range operation_setting.PayMethods {
+			switch method["type"] {
+			case "alipay":
+				appendProvider("alipay")
+			case "wxpay":
+				appendProvider("wechat")
+			}
+		}
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"providers": providers})
 }
 
 func D2SLicensePaidRevoke(c *gin.Context) { D2SOrderCreate(c) }
@@ -200,6 +258,105 @@ func D2SAdminWithdrawals(c *gin.Context) {
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"withdrawals": rows})
+}
+
+func D2SAdminOrders(c *gin.Context) {
+	var rows []model.D2SOrder
+	query := model.DB.Order("created_at DESC").Limit(500)
+	if status := strings.TrimSpace(c.Query("status")); status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if err := query.Find(&rows).Error; err != nil {
+		d2sError(c, err)
+		return
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"orders": rows})
+}
+
+func D2SAdminBalances(c *gin.Context) {
+	var rows []model.D2SBalanceAccount
+	query := model.DB.Order("updated_at DESC").Limit(500)
+	if c.Query("negative") == "true" {
+		query = query.Where("available_minor < 0")
+	}
+	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
+		query = query.Where("user_id = ?", userID)
+	}
+	if err := query.Find(&rows).Error; err != nil {
+		d2sError(c, err)
+		return
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"accounts": rows})
+}
+
+func D2SAdminSigningKeys(c *gin.Context) {
+	var rows []model.D2SSigningKey
+	if err := model.DB.Select("key_id, algorithm, public_jwk, status, created_at, retired_at").Order("created_at DESC").Find(&rows).Error; err != nil {
+		d2sError(c, err)
+		return
+	}
+	type signingKeyResponse struct {
+		KeyID     string `json:"key_id"`
+		Algorithm string `json:"algorithm"`
+		PublicJWK string `json:"public_jwk"`
+		Status    string `json:"status"`
+		CreatedAt int64  `json:"created_at"`
+		RetiredAt int64  `json:"retired_at"`
+		IsCurrent bool   `json:"is_current"`
+	}
+	keys := make([]signingKeyResponse, 0, len(rows))
+	for _, row := range rows {
+		keys = append(keys, signingKeyResponse{
+			KeyID: row.KeyID, Algorithm: row.Algorithm, PublicJWK: row.PublicJWK,
+			Status: row.Status, CreatedAt: row.CreatedAt, RetiredAt: row.RetiredAt,
+			IsCurrent: service.IsD2SCurrentSigningKey(row.KeyID),
+		})
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"keys": keys})
+}
+
+func D2SAdminSigningKeyReview(c *gin.Context) {
+	var request struct {
+		Status string `json:"status"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil || strings.TrimSpace(request.Status) != "retired" {
+		d2sInvalidInput(c, "status must be retired")
+		return
+	}
+	if err := service.RetireD2SSigningKey(c.Param("id"), time.Now().Unix()); err != nil {
+		d2sError(c, err)
+		return
+	}
+	D2SAdminSigningKeys(c)
+}
+
+func D2SAdminReconciliation(c *gin.Context) {
+	startAt, endAt := model.D2SPreviousUTCWindow(time.Now())
+	if value := strings.TrimSpace(c.Query("start_at")); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			d2sInvalidInput(c, "start_at must be a Unix timestamp")
+			return
+		}
+		startAt = parsed
+	}
+	if value := strings.TrimSpace(c.Query("end_at")); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			d2sInvalidInput(c, "end_at must be a Unix timestamp")
+			return
+		}
+		endAt = parsed
+	}
+	report, err := model.ReconcileD2SPayments(startAt, endAt)
+	if err != nil {
+		d2sError(c, err)
+		return
+	}
+	d2sSuccess(c, http.StatusOK, report)
 }
 
 type d2sAdminReviewRequest struct {

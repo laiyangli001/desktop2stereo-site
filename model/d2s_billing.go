@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 	D2SOrderProductLicense          = "license"
 	D2SOrderProductPaidRevoke       = "paid_revoke"
 	D2SOrderProductOfflineExtension = "offline_extension"
+	D2SProviderBalance              = "balance"
 
 	D2SOrderPending    = "pending"
 	D2SOrderPaid       = "paid"
@@ -37,6 +39,7 @@ var (
 	ErrD2SInsufficientBalance  = errors.New("insufficient balance")
 	ErrD2SWithdrawalNotAllowed = errors.New("withdrawal is not allowed")
 	ErrD2SPaymentMismatch      = errors.New("payment amount, currency, or provider mismatch")
+	ErrD2SCheckoutUnavailable  = errors.New("payment checkout is unavailable")
 )
 
 type D2SOrderQuote struct {
@@ -53,7 +56,7 @@ func D2SProviderRegion(provider string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
 	case "epay", "paymentfm", "alipay", "wechat", "waffo":
 		return D2SRegionCN, true
-	case "stripe", "creem", "paypal", "paddle", "waffo_pancake":
+	case "stripe", "creem", "waffo_pancake":
 		return D2SRegionINTL, true
 	default:
 		return "", false
@@ -86,6 +89,12 @@ func QuoteD2SOrder(userID int, product, licenseID, provider string, now int64) (
 	}
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	region, ok := D2SProviderRegion(provider)
+	if provider == D2SProviderBalance {
+		if profile.Region == "" {
+			return nil, ErrD2SRegionMismatch
+		}
+		region, ok = profile.Region, true
+	}
 	if !ok {
 		return nil, ErrD2SOrderInvalid
 	}
@@ -137,7 +146,7 @@ func QuoteD2SOrder(userID int, product, licenseID, provider string, now int64) (
 		if err != nil {
 			return nil, err
 		}
-		if license.Status != D2SLicenseStatusActive || license.Mode == D2SLicenseModePermanent {
+		if license.Status != D2SLicenseStatusActive || (license.ExpiresAt > 0 && license.ExpiresAt <= now) || license.Mode == D2SLicenseModePermanent {
 			return nil, ErrD2SLicenseUnavailable
 		}
 		if region == D2SRegionCN {
@@ -174,6 +183,9 @@ func CreateD2SOrder(userID int, quote *D2SOrderQuote, balanceMinor int64, idempo
 	if quote == nil || strings.TrimSpace(idempotencyKey) == "" || len(idempotencyKey) > 128 || balanceMinor < 0 || balanceMinor > quote.AmountMinor {
 		return nil, ErrD2SOrderInvalid
 	}
+	if quote.Provider == D2SProviderBalance && balanceMinor != quote.AmountMinor {
+		return nil, ErrD2SOrderInvalid
+	}
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
@@ -181,24 +193,65 @@ func CreateD2SOrder(userID int, quote *D2SOrderQuote, balanceMinor int64, idempo
 	if err != nil {
 		return nil, err
 	}
-	if verified.AmountMinor != quote.AmountMinor || verified.Currency != quote.Currency || verified.Region != quote.Region || verified.RevokeNumber != quote.RevokeNumber {
+	if verified.Product != quote.Product || verified.LicenseID != quote.LicenseID || verified.Provider != quote.Provider || verified.AmountMinor != quote.AmountMinor || verified.Currency != quote.Currency || verified.Region != quote.Region || verified.RevokeNumber != quote.RevokeNumber {
 		return nil, ErrD2SOrderInvalid
 	}
 	var order D2SOrder
-	err = DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ? AND idempotency_key = ?", userID, idempotencyKey).First(&order).Error; err == nil {
+	err = d2STransaction(func(tx *gorm.DB) error {
+		if balanceMinor == quote.AmountMinor {
+			var profile D2SUserProfile
+			if err := lockForUpdate(tx).Where("user_id = ?", userID).First(&profile).Error; err != nil {
+				return err
+			}
+			if profile.Region == "" || profile.Region != quote.Region {
+				return ErrD2SRegionMismatch
+			}
+		}
+		order = D2SOrder{
+			ID: uuid.NewString(), UserID: userID, Product: quote.Product, LicenseID: quote.LicenseID,
+			Provider: quote.Provider, Region: quote.Region, Currency: quote.Currency, AmountMinor: quote.AmountMinor,
+			BalanceMinor: balanceMinor, GatewayMinor: quote.AmountMinor - balanceMinor, RevokeNumber: quote.RevokeNumber,
+			Status: D2SOrderPending, IdempotencyKey: idempotencyKey, CreatedAt: now, ExpiresAt: now + 1800,
+		}
+		created := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "idempotency_key"}},
+			DoNothing: true,
+		}).Create(&order)
+		if created.Error != nil {
+			return created.Error
+		}
+		if created.RowsAffected == 0 {
+			order = D2SOrder{}
+			if err := tx.Where("user_id = ? AND idempotency_key = ?", userID, idempotencyKey).First(&order).Error; err != nil {
+				return err
+			}
+			if order.Product != quote.Product || order.LicenseID != quote.LicenseID ||
+				order.Provider != quote.Provider || order.Region != quote.Region ||
+				order.Currency != quote.Currency || order.AmountMinor != quote.AmountMinor ||
+				order.BalanceMinor != balanceMinor || order.RevokeNumber != quote.RevokeNumber {
+				return ErrD2SOrderInvalid
+			}
 			return nil
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
 		}
 		if quote.Product == D2SOrderProductPaidRevoke {
+			// Serialize paid-revoke quote consumption per license. Without this
+			// lock, concurrent orders can observe the same monthly counter and
+			// both pass the pending-order check.
+			if _, err := GetD2SLicense(userID, quote.LicenseID, lockForUpdate(tx)); err != nil {
+				return err
+			}
 			var pending int64
-			if err := tx.Model(&D2SOrder{}).Where("license_id = ? AND product = ? AND status = ?", quote.LicenseID, D2SOrderProductPaidRevoke, D2SOrderPending).Count(&pending).Error; err != nil {
+			if err := tx.Model(&D2SOrder{}).Where("license_id = ? AND product = ? AND status = ? AND id <> ?", quote.LicenseID, D2SOrderProductPaidRevoke, D2SOrderPending, order.ID).Count(&pending).Error; err != nil {
 				return err
 			}
 			if pending > 0 {
 				return ErrD2SPaidRevokePending
 			}
+			pendingKey := quote.LicenseID
+			if err := tx.Model(&D2SOrder{}).Where("id = ? AND status = ?", order.ID, D2SOrderPending).Update("pending_key", pendingKey).Error; err != nil {
+				return err
+			}
+			order.PendingKey = &pendingKey
 		}
 		if balanceMinor > 0 {
 			account, err := d2sBalanceAccountTx(tx, userID, quote.Currency, now)
@@ -221,15 +274,6 @@ func CreateD2SOrder(userID int, quote *D2SOrderQuote, balanceMinor int64, idempo
 			}).Error; err != nil {
 				return err
 			}
-		}
-		order = D2SOrder{
-			ID: uuid.NewString(), UserID: userID, Product: quote.Product, LicenseID: quote.LicenseID,
-			Provider: quote.Provider, Region: quote.Region, Currency: quote.Currency, AmountMinor: quote.AmountMinor,
-			BalanceMinor: balanceMinor, GatewayMinor: quote.AmountMinor - balanceMinor, RevokeNumber: quote.RevokeNumber,
-			Status: D2SOrderPending, IdempotencyKey: idempotencyKey, CreatedAt: now, ExpiresAt: now + 1800,
-		}
-		if err := tx.Create(&order).Error; err != nil {
-			return err
 		}
 		if order.GatewayMinor == 0 {
 			if err := fulfillD2SOrderTx(tx, &order, now); err != nil {
@@ -267,6 +311,43 @@ func settleD2SReservedBalanceTx(tx *gorm.DB, order *D2SOrder, consume bool, now 
 		ID: uuid.NewString(), AccountID: account.ID, UserID: order.UserID, Currency: order.Currency,
 		Kind: kind, AmountMinor: amount, OrderID: order.ID, CreatedAt: now,
 	}).Error
+}
+
+// ExpireD2SPendingOrders cancels expired pending orders and releases any
+// balance reservation in the same transaction as the state transition.
+func ExpireD2SPendingOrders(now int64) error {
+	if now <= 0 {
+		now = time.Now().Unix()
+	}
+	var orderIDs []string
+	if err := DB.Model(&D2SOrder{}).
+		Where("status = ? AND expires_at <= ?", D2SOrderPending, now).
+		Pluck("id", &orderIDs).Error; err != nil {
+		return err
+	}
+	for _, orderID := range orderIDs {
+		if err := d2STransaction(func(tx *gorm.DB) error {
+			var order D2SOrder
+			if err := lockForUpdate(tx).Where("id = ?", orderID).First(&order).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					return nil
+				}
+				return err
+			}
+			if order.Status != D2SOrderPending || order.ExpiresAt > now {
+				return nil
+			}
+			if err := tx.Model(&D2SOrder{}).Where("id = ? AND status = ?", order.ID, D2SOrderPending).
+				Updates(map[string]any{"status": D2SOrderCanceled, "pending_key": nil}).Error; err != nil {
+				return err
+			}
+			order.Status = D2SOrderCanceled
+			return settleD2SReservedBalanceTx(tx, &order, false, now)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func fulfillD2SOrderTx(tx *gorm.DB, order *D2SOrder, now int64) error {
@@ -350,7 +431,7 @@ func fulfillD2SOrderTx(tx *gorm.DB, order *D2SOrder, now int64) error {
 		return ErrD2SOrderInvalid
 	}
 	order.Status, order.CompletedAt = D2SOrderPaid, now
-	return tx.Model(&D2SOrder{}).Where("id = ? AND status = ?", order.ID, D2SOrderPending).Updates(map[string]any{"status": D2SOrderPaid, "completed_at": now}).Error
+	return tx.Model(&D2SOrder{}).Where("id = ? AND status = ?", order.ID, D2SOrderPending).Updates(map[string]any{"status": D2SOrderPaid, "completed_at": now, "pending_key": nil}).Error
 }
 
 func awardD2SInviteTx(tx *gorm.DB, order *D2SOrder, now int64) error {
@@ -404,15 +485,25 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 		now = time.Now().Unix()
 	}
 	var order D2SOrder
-	err := DB.Transaction(func(tx *gorm.DB) error {
-		var existing D2SPaymentEvent
-		if err := tx.Where("provider = ? AND provider_event_id = ?", provider, eventID).First(&existing).Error; err == nil {
-			if existing.OrderID != orderID || existing.EventType != eventType || existing.AmountMinor != amountMinor || existing.Currency != strings.ToUpper(currency) || existing.PayloadHash != payloadHash {
+	err := d2STransaction(func(tx *gorm.DB) error {
+		currency = strings.ToUpper(currency)
+		event := D2SPaymentEvent{ID: uuid.NewString(), Provider: provider, ProviderEventID: eventID, OrderID: orderID, EventType: eventType, AmountMinor: amountMinor, Currency: currency, PayloadHash: payloadHash, ProcessedAt: now}
+		created := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "provider"}, {Name: "provider_event_id"}},
+			DoNothing: true,
+		}).Create(&event)
+		if created.Error != nil {
+			return created.Error
+		}
+		if created.RowsAffected == 0 {
+			var existing D2SPaymentEvent
+			if err := tx.Where("provider = ? AND provider_event_id = ?", provider, eventID).First(&existing).Error; err != nil {
+				return err
+			}
+			if existing.OrderID != orderID || existing.EventType != eventType || existing.AmountMinor != amountMinor || existing.Currency != currency || existing.PayloadHash != payloadHash {
 				return ErrD2SPaymentMismatch
 			}
 			return tx.Where("id = ?", existing.OrderID).First(&order).Error
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
 		}
 		if err := lockForUpdate(tx).Where("id = ?", orderID).First(&order).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -420,12 +511,12 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 			}
 			return err
 		}
-		if order.Provider != provider || order.Currency != strings.ToUpper(currency) || order.GatewayMinor != amountMinor {
+		if order.Provider != provider || order.Currency != currency || order.GatewayMinor != amountMinor {
 			return ErrD2SPaymentMismatch
 		}
-		event := D2SPaymentEvent{ID: uuid.NewString(), Provider: provider, ProviderEventID: eventID, OrderID: order.ID, EventType: eventType, AmountMinor: amountMinor, Currency: order.Currency, PayloadHash: payloadHash, ProcessedAt: now}
-		if err := tx.Create(&event).Error; err != nil {
-			return err
+		providerRegion, ok := D2SProviderRegion(provider)
+		if !ok || order.Region != providerRegion {
+			return ErrD2SRegionMismatch
 		}
 		switch eventType {
 		case "paid":
@@ -452,13 +543,20 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 			if order.Status != D2SOrderPending {
 				return ErrD2SOrderState
 			}
-			if err := tx.Model(&D2SOrder{}).Where("id = ?", order.ID).Update("status", D2SOrderCanceled).Error; err != nil {
+			if err := tx.Model(&D2SOrder{}).Where("id = ?", order.ID).Updates(map[string]any{"status": D2SOrderCanceled, "pending_key": nil}).Error; err != nil {
 				return err
 			}
 			order.Status = D2SOrderCanceled
 			return settleD2SReservedBalanceTx(tx, &order, false, now)
 		case "chargeback", "reversed":
 			if order.Status != D2SOrderPaid {
+				return ErrD2SOrderState
+			}
+			var paidEvents int64
+			if err := tx.Model(&D2SPaymentEvent{}).Where("provider = ? AND order_id = ? AND event_type = ?", provider, order.ID, "paid").Count(&paidEvents).Error; err != nil {
+				return err
+			}
+			if paidEvents == 0 {
 				return ErrD2SOrderState
 			}
 			if order.LicenseID != "" {
@@ -514,7 +612,7 @@ func CreateD2SWithdrawal(userID int, amountMinor int64, alipayAccount, realName 
 		now = time.Now().Unix()
 	}
 	row := &D2SWithdrawalRequest{ID: uuid.NewString(), UserID: userID, Currency: "CNY", AmountMinor: amountMinor, AlipayAccount: strings.TrimSpace(alipayAccount), RealName: strings.TrimSpace(realName), Status: "pending", CreatedAt: now, UpdatedAt: now}
-	err = DB.Transaction(func(tx *gorm.DB) error {
+	err = d2STransaction(func(tx *gorm.DB) error {
 		account, err := d2sBalanceAccountTx(tx, userID, "CNY", now)
 		if err != nil {
 			return err
@@ -538,7 +636,7 @@ func ReviewD2SWithdrawal(adminID int, requestID, status, note string, now int64)
 		return nil, ErrD2SWithdrawalNotAllowed
 	}
 	var row D2SWithdrawalRequest
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := d2STransaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where("id = ?", requestID).First(&row).Error; err != nil {
 			return err
 		}
@@ -557,8 +655,12 @@ func ReviewD2SWithdrawal(adminID int, requestID, status, note string, now int64)
 		} else {
 			paidAt = now
 		}
-		if err := tx.Model(&D2SBalanceAccount{}).Where("id = ? AND reserved_minor >= ?", account.ID, row.AmountMinor).Updates(updates).Error; err != nil {
-			return err
+		result := tx.Model(&D2SBalanceAccount{}).Where("id = ? AND reserved_minor >= ?", account.ID, row.AmountMinor).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrD2SOrderState
 		}
 		if err := tx.Model(&D2SWithdrawalRequest{}).Where("id = ?", row.ID).Updates(map[string]any{"status": status, "reviewed_by": adminID, "review_note": note, "updated_at": now, "paid_at": paidAt}).Error; err != nil {
 			return err
@@ -574,7 +676,7 @@ func ReviewD2SManualUnbind(adminID int, requestID, status, note string, now int6
 		return nil, ErrD2SOrderInvalid
 	}
 	var request D2SManualUnbindRequest
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := d2STransaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where("id = ?", requestID).First(&request).Error; err != nil {
 			return err
 		}
@@ -621,7 +723,7 @@ func SetD2SUserRegion(adminID, userID int, region string, now int64) (*D2SUserPr
 		return nil, ErrD2SRegionMismatch
 	}
 	var profile D2SUserProfile
-	err := DB.Transaction(func(tx *gorm.DB) error {
+	err := d2STransaction(func(tx *gorm.DB) error {
 		if err := lockForUpdate(tx).Where("user_id = ?", userID).First(&profile).Error; err != nil {
 			return err
 		}

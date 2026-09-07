@@ -301,6 +301,7 @@ func Register(c *gin.Context) {
 	}
 	if common.EmailVerificationEnabled {
 		cleanUser.Email = user.Email
+		cleanUser.EmailVerifiedAt = time.Now().Unix()
 	}
 	if err := cleanUser.Insert(inviterId); err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {

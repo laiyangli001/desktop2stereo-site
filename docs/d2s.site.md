@@ -4,7 +4,8 @@
 
 本文是 `desktop2stereo-site` 的唯一部署基准，合并原 `d2s.site` 网站架构方案与
 Desktop2Stereo 授权服务部署要求。服务器端开发计划见
-[`13-cross-platform-licensing-server-implementation-plan.md`](13-cross-platform-licensing-server-implementation-plan.md)。
+[`01-cross-platform-licensing-server-implementation-plan.md`](01-cross-platform-licensing-server-implementation-plan.md)。
+上线前与季度恢复演练按 [`d2s-production-drill.md`](d2s-production-drill.md) 执行。
 
 生产原则是“腾讯云承载权威状态，Cloudflare 提供公网边缘防护和支付回调中转”：
 
@@ -12,6 +13,33 @@ Desktop2Stereo 授权服务部署要求。服务器端开发计划见
 - Redis 只用于会话、限流、缓存和多节点协调，不保存最终授权事实。
 - Cloudflare 不保存 D1 授权状态，也不直接修改订单或授权。
 - SQLite 仅用于本地开发；生产使用 PostgreSQL，MySQL 是受支持的替代方案。
+- SQLite 的 D2S 写事务对短暂的 `database is locked/deadlocked` 进行有限重试；这只提高本地开发并发稳定性，生产仍必须使用 PostgreSQL 或 MySQL。
+
+无管理员权限的 Windows 开发机可使用仓库外的 `.local-db` 便携实例运行真实数据库矩阵：
+
+```powershell
+.\scripts\d2s-local-db.ps1 -Action start
+$env:D2S_TEST_POSTGRES_DSN = 'host=127.0.0.1 port=5433 user=d2s_test password=<local-password> dbname=d2s_test sslmode=disable'
+$env:D2S_TEST_MYSQL_DSN = 'd2s_test:<local-password>@tcp(127.0.0.1:3307)/d2s_test?charset=utf8mb4&parseTime=True&loc=Local'
+go test ./model -run 'TestD2SSchemaConfiguredDatabases|TestD2SConcurrentCriticalPaths' -count=1 -v
+.\scripts\d2s-local-db.ps1 -Action stop
+```
+
+该脚本只管理 `127.0.0.1:5433` 和 `127.0.0.1:3307` 的便携进程，不注册 Windows 系统服务；`.local-db/` 已加入忽略规则，不能用于生产部署。
+
+如果 Windows 杀毒软件拦截 Go 测试程序，不要信任 Go 默认生成的动态 `%TEMP%\go-build*` 目录，改用固定路径测试脚本：
+
+```powershell
+.\scripts\d2s-fixed-go-test.ps1
+```
+
+建议将以下固定目录加入信任列表：
+
+- `E:\AI_2D_to_3D\4.LC700X_Desktop2Stereo\.go-test-binaries`
+- `E:\AI_2D_to_3D\4.LC700X_Desktop2Stereo\.go-build-cache-d2s`
+- `E:\AI_2D_to_3D\4.LC700X_Desktop2Stereo\.go-tmp-d2s`
+
+脚本默认验证 `controller`、`model`、`service` 和 `router`，并把最终测试可执行文件固定输出到 `.go-test-binaries`。
 
 ## 2. 生产拓扑
 
@@ -58,7 +86,15 @@ flowchart TD
 `(provider, provider_event_id)` 幂等处理。Worker 不能直接写数据库，也不能仅依靠来源 IP
 证明回调可信。建议再用 Cloudflare Access 服务令牌或 mTLS 限制桥接入口。
 
+当前 Go 服务也提供已验签渠道的直接适配入口：Stripe、Creem、易支付、Waffo 和 Waffo
+Pancake 回调在本地完成官方验签后进入同一 D2S 事件处理器；这不改变通用桥接接口的用途。
+PayPal/Paddle 在完成适配器前不开放。
+
 必须在渠道沙箱覆盖：成功、重复、乱序、延迟、取消、伪造、金额不符、币种不符和拒付。
+
+日终由管理员调用 `GET /api/v1/admin/reconciliation`（可传 UTC Unix `start_at`/`end_at`）
+导出内部订单与支付事件报告，再与各渠道结算文件逐笔核对。报告中的过期待支付、孤立事件、
+订单/事件金额或币种不一致必须在放量前处理；该接口不会自动修改订单或账本。
 
 ## 5. 必需配置
 
@@ -88,7 +124,28 @@ flowchart TD
 1. 创建腾讯云 CVM/VPC、安全组、PostgreSQL、Redis 和 COS 备份桶。
 2. 将 `d2s.site` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
 3. 克隆本仓库并从 `.env.example` 创建生产 Secret 配置。
-4. 构建当前源码，不能直接使用未包含 D2S 扩展的上游镜像：
+4. 先确认 Go 没有被旧的代理覆盖，并使用官方模块代理和校验服务；这不改变 `go.mod`，也不绕过模块校验：
+
+   ```bash
+   go env -u GOPROXY
+   go env -u GOSUMDB
+   go env GOPROXY GOSUMDB
+   go mod download
+   go mod verify
+   ```
+
+   也可以使用仓库内脚本执行上述检查；脚本只修改当前 PowerShell 进程的环境变量，不会污染全局 Go 配置：
+
+   ```powershell
+   .\scripts\d2s-go-deps.ps1
+   ```
+
+   只有部署机到官方服务的链路确实超时，才显式允许临时切换镜像；当前项目默认不使用镜像：
+
+   ```powershell
+   .\scripts\d2s-go-deps.ps1 -AllowMirrorFallback
+   ```
+5. 构建当前源码，不能直接使用未包含 D2S 扩展的上游镜像：
 
    ```bash
    docker compose build --pull
@@ -96,16 +153,16 @@ flowchart TD
    docker compose ps
    ```
 
-5. 完成 new-api 初始化，启用邮箱验证、Turnstile 和支付渠道。
-6. 部署支付回调 Worker，配置渠道原生 Secret 和独立桥接 Secret。
-7. 执行健康检查：
+6. 完成 new-api 初始化，启用邮箱验证、Turnstile 和支付渠道。
+7. 部署支付回调 Worker，配置渠道原生 Secret 和独立桥接 Secret。
+8. 执行健康检查：
 
    ```bash
    curl -fsS https://d2s.site/api/status
    curl -fsS https://d2s.site/api/v1/license/keys
    ```
 
-8. 用测试账号完成注册、邮箱验证、试用创建、设备码登录、绑定、离线签发、在线租约和沙箱
+9. 用测试账号完成注册、邮箱验证、试用创建、设备码登录、绑定、离线签发、在线租约和沙箱
    支付闭环后，才允许开放公网购买。
 
 首次启动通过 GORM 建表。每次升级前必须做数据库快照，在同版本影子库连续执行两次迁移并

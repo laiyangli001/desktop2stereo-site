@@ -92,6 +92,13 @@ var auditRouteActions = map[string]string{
 	"PUT /api/subscription/admin/plans/:id": "subscription.plan_update",
 	"POST /api/subscription/admin/bind":     "subscription.bind",
 
+	// Desktop2Stereo licensing administration
+	"PUT /api/v1/admin/withdrawals/:id":     "d2s.withdrawal_review",
+	"PUT /api/v1/admin/unbind-requests/:id": "d2s.unbind_review",
+	"PUT /api/v1/admin/users/:id/region":    "d2s.region_update",
+	"PUT /api/v1/admin/signing-keys/:id":    "d2s.signing_key_retire",
+	"POST /api/v1/withdrawal/request":       "d2s.withdrawal_create",
+
 	// 日志
 	"POST /api/system-task/log-cleanup": "log.cleanup_start",
 }

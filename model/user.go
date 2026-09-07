@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -85,6 +86,7 @@ type User struct {
 	Role             int                        `json:"role" gorm:"type:int;default:1"`   // admin, common
 	Status           int                        `json:"status" gorm:"type:int;default:1"` // enabled, disabled
 	Email            string                     `json:"email" gorm:"index" validate:"max=50"`
+	EmailVerifiedAt  int64                      `json:"-" gorm:"type:bigint;not null;default:0;column:email_verified_at"`
 	GitHubId         string                     `json:"github_id" gorm:"column:github_id;index"`
 	DiscordId        string                     `json:"discord_id" gorm:"column:discord_id;index"`
 	OidcId           string                     `json:"oidc_id" gorm:"column:oidc_id;index"`
@@ -605,6 +607,7 @@ func BindEmailToUser(user *User, email string) error {
 				return err
 			}
 			user.Email = email
+			user.EmailVerifiedAt = time.Now().Unix()
 			return user.UpdateWithTx(tx, false)
 		})
 	}); err != nil {

@@ -22,6 +22,68 @@ import i18next from 'i18next'
 import { initReactI18next } from 'react-i18next'
 import { afterEach, beforeAll } from 'vitest'
 
+function createMemoryStorage(): Storage {
+  const values = new Map<string, string>()
+  return {
+    get length() {
+      return values.size
+    },
+    clear() {
+      values.clear()
+    },
+    getItem(key: string) {
+      return values.get(String(key)) ?? null
+    },
+    key(index: number) {
+      return [...values.keys()][index] ?? null
+    },
+    removeItem(key: string) {
+      values.delete(String(key))
+    },
+    setItem(key: string, value: string) {
+      values.set(String(key), String(value))
+    },
+  }
+}
+
+function hasStorageMethods(value: unknown): value is Storage {
+  if (!value || typeof value !== 'object') return false
+  const storage = value as Partial<Storage>
+  return (
+    typeof storage.getItem === 'function' &&
+    typeof storage.setItem === 'function' &&
+    typeof storage.removeItem === 'function' &&
+    typeof storage.clear === 'function' &&
+    typeof storage.key === 'function'
+  )
+}
+
+function installTestStorage(name: 'localStorage' | 'sessionStorage'): void {
+  const globalOwner = globalThis as unknown as Record<string, unknown>
+  const windowOwner = window as unknown as Record<string, unknown>
+  let storage: Storage | undefined
+
+  try {
+    const candidate = windowOwner[name]
+    if (hasStorageMethods(candidate)) storage = candidate
+  } catch {
+    storage = undefined
+  }
+
+  storage ??= createMemoryStorage()
+  Object.defineProperty(globalOwner, name, {
+    configurable: true,
+    value: storage,
+  })
+  Object.defineProperty(windowOwner, name, {
+    configurable: true,
+    value: storage,
+  })
+}
+
+installTestStorage('localStorage')
+installTestStorage('sessionStorage')
+
 beforeAll(async () => {
   await i18next.use(initReactI18next).init({
     lng: 'en',

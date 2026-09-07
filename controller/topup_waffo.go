@@ -360,18 +360,18 @@ func WaffoWebhook(c *gin.Context) {
 	wh := sdk.Webhook()
 	bodyStr := string(bodyBytes)
 	signature := c.GetHeader("X-SIGNATURE")
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, bodyStr))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo webhook 收到请求 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(bodyBytes)))
 
 	// 验证请求签名
 	if !wh.VerifySignature(bodyStr, signature) {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Waffo webhook 验签失败 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, bodyStr))
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Waffo webhook 验签失败 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(bodyBytes)))
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
 
 	var event core.WebhookEvent
 	if err := common.Unmarshal(bodyBytes, &event); err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo webhook 解析失败 path=%q client_ip=%s error=%q body=%q", c.Request.RequestURI, c.ClientIP(), err.Error(), bodyStr))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo webhook 解析失败 path=%q client_ip=%s error=%q %s", c.Request.RequestURI, c.ClientIP(), err.Error(), d2sWebhookPayloadInfo(bodyBytes)))
 		sendWaffoWebhookResponse(c, wh, false, "invalid payload")
 		return
 	}
@@ -381,12 +381,46 @@ func WaffoWebhook(c *gin.Context) {
 		// 解析为扩展类型，区分普通支付和订阅支付
 		var payload webhookPayloadWithSubInfo
 		if err := common.Unmarshal(bodyBytes, &payload); err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo 支付回调载荷解析失败 event_type=%s client_ip=%s error=%q body=%q", event.EventType, c.ClientIP(), err.Error(), bodyStr))
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo 支付回调载荷解析失败 event_type=%s client_ip=%s error=%q %s", event.EventType, c.ClientIP(), err.Error(), d2sWebhookPayloadInfo(bodyBytes)))
 			sendWaffoWebhookResponse(c, wh, false, "invalid payment payload")
 			return
 		}
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo webhook 验签并解析成功 event_type=%s merchant_order_id=%s order_status=%s client_ip=%s", event.EventType, payload.Result.MerchantOrderID, payload.Result.OrderStatus, c.ClientIP()))
+		if handled, err := processWaffoD2SPayment(&payload.Result.PaymentNotificationResult, bodyBytes); handled {
+			if err != nil {
+				logD2SProviderError(c.Request.Context(), "waffo", err)
+				if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+					sendWaffoWebhookResponse(c, wh, false, "invalid D2S payment event")
+					return
+				}
+				sendWaffoWebhookResponse(c, wh, false, "D2S payment processing failed")
+				return
+			}
+			sendWaffoWebhookResponse(c, wh, true, "")
+			return
+		}
 		handleWaffoPayment(c, wh, &payload.Result.PaymentNotificationResult)
+	case core.EventRefund:
+		var notification core.RefundNotification
+		if err := common.Unmarshal(bodyBytes, &notification); err != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("Waffo 退款回调解析失败 event_type=%s client_ip=%s error=%q", event.EventType, c.ClientIP(), err.Error()))
+			sendWaffoWebhookResponse(c, wh, false, "invalid refund payload")
+			return
+		}
+		if handled, err := processWaffoD2SRefund(&notification, bodyBytes); handled {
+			if err != nil {
+				logD2SProviderError(c.Request.Context(), "waffo", err)
+				if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+					sendWaffoWebhookResponse(c, wh, false, "invalid D2S refund event")
+					return
+				}
+				sendWaffoWebhookResponse(c, wh, false, "D2S refund processing failed")
+				return
+			}
+			sendWaffoWebhookResponse(c, wh, true, "")
+			return
+		}
+		sendWaffoWebhookResponse(c, wh, true, "")
 	default:
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("Waffo webhook 忽略事件 event_type=%s client_ip=%s", event.EventType, c.ClientIP()))
 		sendWaffoWebhookResponse(c, wh, true, "")

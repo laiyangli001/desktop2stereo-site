@@ -26,6 +26,9 @@ func StartD2SArtifactCleanup() {
 }
 
 func cleanupD2SArtifacts() {
+	if err := model.ExpireD2SPendingOrders(time.Now().Unix()); err != nil {
+		common.SysError("failed to expire Desktop2Stereo pending orders: " + err.Error())
+	}
 	if err := model.DeleteExpiredD2SRuntimeArtifacts(time.Now().Unix()); err != nil {
 		common.SysError("failed to delete expired Desktop2Stereo device codes and online leases: " + err.Error())
 	}

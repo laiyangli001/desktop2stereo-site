@@ -34,6 +34,8 @@ type BaseNavItem = {
    * `useSidebarView`). Route-level guards still enforce access independently.
    */
   requiredRole?: number
+  /** Exact roles allowed to see this item when threshold matching is too broad. */
+  requiredRoles?: readonly number[]
 }
 
 /**

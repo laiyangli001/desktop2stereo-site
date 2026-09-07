@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/setting"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -36,9 +37,9 @@ func generateCreemSignature(payload string, secret string) string {
 // 验证Creem webhook签名
 func verifyCreemSignature(payload string, signature string, secret string) bool {
 	if secret == "" {
-		logger.LogWarn(context.Background(), fmt.Sprintf("Creem webhook secret 未配置 test_mode=%t signature=%q body=%q", setting.CreemTestMode, signature, payload))
+		logger.LogWarn(context.Background(), fmt.Sprintf("Creem webhook secret 未配置 test_mode=%t %s", setting.CreemTestMode, d2sWebhookPayloadInfo([]byte(payload))))
 		if setting.CreemTestMode {
-			logger.LogInfo(context.Background(), fmt.Sprintf("Creem webhook 验签已跳过 reason=test_mode signature=%q body=%q", signature, payload))
+			logger.LogInfo(context.Background(), fmt.Sprintf("Creem webhook 验签已跳过 reason=test_mode %s", d2sWebhookPayloadInfo([]byte(payload))))
 			return true
 		}
 		return false
@@ -153,7 +154,7 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 func RequestCreemPay(c *gin.Context) {
 	var req CreemPayRequest
 
-	// 读取body内容用于打印，同时保留原始数据供后续使用
+	// Read the raw body for signature verification and downstream parsing.
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Creem 支付请求读取失败 error=%q", err.Error()))
@@ -161,7 +162,7 @@ func RequestCreemPay(c *gin.Context) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem 支付请求已收到 user_id=%d body=%q", c.GetInt("id"), string(bodyBytes)))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem 支付请求已收到 user_id=%d %s", c.GetInt("id"), d2sWebhookPayloadInfo(bodyBytes)))
 
 	// 重新设置body供后续的ShouldBindJSON使用
 	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
@@ -235,6 +236,66 @@ type CreemWebhookEvent struct {
 	} `json:"object"`
 }
 
+// creemD2SReversalEvent contains only the fields needed for D2S refund and dispute events.
+type creemD2SReversalEvent struct {
+	ID        string `json:"id"`
+	EventType string `json:"eventType"`
+	Object    struct {
+		Amount         int64  `json:"amount"`
+		Currency       string `json:"currency"`
+		RefundAmount   int64  `json:"refund_amount"`
+		RefundCurrency string `json:"refund_currency"`
+		RequestID      string `json:"request_id"`
+		Checkout       struct {
+			RequestID string `json:"request_id"`
+		} `json:"checkout"`
+		Transaction struct {
+			Order string `json:"order"`
+		} `json:"transaction"`
+	} `json:"object"`
+}
+
+func creemD2SReversalFields(payload []byte) (bool, string, string, string, int64, string, error) {
+	var event creemD2SReversalEvent
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return false, "", "", "", 0, "", nil
+	}
+	if event.EventType != "refund.created" && event.EventType != "dispute.created" {
+		return false, "", "", "", 0, "", nil
+	}
+
+	orderID := strings.TrimSpace(event.Object.Checkout.RequestID)
+	if orderID == "" {
+		orderID = strings.TrimSpace(event.Object.RequestID)
+	}
+	eventID := strings.TrimSpace(event.ID)
+	if orderID == "" || eventID == "" {
+		return true, eventID, orderID, event.EventType, 0, "", fmt.Errorf("missing Creem reversal identity: %w", model.ErrD2SPaymentMismatch)
+	}
+
+	amountMinor := event.Object.Amount
+	currency := event.Object.Currency
+	if event.EventType == "refund.created" {
+		amountMinor = event.Object.RefundAmount
+		currency = event.Object.RefundCurrency
+	}
+	if amountMinor <= 0 || strings.TrimSpace(currency) == "" {
+		return true, eventID, orderID, event.EventType, amountMinor, currency, fmt.Errorf("invalid Creem reversal amount or currency: %w", model.ErrD2SPaymentMismatch)
+	}
+	return true, eventID, orderID, event.EventType, amountMinor, currency, nil
+}
+
+func processCreemD2SReversal(payload []byte) (bool, error) {
+	handled, eventID, orderID, eventType, amountMinor, currency, err := creemD2SReversalFields(payload)
+	if err != nil || !handled {
+		return handled, err
+	}
+	return processVerifiedD2SPayment("creem", eventID, orderID, map[string]string{
+		"refund.created":  "reversed",
+		"dispute.created": "chargeback",
+	}[eventType], amountMinor, currency, payload)
+}
+
 func CreemWebhook(c *gin.Context) {
 	if !isCreemWebhookEnabled() {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 被拒绝 reason=webhook_disabled path=%q client_ip=%s", c.Request.RequestURI, c.ClientIP()))
@@ -250,18 +311,17 @@ func CreemWebhook(c *gin.Context) {
 		return
 	}
 
-	// 获取签名头
 	signature := c.GetHeader(CreemSignatureHeader)
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(bodyBytes)))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem webhook 收到请求 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(bodyBytes)))
 	if signature == "" {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 缺少签名 path=%q client_ip=%s body=%q", c.Request.RequestURI, c.ClientIP(), string(bodyBytes)))
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 缺少签名 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(bodyBytes)))
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
 
 	// 验证签名
 	if !verifyCreemSignature(string(bodyBytes), signature, setting.CreemWebhookSecret) {
-		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 验签失败 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(bodyBytes)))
+		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 验签失败 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(bodyBytes)))
 		c.AbortWithStatus(http.StatusUnauthorized)
 		return
 	}
@@ -274,7 +334,7 @@ func CreemWebhook(c *gin.Context) {
 	// 解析新格式的webhook数据
 	var webhookEvent CreemWebhookEvent
 	if err := c.ShouldBindJSON(&webhookEvent); err != nil {
-		logger.LogError(c.Request.Context(), fmt.Sprintf("Creem webhook 解析失败 path=%q client_ip=%s error=%q body=%q", c.Request.RequestURI, c.ClientIP(), err.Error(), string(bodyBytes)))
+		logger.LogError(c.Request.Context(), fmt.Sprintf("Creem webhook 解析失败 path=%q client_ip=%s error=%q %s", c.Request.RequestURI, c.ClientIP(), err.Error(), d2sWebhookPayloadInfo(bodyBytes)))
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
@@ -284,7 +344,22 @@ func CreemWebhook(c *gin.Context) {
 	// 根据事件类型处理不同的webhook
 	switch webhookEvent.EventType {
 	case "checkout.completed":
-		handleCheckoutCompleted(c, &webhookEvent)
+		handleCheckoutCompleted(c, &webhookEvent, bodyBytes)
+	case "refund.created", "dispute.created":
+		if handled, err := processCreemD2SReversal(bodyBytes); handled {
+			if err != nil {
+				logD2SProviderError(c.Request.Context(), "creem", err)
+				if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+					c.AbortWithStatus(http.StatusBadRequest)
+					return
+				}
+				c.AbortWithStatus(http.StatusInternalServerError)
+				return
+			}
+			c.Status(http.StatusOK)
+			return
+		}
+		c.Status(http.StatusOK)
 	default:
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem webhook 忽略事件 event_type=%s event_id=%s", webhookEvent.EventType, webhookEvent.Id))
 		c.Status(http.StatusOK)
@@ -292,7 +367,7 @@ func CreemWebhook(c *gin.Context) {
 }
 
 // 处理支付完成事件
-func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
+func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent, payload []byte) {
 	// 验证订单状态
 	if event.Object.Order.Status != "paid" {
 		logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem 订单状态未支付，忽略处理 request_id=%s order_id=%s order_status=%s", event.Object.RequestId, event.Object.Order.Id, event.Object.Order.Status))
@@ -305,6 +380,23 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	if referenceId == "" {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("Creem webhook 缺少 request_id event_id=%s order_id=%s", event.Id, event.Object.Order.Id))
 		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	if handled, err := processVerifiedD2SPayment(
+		"creem", event.Id, referenceId, "paid", int64(event.Object.Order.AmountPaid),
+		event.Object.Order.Currency, payload,
+	); handled {
+		if err != nil {
+			logD2SProviderError(c.Request.Context(), "creem", err)
+			if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusOK)
 		return
 	}
 
@@ -328,7 +420,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 		return
 	}
 
-	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem 支付完成回调 trade_no=%s creem_order_id=%s amount_paid=%d currency=%s product_name=%q customer_email=%q customer_name=%q", referenceId, event.Object.Order.Id, event.Object.Order.AmountPaid, event.Object.Order.Currency, event.Object.Product.Name, event.Object.Customer.Email, event.Object.Customer.Name))
+	logger.LogInfo(c.Request.Context(), fmt.Sprintf("Creem 支付完成回调 trade_no=%s creem_order_id=%s amount_paid=%d currency=%s product_name=%q", referenceId, event.Object.Order.Id, event.Object.Order.AmountPaid, event.Object.Order.Currency, event.Object.Product.Name))
 
 	// 查询本地订单确认存在
 	topUp := model.GetTopUpByTradeNo(referenceId)
@@ -444,7 +536,7 @@ func genCreemLink(ctx context.Context, referenceId string, product *CreemProduct
 		return "", fmt.Errorf("读取响应失败: %v", err)
 	}
 
-	logger.LogInfo(ctx, fmt.Sprintf("Creem API 响应已收到 trade_no=%s status_code=%d body=%q", referenceId, resp.StatusCode, string(body)))
+	logger.LogInfo(ctx, fmt.Sprintf("Creem API 响应已收到 trade_no=%s status_code=%d %s", referenceId, resp.StatusCode, d2sWebhookPayloadInfo(body)))
 
 	// 检查响应状态
 	if resp.StatusCode/100 != 2 {

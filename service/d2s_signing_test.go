@@ -58,6 +58,29 @@ func TestD2SOfflineEntitlementIsValidES256JWS(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test-key", claims.KeyID)
 	assert.Equal(t, now+14*86400, claims.ExpiresAt)
+	oldKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	oldJWK, err := common.Marshal(d2sPublicJWK(oldKey, "old-key"))
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&model.D2SSigningKey{
+		KeyID: "old-key", Algorithm: "ES256", PublicJWK: string(oldJWK), Status: "active", CreatedAt: now - 100,
+	}).Error)
+	keys, err := D2SPublicSigningKeys()
+	require.NoError(t, err)
+	keyIDs := make(map[string]bool, len(keys))
+	for _, publicKey := range keys {
+		keyIDs[publicKey.Kid] = true
+	}
+	assert.True(t, keyIDs["test-key"])
+	assert.True(t, keyIDs["old-key"])
+	require.NoError(t, db.Model(&model.D2SSigningKey{}).Where("key_id = ?", "old-key").Update("status", "retired").Error)
+	keys, err = D2SPublicSigningKeys()
+	require.NoError(t, err)
+	keyIDs = make(map[string]bool, len(keys))
+	for _, publicKey := range keys {
+		keyIDs[publicKey.Kid] = true
+	}
+	assert.False(t, keyIDs["old-key"])
 	parts := strings.Split(jws, ".")
 	require.Len(t, parts, 3)
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
@@ -67,4 +90,39 @@ func TestD2SOfflineEntitlementIsValidES256JWS(t *testing.T) {
 	r := new(big.Int).SetBytes(signature[:32])
 	s := new(big.Int).SetBytes(signature[32:])
 	assert.True(t, ecdsa.Verify(&key.PublicKey, digest[:], r, s))
+}
+
+func TestD2SRetireSigningKeyProtectsCurrentKey(t *testing.T) {
+	previousDB := model.DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	db, err := gorm.Open(sqlite.Open(fmt.Sprintf("file:%s?mode=memory&cache=shared", t.Name())), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	require.NoError(t, db.AutoMigrate(&model.D2SSigningKey{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = sqlDB.Close()
+		model.DB = previousDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	t.Setenv("D2S_LICENSE_KEY_ID", "current-key")
+	assert.True(t, IsD2SCurrentSigningKey("current-key"))
+	assert.False(t, IsD2SCurrentSigningKey("old-key"))
+	require.NoError(t, db.Create(&model.D2SSigningKey{
+		KeyID: "current-key", Algorithm: "ES256", PublicJWK: "{}", Status: "active", CreatedAt: 1,
+	}).Error)
+	require.NoError(t, db.Create(&model.D2SSigningKey{
+		KeyID: "old-key", Algorithm: "ES256", PublicJWK: "{}", Status: "active", CreatedAt: 1,
+	}).Error)
+
+	err = RetireD2SSigningKey("current-key", 10)
+	require.ErrorIs(t, err, ErrD2SSigningKeyCurrent)
+	require.NoError(t, RetireD2SSigningKey("old-key", 11))
+	require.ErrorIs(t, RetireD2SSigningKey("missing-key", 12), ErrD2SSigningKeyNotFound)
+	var oldKey model.D2SSigningKey
+	require.NoError(t, db.Where("key_id = ?", "old-key").First(&oldKey).Error)
+	assert.Equal(t, "retired", oldKey.Status)
+	assert.Equal(t, int64(11), oldKey.RetiredAt)
 }

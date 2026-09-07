@@ -53,7 +53,10 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		{
 			orders.POST("/preview", controller.D2SOrderPreview)
 			orders.POST("/create", middleware.CriticalRateLimit(), controller.D2SOrderCreate)
+			orders.GET("/providers", controller.D2SOrderProviders)
+			orders.GET("", controller.D2SOrderList)
 			orders.GET("/:id", controller.D2SOrderGet)
+			orders.POST("/:id/checkout", middleware.CriticalRateLimit(), controller.D2SOrderCheckout)
 		}
 		invite := v1.Group("/invite")
 		invite.Use(middleware.UserAuth())
@@ -78,6 +81,11 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		admin.Use(middleware.AdminAuth())
 		{
 			admin.GET("/licenses", controller.D2SAdminLicenses)
+			admin.GET("/orders", controller.D2SAdminOrders)
+			admin.GET("/balances", controller.D2SAdminBalances)
+			admin.GET("/signing-keys", controller.D2SAdminSigningKeys)
+			admin.PUT("/signing-keys/:id", controller.D2SAdminSigningKeyReview)
+			admin.GET("/reconciliation", controller.D2SAdminReconciliation)
 			admin.GET("/withdrawals", controller.D2SAdminWithdrawals)
 			admin.PUT("/withdrawals/:id", controller.D2SAdminWithdrawalReview)
 			admin.GET("/unbind-requests", controller.D2SAdminUnbindRequests)

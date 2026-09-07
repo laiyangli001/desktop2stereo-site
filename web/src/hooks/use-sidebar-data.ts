@@ -37,7 +37,8 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { type SidebarData } from '@/components/layout/types'
+import type { SidebarData } from '@/components/layout/types'
+import { D2S_ADMIN_ROLES } from '@/features/d2s/access'
 import { ROLE } from '@/lib/roles'
 
 /**
@@ -110,6 +111,11 @@ export function useSidebarData(): SidebarData {
             icon: Wallet,
           },
           {
+            title: t('Desktop2Stereo'),
+            url: '/d2s',
+            icon: CreditCard,
+          },
+          {
             title: t('Profile'),
             url: '/profile',
             icon: User,
@@ -144,6 +150,13 @@ export function useSidebarData(): SidebarData {
             title: t('Subscriptions'),
             url: '/subscriptions',
             icon: CreditCard,
+          },
+          {
+            title: t('Desktop2Stereo Admin'),
+            url: '/d2s-admin',
+            icon: CreditCard,
+            requiredRole: ROLE.ADMIN,
+            requiredRoles: D2S_ADMIN_ROLES,
           },
           {
             title: t('System Info'),

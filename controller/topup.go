@@ -447,6 +447,19 @@ func EpayNotify(c *gin.Context) {
 		return
 	}
 	logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 webhook 验签成功 trade_no=%s callback_type=%s trade_status=%s client_ip=%s verify_info=%q", verifyInfo.ServiceTradeNo, verifyInfo.Type, verifyInfo.TradeStatus, c.ClientIP(), common.GetJsonString(verifyInfo)))
+	if handled, err := processEpayD2SPayment(verifyInfo, []byte(common.GetJsonString(params))); handled {
+		if err != nil {
+			logD2SProviderError(c.Request.Context(), "epay", err)
+			if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+				_, _ = c.Writer.Write([]byte("fail"))
+				return
+			}
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
+		_, _ = c.Writer.Write([]byte("success"))
+		return
+	}
 
 	if verifyInfo.TradeStatus == epay.StatusTradeSuccess {
 		// 进程内锁只是优化；重复/并发回调的正确性由 RechargeEpay 的

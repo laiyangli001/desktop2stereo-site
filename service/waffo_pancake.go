@@ -62,6 +62,7 @@ type WaffoPancakeWebhookData struct {
 	TaxAmount                     string
 	ProductName                   string
 	MerchantProvidedBuyerIdentity string
+	RefundStatus                  string
 }
 
 // NormalizedEventType returns the event type or empty string for a nil event.
@@ -190,8 +191,16 @@ func VerifyConfiguredWaffoPancakeWebhook(payload string, signatureHeader string)
 			TaxAmount:                     evt.Data.TaxAmount,
 			ProductName:                   evt.Data.ProductName,
 			MerchantProvidedBuyerIdentity: identity,
+			RefundStatus:                  pointerValue(evt.Data.RefundStatus),
 		},
 	}, nil
+}
+
+func pointerValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 // ResolveWaffoPancakeTradeNo maps a verified webhook event to a local TopUp

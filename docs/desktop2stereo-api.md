@@ -41,6 +41,9 @@ access token。
 - `POST|GET /api/v1/license/manual-unbind`
 - `GET /api/v1/license/keys`
 
+公钥接口返回当前键以及数据库中所有尚未标记为 `retired` 的历史公钥；客户端应按 `kid`
+选择验证键。轮换完成且旧凭证全部过期后，管理员才可将旧键标记为 `retired`。
+
 设备指纹必须是客户端按平台规则计算的 64 位小写 SHA-256 摘要，并携带正整数指纹版本。
 服务器不会接收 MachineGuid、machine-id、IOPlatformUUID 等原始标识。
 
@@ -51,7 +54,10 @@ access token。
 
 - `POST /api/v1/orders/preview`：服务器报价。
 - `POST /api/v1/orders/create`：再次报价并使用 `idempotency_key` 创建订单。
+- `GET /api/v1/orders`：返回当前账号最近 100 笔订单。
+- `GET /api/v1/orders/providers`：返回当前已配置并满足合规开关的 Checkout 渠道；前端不得展示未返回的渠道。
 - `GET /api/v1/orders/:id`
+- `POST /api/v1/orders/:id/checkout`：为已创建的 Stripe、Creem、Waffo、Waffo Pancake 或易支付订单生成 Checkout 信息；服务端再次校验订单归属、状态、过期时间、渠道和网关金额。Creem 还要求已配置与服务器报价完全匹配的 USD 商品，Waffo/Waffo Pancake 使用服务器价格快照；易支付返回服务端签名的 `POST` 地址和参数，客户端不得自行改写。
 - `GET /api/v1/invite/info`、`GET /api/v1/invite/records`
 - `GET /api/v1/balance/info`、`GET /api/v1/balance/transactions`
 - `POST /api/v1/withdrawal/request`、`GET /api/v1/withdrawal/status`
@@ -59,6 +65,8 @@ access token。
 `product` 支持 `license`、`paid_revoke` 和 `offline_extension`。金额全部使用最小货币单位。
 正式授权固定为 CN/CNY 9900、INTL/USD 2990；付费撤销按 1/2/3 次分别为
 CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置给出。
+`provider: "balance"` 仅适用于已锁定区域的余额全额支付；服务器重新报价并在同一事务中
+扣除余额、签发授权，不允许用余额建立区域来源或创建部分余额支付订单。
 
 ## 支付事件桥
 
@@ -78,11 +86,22 @@ CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置�
 结果放入 `X-D2S-Signature`。支持 `paid`、`canceled`、`failed`、`chargeback`、`reversed`。
 事件以 `(provider,event_id)` 幂等，重复事件的订单、金额、币种、类型或摘要不一致时拒绝。
 
+当前服务端已在完成渠道官方验签后，将 Stripe、Creem、易支付、Waffo 和 Waffo Pancake
+的已规范化订单事件直接送入同一 D2S 事务处理器；普通 new-api 充值仍沿用原有回调逻辑。
+PayPal/Paddle 尚未接入，不能作为订单渠道使用。
+
 ## 管理 API
 
-- `GET /api/v1/admin/licenses`
+- `GET /api/v1/admin/licenses`（每项包含当前用户区域 `region`；空字符串表示尚未锁定）
+- `GET /api/v1/admin/orders[?status=&user_id=]`（包含拒付/冲正后的订单状态）
+- `GET /api/v1/admin/balances[?negative=true&user_id=]`（默认查看负余额）
+- `GET /api/v1/admin/signing-keys`（仅公开 JWK，不返回私钥）
+- `PUT /api/v1/admin/signing-keys/:id`（请求 `{"status":"retired"}`；当前活动键不可退休）
+- `GET /api/v1/admin/reconciliation[?start_at=&end_at=]`（默认上一 UTC 日）
 - `GET|PUT /api/v1/admin/withdrawals[/:id]`
 - `GET|PUT /api/v1/admin/unbind-requests[/:id]`
 - `PUT /api/v1/admin/users/:id/region`
 
 管理员写操作经过 new-api 的管理员审计中间件。区域只允许在余额为零、无待处理订单和提现时调整。
+对账报告还会标记 `paid_order_without_payment_event`、`paid_order_not_settled`、
+`orphan_payment_event`、`payment_order_mismatch` 和 `pending_expired`，仅报告异常，不自动改账。

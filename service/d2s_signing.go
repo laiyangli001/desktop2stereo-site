@@ -23,8 +23,10 @@ import (
 )
 
 var (
-	ErrD2SSigningKeyMissing = errors.New("Desktop2Stereo signing key is not configured")
-	ErrD2SSigningKeyInvalid = errors.New("Desktop2Stereo signing key is invalid")
+	ErrD2SSigningKeyMissing  = errors.New("Desktop2Stereo signing key is not configured")
+	ErrD2SSigningKeyInvalid  = errors.New("Desktop2Stereo signing key is invalid")
+	ErrD2SSigningKeyCurrent  = errors.New("the active Desktop2Stereo signing key cannot be retired")
+	ErrD2SSigningKeyNotFound = errors.New("Desktop2Stereo signing key was not found")
 )
 
 type D2SOfflineClaims struct {
@@ -53,11 +55,21 @@ type D2SPublicJWK struct {
 	Kid string `json:"kid"`
 }
 
-func d2sSigningKey() (*ecdsa.PrivateKey, string, error) {
+func d2sConfiguredKeyID() string {
 	keyID := strings.TrimSpace(os.Getenv("D2S_LICENSE_KEY_ID"))
 	if keyID == "" {
-		keyID = "d2s-es256-v1"
+		return "d2s-es256-v1"
 	}
+	return keyID
+}
+
+// IsD2SCurrentSigningKey reports whether a persisted key is configured for new signatures.
+func IsD2SCurrentSigningKey(keyID string) bool {
+	return strings.TrimSpace(keyID) == d2sConfiguredKeyID()
+}
+
+func d2sSigningKey() (*ecdsa.PrivateKey, string, error) {
+	keyID := d2sConfiguredKeyID()
 	raw := strings.TrimSpace(os.Getenv("D2S_LICENSE_PRIVATE_KEY_PEM"))
 	if encoded := strings.TrimSpace(os.Getenv("D2S_LICENSE_PRIVATE_KEY_B64")); raw == "" && encoded != "" {
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
@@ -128,63 +140,125 @@ func D2SPublicSigningKeys() ([]D2SPublicJWK, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []D2SPublicJWK{d2sPublicJWK(key, keyID)}, nil
+	current := d2sPublicJWK(key, keyID)
+	currentJSON, err := common.Marshal(current)
+	if err != nil {
+		return nil, err
+	}
+	if err := model.DB.Where("key_id = ?", keyID).Assign(model.D2SSigningKey{
+		KeyID: keyID, Algorithm: "ES256", PublicJWK: string(currentJSON), Status: "active",
+	}).FirstOrCreate(&model.D2SSigningKey{KeyID: keyID, CreatedAt: time.Now().Unix()}).Error; err != nil {
+		return nil, err
+	}
+
+	var stored []model.D2SSigningKey
+	if err := model.DB.Where("status <> ?", "retired").Order("created_at DESC").Find(&stored).Error; err != nil {
+		return nil, err
+	}
+	keys := make([]D2SPublicJWK, 0, len(stored))
+	seen := make(map[string]struct{}, len(stored))
+	for _, row := range stored {
+		if row.Algorithm != "ES256" || strings.TrimSpace(row.PublicJWK) == "" {
+			return nil, fmt.Errorf("%w: invalid public key metadata", ErrD2SSigningKeyInvalid)
+		}
+		var public D2SPublicJWK
+		if err := common.Unmarshal([]byte(row.PublicJWK), &public); err != nil || public.Kid == "" || public.Alg != "ES256" {
+			return nil, fmt.Errorf("%w: invalid public key metadata", ErrD2SSigningKeyInvalid)
+		}
+		if _, ok := seen[public.Kid]; ok {
+			continue
+		}
+		seen[public.Kid] = struct{}{}
+		keys = append(keys, public)
+	}
+	if len(keys) == 0 {
+		return []D2SPublicJWK{current}, nil
+	}
+	return keys, nil
+}
+
+func RetireD2SSigningKey(keyID string, now int64) error {
+	keyID = strings.TrimSpace(keyID)
+	if keyID == "" {
+		return model.ErrD2SOrderInvalid
+	}
+	if keyID == d2sConfiguredKeyID() {
+		return ErrD2SSigningKeyCurrent
+	}
+	if now <= 0 {
+		now = time.Now().Unix()
+	}
+	result := model.DB.Model(&model.D2SSigningKey{}).
+		Where("key_id = ? AND status <> ?", keyID, "retired").
+		Updates(map[string]any{"status": "retired", "retired_at": now})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrD2SSigningKeyNotFound
+	}
+	return nil
 }
 
 func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash string, requestedDays int, now int64) (string, *D2SOfflineClaims, error) {
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
-	license, err := model.GetD2SLicense(userID, licenseID, nil)
-	if err != nil {
-		return "", nil, err
-	}
-	if license.Status != model.D2SLicenseStatusActive || license.DeviceHash != strings.ToLower(strings.TrimSpace(deviceHash)) || (license.ExpiresAt > 0 && license.ExpiresAt <= now) {
-		return "", nil, model.ErrD2SLicenseUnavailable
-	}
-	if license.Mode != model.D2SLicenseModeOffline && license.Mode != model.D2SLicenseModePermanent {
-		return "", nil, model.ErrD2SLicenseUnavailable
-	}
-	days := requestedDays
-	if license.Mode == model.D2SLicenseModeOffline {
-		if days != 7 && days != 14 && days != 30 {
-			return "", nil, model.ErrD2SLicenseUnavailable
-		}
-		if days != license.OfflinePeriodDays {
-			return "", nil, model.ErrD2SLicenseUnavailable
-		}
-	}
-	expiresAt := now + int64(days)*86400
-	if license.Mode == model.D2SLicenseModePermanent {
-		days = 0
-		expiresAt = 253402300799
-	}
-	if license.ExpiresAt > 0 && license.ExpiresAt < expiresAt {
-		expiresAt = license.ExpiresAt
-	}
-	if license.OfflineValidUntil > expiresAt {
-		expiresAt = license.OfflineValidUntil
-	}
 	key, keyID, err := d2sSigningKey()
 	if err != nil {
 		return "", nil, err
 	}
-	claims := &D2SOfflineClaims{
-		Version: 1, KeyID: keyID, EntitlementID: uuid.NewString(), LicenseID: license.ID,
-		Product: model.D2SProductDesktop2Stereo, DeviceHash: license.DeviceHash, Mode: license.Mode,
-		Features: []string{"runtime"}, IssuedAt: now, NotBefore: now - 60, ExpiresAt: expiresAt,
-		Trial: license.Kind == model.D2SLicenseKindTrial, OfflinePeriodDays: days,
-	}
-	jws, err := signD2SClaims(key, keyID, *claims)
-	if err != nil {
-		return "", nil, err
-	}
-	digest := sha256.Sum256([]byte(jws))
 	jwkJSON, err := common.Marshal(d2sPublicJWK(key, keyID))
 	if err != nil {
 		return "", nil, err
 	}
+	var jws string
+	var claims *D2SOfflineClaims
 	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		var license model.D2SLicense
+		if err := model.LockForUpdate(tx).Where("id = ? AND user_id = ?", licenseID, userID).First(&license).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return model.ErrD2SLicenseNotFound
+			}
+			return err
+		}
+		if license.Status != model.D2SLicenseStatusActive || license.DeviceHash != strings.ToLower(strings.TrimSpace(deviceHash)) || (license.ExpiresAt > 0 && license.ExpiresAt <= now) {
+			return model.ErrD2SLicenseUnavailable
+		}
+		if license.Mode != model.D2SLicenseModeOffline && license.Mode != model.D2SLicenseModePermanent {
+			return model.ErrD2SLicenseUnavailable
+		}
+		days := requestedDays
+		if license.Mode == model.D2SLicenseModeOffline {
+			if days != 7 && days != 14 && days != 30 {
+				return model.ErrD2SLicenseUnavailable
+			}
+			if days != license.OfflinePeriodDays {
+				return model.ErrD2SLicenseUnavailable
+			}
+		}
+		expiresAt := now + int64(days)*86400
+		if license.Mode == model.D2SLicenseModePermanent {
+			days = 0
+			expiresAt = 253402300799
+		}
+		if license.ExpiresAt > 0 && license.ExpiresAt < expiresAt {
+			expiresAt = license.ExpiresAt
+		}
+		if license.OfflineValidUntil > expiresAt {
+			expiresAt = license.OfflineValidUntil
+		}
+		claims = &D2SOfflineClaims{
+			Version: 1, KeyID: keyID, EntitlementID: uuid.NewString(), LicenseID: license.ID,
+			Product: model.D2SProductDesktop2Stereo, DeviceHash: license.DeviceHash, Mode: license.Mode,
+			Features: []string{"runtime"}, IssuedAt: now, NotBefore: now - 60, ExpiresAt: expiresAt,
+			Trial: license.Kind == model.D2SLicenseKindTrial, OfflinePeriodDays: days,
+		}
+		jws, err = signD2SClaims(key, keyID, *claims)
+		if err != nil {
+			return err
+		}
+		digest := sha256.Sum256([]byte(jws))
 		keyMetadata := model.D2SSigningKey{
 			KeyID: keyID, Algorithm: "ES256", PublicJWK: string(jwkJSON), Status: "active", CreatedAt: now,
 		}

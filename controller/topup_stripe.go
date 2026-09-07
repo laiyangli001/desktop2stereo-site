@@ -177,7 +177,7 @@ func StripeWebhook(c *gin.Context) {
 	}
 
 	signature := c.GetHeader("Stripe-Signature")
-	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s signature=%q body=%q", c.Request.RequestURI, c.ClientIP(), signature, string(payload)))
+	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 收到请求 path=%q client_ip=%s %s", c.Request.RequestURI, c.ClientIP(), d2sWebhookPayloadInfo(payload)))
 	event, err := webhook.ConstructEventWithOptions(payload, signature, setting.StripeWebhookSecret, webhook.ConstructEventOptions{
 		IgnoreAPIVersionMismatch: true,
 	})
@@ -190,6 +190,19 @@ func StripeWebhook(c *gin.Context) {
 
 	callerIp := c.ClientIP()
 	logger.LogInfo(ctx, fmt.Sprintf("Stripe webhook 验签成功 event_type=%s client_ip=%s path=%q", string(event.Type), callerIp, c.Request.RequestURI))
+	if handled, err := processStripeD2SPayment(event, payload); handled {
+		if err != nil {
+			logD2SProviderError(ctx, "stripe", err)
+			if errors.Is(err, model.ErrD2SPaymentMismatch) || errors.Is(err, model.ErrD2SOrderState) {
+				c.AbortWithStatus(http.StatusBadRequest)
+				return
+			}
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Status(http.StatusOK)
+		return
+	}
 	switch event.Type {
 	case stripe.EventTypeCheckoutSessionCompleted:
 		sessionCompleted(ctx, event, callerIp)
