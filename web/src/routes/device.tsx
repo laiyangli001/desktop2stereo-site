@@ -26,7 +26,7 @@ export const Route = createFileRoute('/device')({
   component: D2SDeviceApprovalPage,
 })
 
-function D2SDeviceApprovalPage() {
+export function D2SDeviceApprovalPage() {
   const { t } = useTranslation()
   const [userCode, setUserCode] = useState('')
   const [approved, setApproved] = useState(false)
