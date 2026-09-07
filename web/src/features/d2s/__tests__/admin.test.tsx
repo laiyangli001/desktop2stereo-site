@@ -44,6 +44,10 @@ describe('D2SAdminWorkspace', () => {
             id: 'license-1',
             user_id: 42,
             license_code: 'D2S-ADMIN-1',
+            status: 'active',
+            mode: 'online',
+            device_hash:
+              '1234567890123456789012345678901234567890123456789012345678901234',
             region: 'INTL',
           },
         ],
@@ -133,6 +137,10 @@ describe('D2SAdminWorkspace', () => {
       expect(screen.getAllByText(/order-chargeback/).length).toBeGreaterThan(0)
     })
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Status: active · Mode: online/)
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Device: 123456789012…/)).toBeInTheDocument()
     expect(screen.getByText(/reversal_not_settled/)).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('INTL')
     expect(screen.getAllByRole('button', { name: 'Approve' })).toHaveLength(2)

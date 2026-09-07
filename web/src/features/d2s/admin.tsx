@@ -335,6 +335,9 @@ function RegionRow(props: {
     id: string
     user_id?: number
     license_code: string
+    status?: string
+    mode?: string
+    device_hash?: string
     region?: string
   }
   onSave: (region: string) => void
@@ -346,9 +349,25 @@ function RegionRow(props: {
   }, [props.license.region])
   return (
     <div className='flex flex-wrap items-center gap-2 border-b pb-2'>
-      <span className='min-w-52'>
-        {props.license.license_code} · user {props.license.user_id}
-      </span>
+      <div
+        className='min-w-64'
+        role='group'
+        aria-label={props.license.license_code}
+      >
+        <div className='font-medium'>
+          {props.license.license_code} · user {props.license.user_id}
+        </div>
+        <div className='text-muted-foreground text-xs'>
+          {t('Status')}: {props.license.status || '—'} · {t('Mode')}:{' '}
+          {props.license.mode || '—'}
+        </div>
+        <div className='text-muted-foreground font-mono text-xs'>
+          {t('Device')}:{' '}
+          {props.license.device_hash
+            ? `${props.license.device_hash.slice(0, 12)}…`
+            : t('Unbound')}
+        </div>
+      </div>
       <select
         aria-label={t('Region')}
         value={region}
