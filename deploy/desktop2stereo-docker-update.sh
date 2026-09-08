@@ -6,6 +6,8 @@ APP_ROOT="${D2S_DOCKER_APP_ROOT:-/opt/desktop2stereo-site}"
 RELEASE_ROOT="${D2S_DOCKER_RELEASE_ROOT:-/opt/desktop2stereo-releases}"
 BACKUP_SCRIPT="${D2S_UPDATE_BACKUP_SCRIPT:-/usr/local/sbin/desktop2stereo-db-backup}"
 UPDATE_SCRIPT_PATH="${D2S_DOCKER_UPDATE_SCRIPT:-/usr/local/sbin/desktop2stereo-docker-update}"
+BUILD_GOPROXY="${D2S_BUILD_GOPROXY:-https://goproxy.cn,direct}"
+BUILD_GOSUMDB="${D2S_BUILD_GOSUMDB:-off}"
 SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
 CURRENT_PHASE="starting"
@@ -106,7 +108,9 @@ docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:
 CURRENT_PHASE="build"
 write_status "running" "$CURRENT_PHASE" "正在构建 Docker 镜像"
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" build \
-  --build-arg "D2S_BUILD_VERSION=$SHA" new-api
+  --build-arg "D2S_BUILD_VERSION=$SHA" \
+  --build-arg "GOPROXY=$BUILD_GOPROXY" \
+  --build-arg "GOSUMDB=$BUILD_GOSUMDB" new-api
 docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:$SHA"
 CURRENT_PHASE="restart"
 write_status "running" "$CURRENT_PHASE" "正在重启应用容器"

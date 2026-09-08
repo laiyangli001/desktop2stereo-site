@@ -99,6 +99,10 @@ D2S_UPDATE_HEALTH_URL=http://127.0.0.1:3000/api/status
 6. 在独立 release 目录编译前端和 Go 程序。
    构建时将目标完整 commit SHA 注入前端版本、Go `common.Version` 和
    `org.opencontainers.image.revision`，并额外保留 `new-api-desktop2stereo-site:<commit-sha>` 镜像标签。
+   服务器更新器默认使用腾讯云可达的 `https://goproxy.cn,direct`；由于生产服务器可能无法访问
+   `sum.golang.org`，默认使用仓库已有 `go.sum` 进行依赖校验并设置 `GOSUMDB=off`。如服务器已配置
+   可达的校验数据库，可通过固定服务环境变量 `D2S_BUILD_GOPROXY` 和 `D2S_BUILD_GOSUMDB` 覆盖，
+   不要把代理或校验配置写入仓库 Secret。
 7. 原子切换 `current` 软链接。
 8. 重启服务并请求健康接口。
 9. 健康检查失败时恢复旧软链接并重启旧版本。
