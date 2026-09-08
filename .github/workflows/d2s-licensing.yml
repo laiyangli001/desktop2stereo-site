@@ -6,6 +6,7 @@ on:
     paths:
       - '.github/workflows/d2s-licensing.yml'
       - 'scripts/d2s-sensitive-scan.ps1'
+      - 'scripts/d2s-fixed-path-scan.ps1'
       - 'scripts/d2s-go-deps.ps1'
       - 'scripts/d2s-production-readiness.ps1'
       - 'scripts/d2s-reconciliation.ps1'
@@ -53,6 +54,7 @@ on:
     paths:
       - '.github/workflows/d2s-licensing.yml'
       - 'scripts/d2s-sensitive-scan.ps1'
+      - 'scripts/d2s-fixed-path-scan.ps1'
       - 'scripts/d2s-go-deps.ps1'
       - 'scripts/d2s-production-readiness.ps1'
       - 'scripts/d2s-reconciliation.ps1'
@@ -147,6 +149,9 @@ jobs:
           }
           Write-Host "Production Compose rejected missing credentials as expected (exit code $composeExitCode)."
           exit 0
+      - name: Reject random test paths
+        shell: pwsh
+        run: ./scripts/d2s-fixed-path-scan.ps1
       - name: Run D2S unit tests
         run: go test ./controller ./model ./service -run 'D2S' -count=1
       - name: Run complete Go test suite
@@ -162,6 +167,7 @@ jobs:
         shell: pwsh
         run: |
           foreach ($path in @(
+            './scripts/d2s-fixed-path-scan.ps1',
             './scripts/d2s-go-deps.ps1',
             './scripts/d2s-production-readiness.ps1',
             './scripts/d2s-reconciliation.ps1',
