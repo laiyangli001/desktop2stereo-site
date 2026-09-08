@@ -315,4 +315,64 @@ describe('D2SAdminWorkspace', () => {
       expect(region.closest('[aria-busy="true"]')).not.toBeNull()
     })
   })
+
+  it('restores region controls when the save request fails', async () => {
+    apiMocks.getD2SAdminLicenses.mockResolvedValue(
+      response({
+        licenses: [
+          {
+            id: 'license-region-failure',
+            user_id: 8,
+            license_code: 'D2S-REGION-FAILURE',
+            status: 'active',
+            mode: 'online',
+            region: 'INTL',
+          },
+        ],
+      })
+    )
+    for (const query of [
+      apiMocks.getD2SAdminOrders,
+      apiMocks.getD2SAdminPaymentEvents,
+      apiMocks.getD2SAdminBalances,
+      apiMocks.getD2SAdminWithdrawals,
+      apiMocks.getD2SAdminUnbindRequests,
+      apiMocks.getD2SAdminSigningKeys,
+      apiMocks.getD2SAdminReconciliation,
+    ]) {
+      query.mockResolvedValue(
+        response({
+          orders: [],
+          events: [],
+          accounts: [],
+          withdrawals: [],
+          requests: [],
+          keys: [],
+          mismatches: [],
+        })
+      )
+    }
+    apiMocks.setD2SUserRegion.mockRejectedValue(new Error('region unavailable'))
+
+    renderAdminWorkspace()
+
+    const region = await screen.findByRole('combobox', {
+      name: 'Region D2S-REGION-FAILURE',
+    })
+    fireEvent.change(region, { target: { value: 'CN' } })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save region D2S-REGION-FAILURE' })
+    )
+
+    await waitFor(() => {
+      expect(apiMocks.setD2SUserRegion).toHaveBeenCalledWith(8, 'CN')
+      expect(region).toBeEnabled()
+      expect(
+        screen.getByRole('button', {
+          name: 'Save region D2S-REGION-FAILURE',
+        })
+      ).toBeEnabled()
+    })
+    expect(region.closest('[aria-busy="true"]')).toBeNull()
+  })
 })
