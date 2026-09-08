@@ -11,8 +11,8 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 	{
 		auth := v1.Group("/auth")
 		{
-			auth.POST("/register", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, middleware.TurnstileCheck(), controller.Register)
-			auth.POST("/login", middleware.CriticalRateLimit(), middleware.DisableCache(), anonymousRequestBodyLimit, middleware.TurnstileCheck(), controller.Login)
+			auth.POST("/register", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.Register)
+			auth.POST("/login", middleware.CriticalRateLimit(), middleware.DisableCache(), anonymousRequestBodyLimit, controller.Login)
 			auth.POST("/logout", middleware.SessionCookieOriginGuard(), middleware.CriticalRateLimit(), middleware.DisableCache(), controller.AuthLogout)
 			auth.POST("/refresh", middleware.SessionCookieOriginGuard(), middleware.CriticalRateLimit(), middleware.DisableCache(), controller.RefreshAuth)
 			auth.POST("/password-reset/confirm", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.ResetPassword)

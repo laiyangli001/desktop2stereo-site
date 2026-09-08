@@ -25,8 +25,8 @@ import { toast } from 'sonner'
 import type { z } from 'zod'
 
 import { Dialog } from '@/components/dialog'
+import { BehaviorCaptcha, type BehaviorCaptchaValue } from '@/components/behavior-captcha'
 import { PasswordInput } from '@/components/password-input'
-import { Turnstile } from '@/components/turnstile'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -44,7 +44,6 @@ import { OAuthProviders } from '@/features/auth/components/oauth-providers'
 import { registerFormSchema } from '@/features/auth/constants'
 import { useAuthRedirect } from '@/features/auth/hooks/use-auth-redirect'
 import { useEmailVerification } from '@/features/auth/hooks/use-email-verification'
-import { useTurnstile } from '@/features/auth/hooks/use-turnstile'
 import {
   getAffiliateCode,
   saveAffiliateCode,
@@ -65,17 +64,10 @@ export function SignUpForm({
   const [wechatCode, setWeChatCode] = useState('')
   const [isWeChatDialogOpen, setIsWeChatDialogOpen] = useState(false)
   const [isWeChatSubmitting, setIsWeChatSubmitting] = useState(false)
-  const [turnstileWidgetKey, setTurnstileWidgetKey] = useState(0)
+  const [captcha, setCaptcha] = useState<BehaviorCaptchaValue>()
   const legalConsentErrorMessage = t('Please agree to the legal terms first')
 
   const { status } = useStatus()
-  const {
-    isTurnstileEnabled,
-    turnstileSiteKey,
-    turnstileToken,
-    setTurnstileToken,
-    validateTurnstile,
-  } = useTurnstile()
   const { redirectToLogin, handleLoginSuccess } = useAuthRedirect()
   const {
     isSending: isSendingCode,
@@ -83,8 +75,6 @@ export function SignUpForm({
     isActive,
     sendCode,
   } = useEmailVerification({
-    turnstileToken,
-    validateTurnstile,
   })
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
@@ -107,7 +97,6 @@ export function SignUpForm({
     status?.data?.oauth_register_enabled ??
     true
   const hasWeChatLogin = Boolean(status?.wechat_login)
-  const turnstileReady = !isTurnstileEnabled || Boolean(turnstileToken)
 
   const wechatQrCodeUrl = useMemo(() => {
     return (
@@ -156,7 +145,10 @@ export function SignUpForm({
       }
     }
 
-    if (!validateTurnstile()) return
+    if (!captcha) {
+      toast.error(t('Please complete the drag verification'))
+      return
+    }
 
     setIsLoading(true)
     try {
@@ -166,7 +158,7 @@ export function SignUpForm({
         email: data.email || undefined,
         verification_code: verificationCode || undefined,
         aff_code: getAffiliateCode(),
-        turnstile: turnstileToken,
+        ...captcha,
       })
 
       if (res?.success) {
@@ -184,8 +176,7 @@ export function SignUpForm({
 
   async function handleSendVerificationCode() {
     if (await sendCode(emailValue || '')) {
-      setTurnstileToken('')
-      setTurnstileWidgetKey((current) => current + 1)
+      setCaptcha(undefined)
     }
   }
 
@@ -335,8 +326,7 @@ export function SignUpForm({
                   isLoading ||
                   isSendingCode ||
                   isActive ||
-                  !emailValue ||
-                  !turnstileReady
+                  !emailValue
                 }
                 onClick={handleSendVerificationCode}
               >
@@ -346,16 +336,7 @@ export function SignUpForm({
           </>
         )}
 
-        {/* Turnstile */}
-        {isTurnstileEnabled && (
-          <div className='mt-2'>
-            <Turnstile
-              key={turnstileWidgetKey}
-              siteKey={turnstileSiteKey}
-              onVerify={setTurnstileToken}
-            />
-          </div>
-        )}
+        <BehaviorCaptcha value={captcha} onChange={setCaptcha} />
 
         <LegalConsent
           status={status}
@@ -371,7 +352,7 @@ export function SignUpForm({
           disabled={
             isLoading ||
             (requiresLegalConsent && !agreedToLegal) ||
-            !turnstileReady
+            !captcha
           }
         >
           {isLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : null}

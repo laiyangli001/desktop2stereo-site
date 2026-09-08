@@ -26,6 +26,9 @@ export interface LoginPayload {
   username: string
   password: string
   turnstile?: string
+  captcha_id?: string
+  captcha_x?: number
+  captcha_y?: number
   passwordEncryptionEnabled?: boolean
 }
 
@@ -41,6 +44,9 @@ export interface RegisterPayload {
   verification_code?: string
   aff_code?: string
   turnstile?: string
+  captcha_id?: string
+  captcha_x?: number
+  captcha_y?: number
 }
 
 export interface PasswordResetPayload {

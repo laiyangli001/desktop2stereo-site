@@ -51,7 +51,6 @@ function currentEmailLanguage(): string {
 
 // User login with username and password
 export async function login(payload: LoginPayload): Promise<LoginResponse> {
-  const turnstile = payload.turnstile ?? ''
   try {
     let passwordFields:
       | { password: string }
@@ -66,10 +65,13 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
       passwordFields = { password: payload.password }
     }
     const res = await api.post<LoginResponse>(
-      `/api/user/login?turnstile=${turnstile}`,
+      '/api/user/login',
       {
         username: payload.username,
         ...passwordFields,
+        captcha_id: payload.captcha_id,
+        captcha_x: payload.captcha_x,
+        captcha_y: payload.captcha_y,
       },
       { skipAuthRefresh: true }
     )
@@ -214,9 +216,7 @@ export async function telegramLogin(
 
 // User registration
 export async function register(payload: RegisterPayload): Promise<ApiResponse> {
-  const res = await api.post(`/api/user/register`, payload, {
-    params: { turnstile: payload.turnstile ?? '' },
-  })
+  const res = await api.post(`/api/user/register`, payload)
   return res.data
 }
 

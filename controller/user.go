@@ -32,6 +32,9 @@ type LoginRequest struct {
 	Password          string `json:"password"`
 	PasswordEncrypted string `json:"password_encrypted"`
 	EncryptionKeyID   string `json:"encryption_key_id"`
+	CaptchaID         string `json:"captcha_id"`
+	CaptchaX          int    `json:"captcha_x"`
+	CaptchaY          int    `json:"captcha_y"`
 }
 
 var (
@@ -65,6 +68,10 @@ func Login(c *gin.Context) {
 	err := common.DecodeJson(c.Request.Body, &loginRequest)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if !VerifyBehaviorCaptcha(loginRequest.CaptchaID, loginRequest.CaptchaX, loginRequest.CaptchaY) {
+		behaviorCaptchaError(c)
 		return
 	}
 	username := loginRequest.Username
@@ -242,12 +249,22 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordRegisterDisabled)
 		return
 	}
-	var user model.User
-	err := common.DecodeJson(c.Request.Body, &user)
+	var request struct {
+		model.User
+		CaptchaID string `json:"captcha_id"`
+		CaptchaX  int    `json:"captcha_x"`
+		CaptchaY  int    `json:"captcha_y"`
+	}
+	err := common.DecodeJson(c.Request.Body, &request)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
+	if !VerifyBehaviorCaptcha(request.CaptchaID, request.CaptchaX, request.CaptchaY) {
+		behaviorCaptchaError(c)
+		return
+	}
+	user := request.User
 	user.Username = strings.TrimSpace(user.Username)
 	user.Email = model.NormalizeEmail(user.Email)
 	if user.Username == "" {
