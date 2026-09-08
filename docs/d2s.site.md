@@ -52,6 +52,19 @@ PostgreSQL superuser 密码分别使用 `D2S_LOCAL_MYSQL_ROOT_PASSWORD` 与
 
 脚本默认验证 `controller`、`model`、`service` 和 `router`，并把最终测试可执行文件固定输出到 `.go-test-binaries`。
 
+前端 Vitest 测试使用固定路径脚本，避免 Node/Vite 回落到系统临时目录：
+
+```powershell
+.\scripts\d2s-fixed-web-test.ps1 src/features/d2s/__tests__ src/routes/__tests__/device.test.tsx
+```
+
+脚本使用以下固定目录：
+
+- `E:\AI_2D_to_3D\4.LC700X_Desktop2Stereo\.web-cache-d2s`
+- `E:\AI_2D_to_3D\4.LC700X_Desktop2Stereo\.web-tmp-d2s`
+
+Go 或前端工具在固定父目录内部生成的编译子目录仍可能带工具链生成的名称；360 应信任上述固定父目录，而不是只信任某一次生成的子目录或可执行文件。
+
 ## 2. 生产拓扑
 
 ```mermaid

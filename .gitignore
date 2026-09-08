@@ -22,6 +22,8 @@ tiktoken_cache
 .eslintcache
 .gocache
 .go-build-cache-d2s/
+.web-cache-d2s/
+.web-tmp-d2s/
 .gomodcache/
 .cache
 .plans
