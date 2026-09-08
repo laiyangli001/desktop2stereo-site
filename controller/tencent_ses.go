@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -57,6 +59,7 @@ func TestTencentSESSend(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 	defer cancel()
+	request.Data = fillTencentSESTestData(request.Scene, request.Data)
 	result, err := common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
 		Scene:        request.Scene,
 		TemplateID:   request.TemplateID,
@@ -71,6 +74,38 @@ func TestTencentSESSend(c *gin.Context) {
 	}
 	common.SysLog("Tencent SES test email sent: scene=" + request.Scene + ", request_id=" + result.RequestID)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "测试邮件发送成功", "data": result})
+}
+
+func fillTencentSESTestData(scene string, data map[string]string) map[string]string {
+	filled := make(map[string]string, len(data)+3)
+	for key, value := range data {
+		filled[key] = value
+	}
+	setDefault := func(key, value string) {
+		if strings.TrimSpace(filled[key]) == "" {
+			filled[key] = value
+		}
+	}
+
+	switch scene {
+	case "email_verification":
+		setDefault("code", "123456")
+		setDefault("expire_minutes", fmt.Sprintf("%d", common.VerificationValidMinutes))
+		setDefault("system_name", common.SystemName)
+	case "password_reset":
+		baseURL := strings.TrimRight(system_setting.ServerAddress, "/")
+		if baseURL == "" {
+			baseURL = "https://example.com"
+		}
+		setDefault("reset_url", baseURL+"/user/reset?email=test%40example.com&token=test-token")
+		setDefault("expire_minutes", fmt.Sprintf("%d", common.VerificationValidMinutes))
+		setDefault("system_name", common.SystemName)
+	case "system_notification":
+		setDefault("title", "测试通知")
+		setDefault("content", "这是一封腾讯云邮件推送测试邮件，用于验证模板、发信域名和服务配置。")
+		setDefault("system_name", common.SystemName)
+	}
+	return filled
 }
 
 func deliveryStatus(err error) string {
