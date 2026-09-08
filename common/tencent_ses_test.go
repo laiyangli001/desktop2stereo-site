@@ -47,6 +47,7 @@ func TestTencentSESTemplateMappingSelectsLanguageAndKeepsLegacyFormat(t *testing
 	require.Equal(t, uint64(123), resolveTencentSESTemplateID(config, "email_verification", "zh-CN"))
 	require.Equal(t, uint64(456), resolveTencentSESTemplateID(config, "email_verification", "en-US"))
 	require.Equal(t, uint64(789), resolveTencentSESTemplateID(config, "password_reset", "en"))
+	require.Equal(t, uint64(789), firstTencentSESTemplateID(config))
 }
 
 func TestTencentSESConfigPublicDoesNotExposeSecretKey(t *testing.T) {

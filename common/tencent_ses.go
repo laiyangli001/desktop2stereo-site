@@ -217,6 +217,22 @@ func resolveTencentSESTemplateID(config TencentSESTemplateConfig, scene, languag
 	return config.Templates[scene]
 }
 
+func firstTencentSESTemplateID(config TencentSESTemplateConfig) uint64 {
+	for _, templateID := range config.Templates {
+		if templateID != 0 {
+			return templateID
+		}
+	}
+	for _, localized := range config.LocalizedTemplates {
+		for _, templateID := range localized {
+			if templateID != 0 {
+				return templateID
+			}
+		}
+	}
+	return 0
+}
+
 func SendTencentSESTemplate(ctx context.Context, message TemplateEmailMessage) (TencentSESSendResult, error) {
 	config := GetTencentSESConfig()
 	if !config.Enabled {
@@ -309,11 +325,7 @@ func TestTencentSESConnection(ctx context.Context) error {
 	if err := validateTencentSESConfig(config); err != nil {
 		return err
 	}
-	var templateID uint64
-	for _, candidate := range config.Templates {
-		templateID = candidate
-		break
-	}
+	templateID := firstTencentSESTemplateID(config)
 	if templateID == 0 {
 		return fmt.Errorf("%w: configure at least one TemplateID before testing the connection", ErrTencentSESTemplateMissing)
 	}
