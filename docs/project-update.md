@@ -12,7 +12,10 @@ https://github.com/laiyangli001/desktop2stereo-site
 
 - 更新仓库、分支和执行脚本不由浏览器传入，仓库固定为 Desktop2Stereo 项目。
 - 页面只能提交 GitHub 返回的 40 位 commit SHA，服务端会再次向 GitHub 校验 SHA 是否仍为 `main` 最新提交。
-- 更新脚本固定从 `/usr/local/sbin/desktop2stereo-update` 执行，不接受任意 shell 命令。
+- Docker 部署通过固定的 `/opt/desktop2stereo-site/update-requests/request` 请求文件触发更新；宿主机
+  `desktop2stereo-update-watcher` 只读取并删除该文件，再调用固定的
+  `/usr/local/sbin/desktop2stereo-docker-update`，不接受浏览器传入的 shell 命令。
+- `/usr/local/sbin/desktop2stereo-update` 仅适用于旧的非 Docker 部署模式，不是当前 Docker 生产模式的更新器。
 - 代码发布目录和运行数据目录分离。
 - 发布归档使用目标 commit 自带的 `Dockerfile`；不会被服务器工作目录中的旧 Dockerfile 覆盖。
 - 成功健康检查后，固定更新器会同步安装该 commit 自带的
@@ -36,7 +39,7 @@ https://github.com/laiyangli001/desktop2stereo-site
     └── backups/
 ```
 
-将 `deploy/desktop2stereo-update.sh` 安装为固定脚本并限制权限：
+非 Docker 部署模式才安装 `deploy/desktop2stereo-update.sh`：
 
 ```bash
 install -o root -g root -m 0750 deploy/desktop2stereo-update.sh \
@@ -45,7 +48,7 @@ install -o root -g root -m 0750 deploy/desktop2stereo-update.sh \
 
 另外安装 `/usr/local/sbin/desktop2stereo-db-backup`。Docker 部署可以直接使用仓库中的 `deploy/desktop2stereo-db-backup-docker.sh`，该脚本先完成 PostgreSQL 备份，再返回成功；失败时必须返回非零退出码。备份脚本不应放在 GitHub 工作目录中。
 
-Docker 部署不把 Docker socket 暴露给应用容器，而是使用宿主机 systemd path watcher：
+Docker 部署不把 Docker socket 暴露给应用容器，而是使用宿主机 systemd path watcher。生产 Docker 模式安装：
 
 ```bash
 install -o root -g root -m 0750 deploy/desktop2stereo-db-backup-docker.sh /usr/local/sbin/desktop2stereo-db-backup
@@ -83,11 +86,16 @@ D2S_UPDATE_SERVICE=desktop2stereo
 
 ```text
 D2S_UPDATE_ENABLED=true
-D2S_UPDATE_SCRIPT=/usr/local/sbin/desktop2stereo-update
-D2S_UPDATE_ROOT=/opt/desktop2stereo
+D2S_UPDATE_REQUEST_FILE=/opt/desktop2stereo-site/update-requests/request
+D2S_UPDATE_STATUS_FILE=/opt/desktop2stereo-site/update-requests/status.json
+D2S_DOCKER_APP_ROOT=/opt/desktop2stereo-site
+D2S_DOCKER_RELEASE_ROOT=/opt/desktop2stereo-releases
+D2S_DOCKER_UPDATE_SCRIPT=/usr/local/sbin/desktop2stereo-docker-update
 D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
-D2S_UPDATE_HEALTH_URL=http://127.0.0.1:3000/api/status
 ```
+
+非 Docker 模式使用 `D2S_UPDATE_SCRIPT`、`D2S_UPDATE_ROOT` 和
+`D2S_UPDATE_HEALTH_URL`；不要把这些旧模式变量与 Docker 请求文件模式混用。
 
 ## 页面操作流程
 
