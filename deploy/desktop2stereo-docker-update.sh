@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPOSITORY="https://github.com/laiyangli001/desktop2stereo-site.git"
-BRANCH="main"
+REPOSITORY="laiyangli001/desktop2stereo-site"
 APP_ROOT="${D2S_DOCKER_APP_ROOT:-/opt/desktop2stereo-site}"
 RELEASE_ROOT="${D2S_DOCKER_RELEASE_ROOT:-/opt/desktop2stereo-releases}"
 BACKUP_SCRIPT="${D2S_UPDATE_BACKUP_SCRIPT:-/usr/local/sbin/desktop2stereo-db-backup}"
@@ -16,7 +15,7 @@ if [[ ! -x "$BACKUP_SCRIPT" ]]; then
   echo "database backup script is missing: $BACKUP_SCRIPT" >&2
   exit 3
 fi
-for command_name in git docker; do
+for command_name in curl docker tar; do
   command -v "$command_name" >/dev/null || { echo "required command is missing: $command_name" >&2; exit 4; }
 done
 
@@ -37,8 +36,20 @@ if [[ -e "$RELEASE" ]]; then
 fi
 
 "$BACKUP_SCRIPT" "$APP_ROOT/backups" "$SHA"
-git clone --filter=blob:none --no-checkout --branch "$BRANCH" --single-branch "$REPOSITORY" "$RELEASE"
-git -C "$RELEASE" checkout --detach "$SHA"
+ARCHIVE="$RELEASE_ROOT/.desktop2stereo-$SHA.tar.gz"
+EXTRACT_ROOT="$RELEASE_ROOT/.desktop2stereo-$SHA"
+rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
+mkdir -p "$EXTRACT_ROOT"
+curl --fail --location --retry 3 --connect-timeout 10 --max-time 300 \
+  -o "$ARCHIVE" "https://codeload.github.com/$REPOSITORY/tar.gz/$SHA"
+tar -xzf "$ARCHIVE" -C "$EXTRACT_ROOT"
+SOURCE_DIR="$(find "$EXTRACT_ROOT" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+if [[ -z "$SOURCE_DIR" ]]; then
+  echo "GitHub commit archive has no source directory" >&2
+  exit 7
+fi
+mv "$SOURCE_DIR" "$RELEASE"
+rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
 
 if [[ -f "$APP_ROOT/Dockerfile" ]]; then
   cp "$APP_ROOT/Dockerfile" "$RELEASE/Dockerfile"
