@@ -71,10 +71,15 @@ cleanup() { rm -rf -- "$LOCK"; }
 trap cleanup EXIT
 
 RELEASE="$RELEASE_ROOT/$SHA"
-if [[ -e "$RELEASE" ]]; then
+RELEASE_MARKER="$RELEASE/.update-complete"
+if [[ -f "$RELEASE_MARKER" ]]; then
 	write_status "succeeded" "completed" "该版本已部署，无需重复更新"
   echo "release already prepared: $RELEASE"
   exit 0
+fi
+if [[ -e "$RELEASE" ]]; then
+  echo "removing incomplete release: $RELEASE"
+  rm -rf -- "$RELEASE"
 fi
 
 CURRENT_PHASE="backup"
@@ -124,6 +129,7 @@ for _ in $(seq 1 30); do
 	if [[ -x "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
 	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"
 	fi
+	touch "$RELEASE_MARKER"
 	write_status "succeeded" "completed" "更新完成，应用健康检查通过"
     echo "Docker update succeeded: $SHA"
     exit 0

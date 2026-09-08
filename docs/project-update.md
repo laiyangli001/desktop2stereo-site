@@ -103,6 +103,8 @@ D2S_UPDATE_HEALTH_URL=http://127.0.0.1:3000/api/status
    `sum.golang.org`，默认使用仓库已有 `go.sum` 进行依赖校验并设置 `GOSUMDB=off`。如服务器已配置
    可达的校验数据库，可通过固定服务环境变量 `D2S_BUILD_GOPROXY` 和 `D2S_BUILD_GOSUMDB` 覆盖，
    不要把代理或校验配置写入仓库 Secret。
+   只有健康检查通过后，发布目录才会写入 `.update-complete` 标记；中途失败或被终止留下的
+   不完整目录会在同一 SHA 重试时清理并重新构建，不会被误判为“已部署”。
 7. 原子切换 `current` 软链接。
 8. 重启服务并请求健康接口。
 9. 健康检查失败时恢复旧软链接并重启旧版本。
