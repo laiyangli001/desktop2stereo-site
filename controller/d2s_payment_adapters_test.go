@@ -275,9 +275,17 @@ func TestD2SProviderAdaptersEnterSharedOrderTransaction(t *testing.T) {
 	assert.Equal(t, model.D2SOrderCanceled, canceledWaffoOrder.Status)
 
 	pancakeOrder := makeOrder("pancake-adapter-order", 903, "waffo_pancake", "USD")
-	handled, err = processWaffoPancakeD2SPayment(&service.WaffoPancakeWebhookEvent{EventID: "pancake-event", EventType: "order.completed", Data: service.WaffoPancakeWebhookData{OrderMerchantExternalID: pancakeOrder.ID, Currency: "USD", Amount: "29.90"}}, []byte("pancake-payload"))
+	pancakePaidEvent := &service.WaffoPancakeWebhookEvent{EventID: "pancake-event", EventType: "order.completed", Data: service.WaffoPancakeWebhookData{OrderMerchantExternalID: pancakeOrder.ID, Currency: "USD", Amount: "29.90"}}
+	handled, err = processWaffoPancakeD2SPayment(pancakePaidEvent, []byte("pancake-payload"))
 	require.NoError(t, err)
 	assert.True(t, handled)
+	handled, err = processWaffoPancakeD2SPayment(pancakePaidEvent, []byte("pancake-payload"))
+	require.NoError(t, err)
+	assert.True(t, handled, "repeated Pancake order.completed must be idempotent")
+	conflictingPancakeEvent := &service.WaffoPancakeWebhookEvent{EventID: "pancake-event", EventType: "order.completed", Data: service.WaffoPancakeWebhookData{OrderMerchantExternalID: pancakeOrder.ID, Currency: "USD", Amount: "29.91"}}
+	handled, err = processWaffoPancakeD2SPayment(conflictingPancakeEvent, []byte("pancake-conflicting-payload"))
+	assert.True(t, handled)
+	assert.ErrorIs(t, err, model.ErrD2SPaymentMismatch)
 	handled, err = processWaffoPancakeD2SRefund(&service.WaffoPancakeWebhookEvent{EventID: "pancake-refund-event", EventType: "refund.succeeded", Data: service.WaffoPancakeWebhookData{OrderMerchantExternalID: pancakeOrder.ID, Currency: "USD", Amount: "29.90"}}, []byte("pancake-refund-payload"))
 	require.NoError(t, err)
 	assert.True(t, handled)
