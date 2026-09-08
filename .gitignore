@@ -37,6 +37,7 @@ electron/dist
 token_estimator_test.go
 skills-lock.json
 .playwright-mcp
+.ssh/
 
 # Portable local MySQL/PostgreSQL instances used by the D2S database matrix.
 .local-db/
