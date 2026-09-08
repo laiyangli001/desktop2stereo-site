@@ -108,6 +108,36 @@ PayPal/Paddle 在完成适配器前不开放。
 导出内部订单与支付事件报告，再与各渠道结算文件逐笔核对。报告中的过期待支付、孤立事件、
 订单/事件金额或币种不一致必须在放量前处理；该接口不会自动修改订单或账本。
 
+生产服务器使用固定路径的 systemd timer 每天 02:15 UTC 执行对账。安装仓库中的
+`deploy/desktop2stereo-reconciliation.sh` 到 `/usr/local/sbin/desktop2stereo-reconciliation`，
+并创建 root-only 的 `/etc/desktop2stereo/reconciliation.env`：
+
+```text
+D2S_RECONCILIATION_BASE_URL=https://d2s.site
+D2S_RECONCILIATION_ROOT=/opt/desktop2stereo-site
+D2S_RECONCILIATION_REPORT_ROOT=/opt/desktop2stereo-site/reconciliation-reports
+D2S_ADMIN_TOKEN=<admin-token>
+```
+
+环境文件必须使用 `root:root` 和 `0600` 权限，不能提交到 Git。再安装并启用：
+
+```bash
+install -o root -g root -m 0750 deploy/desktop2stereo-reconciliation.sh \
+  /usr/local/sbin/desktop2stereo-reconciliation
+install -d -o root -g root -m 0700 /etc/desktop2stereo
+install -d -o root -g root -m 0700 /opt/desktop2stereo-site/reconciliation-reports
+install -o root -g root -m 0644 deploy/desktop2stereo-reconciliation.service \
+  /etc/systemd/system/desktop2stereo-reconciliation.service
+install -o root -g root -m 0644 deploy/desktop2stereo-reconciliation.timer \
+  /etc/systemd/system/desktop2stereo-reconciliation.timer
+systemctl daemon-reload
+systemctl enable --now desktop2stereo-reconciliation.timer
+```
+
+报告固定保存到 `/opt/desktop2stereo-site/reconciliation-reports/`，同一 UTC 日期的已有报告
+不会被覆盖。存在差异时脚本以非零状态退出，`systemctl status`、journal 和服务器监控可据此
+告警；脚本不会输出管理员令牌，也不会自动修改订单或账本。
+
 ## 5. 必需配置
 
 基础配置：

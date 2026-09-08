@@ -1,0 +1,15 @@
+[Unit]
+Description=Desktop2Stereo daily payment reconciliation
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=/etc/desktop2stereo/reconciliation.env
+ExecStart=/usr/local/sbin/desktop2stereo-reconciliation
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/desktop2stereo-site/reconciliation-reports

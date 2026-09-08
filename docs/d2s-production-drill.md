@@ -77,6 +77,11 @@ curl -H 'Authorization: Bearer <admin-token>' \
 已有报告。接入计划任务或告警时增加 `-FailOnMismatch`，脚本会先保存报告，再以失败状态退出，
 避免把存在差异的日期误判为已结算；默认不加该参数时保持人工复核流程。
 
+生产日终任务使用固定的 `/usr/local/sbin/desktop2stereo-reconciliation` 和
+`desktop2stereo-reconciliation.timer`。管理员令牌只放在 `/etc/desktop2stereo/reconciliation.env`
+（`0600`），报告写入 `/opt/desktop2stereo-site/reconciliation-reports/`；同一天重复执行不会覆盖
+原报告。差异会使 service 失败，必须通过 systemd/journal 的服务器监控告警并人工核对渠道结算文件。
+
 ## 3. 密钥轮换
 
 1. 发布包含新公钥的客户端版本，记录客户端版本和新 `key_id`。

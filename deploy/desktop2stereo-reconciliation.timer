@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Desktop2Stereo payment reconciliation daily
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+Persistent=true
+RandomizedDelaySec=0
+Unit=desktop2stereo-reconciliation.service
+
+[Install]
+WantedBy=timers.target
