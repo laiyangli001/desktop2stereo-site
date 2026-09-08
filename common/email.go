@@ -10,6 +10,8 @@ import (
 	"time"
 )
 
+var ErrEmailRecipientMissing = fmt.Errorf("email recipient is required")
+
 func generateMessageID() (string, error) {
 	split := strings.Split(SMTPFrom, "@")
 	if len(split) < 2 {

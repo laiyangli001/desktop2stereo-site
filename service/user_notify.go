@@ -113,22 +113,16 @@ func sendEmailNotify(userEmail string, data dto.Notify) error {
 	for _, value := range data.Values {
 		content = strings.Replace(content, dto.ContentValueParam, fmt.Sprintf("%v", value), 1)
 	}
-	if common.GetTencentSESConfig().Enabled {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		return func() error {
-			result, err := common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
-				Scene:        "system_notification",
-				To:           []string{userEmail},
-				Subject:      data.Title,
-				TemplateData: map[string]string{"title": data.Title, "content": content},
-			})
-			model.RecordEmailDelivery("system_notification", userEmail, deliveryStatus(err), result.RequestID, result.MessageID, err)
-			return err
-		}()
-	}
-	err := common.SendEmail(data.Title, userEmail, content)
-	model.RecordEmailDelivery("system_notification", userEmail, deliveryStatus(err), "", "", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	result, err := common.SendEmailMessage(ctx, common.EmailMessage{
+		Scene:        "system_notification",
+		To:           []string{userEmail},
+		Subject:      data.Title,
+		TemplateData: map[string]string{"title": data.Title, "content": content},
+		HTMLBody:     content,
+	})
+	model.RecordEmailDelivery("system_notification", userEmail, deliveryStatus(err), result.RequestID, result.MessageID, err)
 	return err
 }
 

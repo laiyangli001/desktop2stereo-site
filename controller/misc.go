@@ -288,20 +288,16 @@ func SendEmailVerification(c *gin.Context) {
 		"<p>您的验证码为: <strong>%s</strong></p>"+
 		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
 	var err error
-	var delivery common.TencentSESSendResult
-	if common.GetTencentSESConfig().Enabled {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
-		delivery, err = common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
-			Scene:        "email_verification",
-			Language:     language,
-			To:           []string{email},
-			Subject:      subject,
-			TemplateData: map[string]string{"token": code, "code": code, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
-		})
-		cancel()
-	} else {
-		err = common.SendEmail(subject, email, content)
-	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+	defer cancel()
+	delivery, err := common.SendEmailMessage(ctx, common.EmailMessage{
+		Scene:        "email_verification",
+		Language:     language,
+		To:           []string{email},
+		Subject:      subject,
+		TemplateData: map[string]string{"token": code, "code": code, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
+		HTMLBody:     content,
+	})
 	model.RecordEmailDelivery("email_verification", email, deliveryStatus(err), delivery.RequestID, delivery.MessageID, err)
 	if err != nil {
 		common.ApiError(c, err)
@@ -336,21 +332,16 @@ func SendPasswordResetEmail(c *gin.Context) {
 			"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
 			"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
 			"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.VerificationValidMinutes)
-		var err error
-		var delivery common.TencentSESSendResult
-		if common.GetTencentSESConfig().Enabled {
-			ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
-			delivery, err = common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
-				Scene:        "password_reset",
-				Language:     language,
-				To:           []string{email},
-				Subject:      subject,
-				TemplateData: map[string]string{"token": link, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
-			})
-			cancel()
-		} else {
-			err = common.SendEmail(subject, email, content)
-		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+		delivery, err := common.SendEmailMessage(ctx, common.EmailMessage{
+			Scene:        "password_reset",
+			Language:     language,
+			To:           []string{email},
+			Subject:      subject,
+			TemplateData: map[string]string{"token": link, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
+			HTMLBody:     content,
+		})
+		cancel()
 		model.RecordEmailDelivery("password_reset", email, deliveryStatus(err), delivery.RequestID, delivery.MessageID, err)
 		if err != nil {
 			logger.LogError(c.Request.Context(), fmt.Sprintf("failed to send password reset email to %s: %s", email, err.Error()))
