@@ -181,4 +181,28 @@ describe('D2SWorkspace purchase flow', () => {
     expect(pendingButton).toBeDisabled()
     expect(pendingButton.closest('[aria-busy="true"]')).not.toBeNull()
   })
+
+  it('restores checkout controls when checkout creation fails', async () => {
+    apiMocks.createD2SOrderCheckout.mockRejectedValue(
+      new Error('checkout unavailable')
+    )
+
+    renderWorkspace()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Pay with Stripe' })
+    )
+
+    await waitFor(() => {
+      expect(apiMocks.createD2SOrderCheckout).toHaveBeenCalledWith('order-1')
+      expect(
+        screen.getByRole('button', { name: 'Pay with Stripe' })
+      ).toBeEnabled()
+    })
+    expect(
+      screen.getByRole('button', { name: 'Pay with Stripe' }).closest(
+        '[aria-busy="true"]'
+      )
+    ).toBeNull()
+  })
 })
