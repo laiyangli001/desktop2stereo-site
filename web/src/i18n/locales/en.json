@@ -5658,6 +5658,7 @@
     "Test email failed": "Test email failed",
     "Template mapping must be a JSON object of positive numeric IDs": "Template mapping must be a JSON object of positive numeric IDs",
     "Invalid template mapping": "Invalid template mapping",
-    "Leave blank to keep existing credential": "Leave blank to keep existing credential"
+    "Leave blank to keep existing credential": "Leave blank to keep existing credential",
+    "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.": "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported."
   }
 }

@@ -37,6 +37,18 @@ func TestGetTencentSESConfigUsesSafeDefaults(t *testing.T) {
 	require.Empty(t, config.Templates)
 }
 
+func TestTencentSESTemplateMappingSelectsLanguageAndKeepsLegacyFormat(t *testing.T) {
+	mapping, err := parseTencentSESTemplateMapping(`{"email_verification":{"zhCN":123,"en":456},"password_reset":789}`)
+	require.NoError(t, err)
+	config := TencentSESTemplateConfig{
+		Templates:          mapping.Default,
+		LocalizedTemplates: mapping.Localized,
+	}
+	require.Equal(t, uint64(123), resolveTencentSESTemplateID(config, "email_verification", "zh-CN"))
+	require.Equal(t, uint64(456), resolveTencentSESTemplateID(config, "email_verification", "en-US"))
+	require.Equal(t, uint64(789), resolveTencentSESTemplateID(config, "password_reset", "en"))
+}
+
 func TestTencentSESConfigPublicDoesNotExposeSecretKey(t *testing.T) {
 	withTencentSESOptions(t, map[string]string{
 		"TencentSESEnabled":   "true",

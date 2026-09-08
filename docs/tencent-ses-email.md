@@ -14,7 +14,7 @@ New API 管理后台的“运维 → 邮件推送”使用腾讯云 SES 模板�
 - 已验证发信地址及可选发件人名称；
 - 可选 Reply-To 地址和主题前缀；
 - 请求超时时间和有限重试次数；
-- 业务场景到腾讯云 `TemplateID` 的 JSON 映射。
+- 业务场景和语言到腾讯云 `TemplateID` 的 JSON 映射。
 
 SecretKey 不会回显到接口或页面。留空 SecretId/SecretKey 后保存会保留服务器上已有值。不要把真实凭证提交到 Git、前端代码或普通日志。
 
@@ -22,18 +22,24 @@ SecretKey 不会回显到接口或页面。留空 SecretId/SecretKey 后保存�
 
 ```json
 {
-  "email_verification": 1001,
-  "password_reset": 1002,
-  "system_notification": 1003,
-  "order_created": 1004,
-  "payment_succeeded": 1005,
-  "refund": 1006,
-  "authorization_success": 1007,
-  "test": 1008
+  "email_verification": {
+    "zhCN": 1001,
+    "en": 1002
+  },
+  "password_reset": {
+    "zhCN": 1003,
+    "en": 1004
+  },
+  "system_notification": {
+    "zhCN": 1005,
+    "en": 1006
+  }
 }
 ```
 
-示例中的 ID 仅用于说明格式，不能直接用于生产环境。请替换为腾讯云控制台中已审核的真实模板 ID。
+`zhCN` 表示简体中文，`en` 表示英文。示例中的 ID 仅用于说明格式，不能直接用于生产环境。请替换为腾讯云控制台中已审核的真实模板 ID。旧版单层格式（例如 `{"password_reset":1003}`）仍然兼容，并作为不区分语言的默认模板使用。
+
+语言选择优先级为：密码重置优先使用用户保存的语言；其他未登录场景使用请求的 `lang` 参数、`X-User-Language` 或 `Accept-Language`；无法判断时默认使用 `zhCN`。如果目标语言没有配置模板，会依次回退到简体中文、英文和旧版默认模板。
 
 ## 标准场景变量
 

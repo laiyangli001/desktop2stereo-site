@@ -216,6 +216,20 @@ func GetHomePageContent(c *gin.Context) {
 	serveRevalidatedJSON(c, homePageContent)
 }
 
+func requestEmailLanguage(c *gin.Context) string {
+	if language := strings.TrimSpace(c.Query("lang")); language != "" {
+		return language
+	}
+	if language := strings.TrimSpace(c.GetHeader("X-User-Language")); language != "" {
+		return language
+	}
+	acceptLanguage := strings.TrimSpace(c.GetHeader("Accept-Language"))
+	if acceptLanguage == "" {
+		return "zhCN"
+	}
+	return strings.TrimSpace(strings.Split(strings.Split(acceptLanguage, ",")[0], ";")[0])
+}
+
 func SendEmailVerification(c *gin.Context) {
 	email := model.NormalizeEmail(c.Query("email"))
 	if err := common.Validate.Var(email, "required,email"); err != nil {
@@ -275,6 +289,7 @@ func SendEmailVerification(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 		delivery, err = common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
 			Scene:        "email_verification",
+			Language:     requestEmailLanguage(c),
 			To:           []string{email},
 			Subject:      subject,
 			TemplateData: map[string]string{"code": code, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
@@ -301,7 +316,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	if _, err := model.GetUniqueUserByEmail(email); err == nil {
+	if user, err := model.GetUniqueUserByEmail(email); err == nil {
 		code := common.GenerateVerificationCode(0)
 		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
 		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
@@ -315,7 +330,13 @@ func SendPasswordResetEmail(c *gin.Context) {
 		if common.GetTencentSESConfig().Enabled {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 			delivery, err = common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
-				Scene:        "password_reset",
+				Scene: "password_reset",
+				Language: func() string {
+					if language := model.GetUserLanguage(user.Id); language != "" {
+						return language
+					}
+					return requestEmailLanguage(c)
+				}(),
 				To:           []string{email},
 				Subject:      subject,
 				TemplateData: map[string]string{"reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},

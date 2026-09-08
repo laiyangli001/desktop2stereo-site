@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import axios from 'axios'
+import i18next from 'i18next'
 
 import { api, refreshAuthentication, type RefreshOutcome } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
@@ -35,6 +36,10 @@ import type {
   RegisterPayload,
   ApiResponse,
 } from './types'
+
+function currentEmailLanguage(): string {
+  return i18next.resolvedLanguage || i18next.language || 'zhCN'
+}
 
 // ============================================================================
 // Authentication APIs
@@ -145,10 +150,11 @@ export async function logout(): Promise<ApiResponse> {
 // Send password reset email
 export async function sendPasswordResetEmail(
   email: string,
-  turnstile?: string
+  turnstile?: string,
+  language?: string
 ): Promise<ApiResponse> {
   const res = await api.get('/api/reset_password', {
-    params: { email, turnstile },
+    params: { email, turnstile, lang: language || currentEmailLanguage() },
   })
   return res.data
 }
@@ -217,10 +223,11 @@ export async function register(payload: RegisterPayload): Promise<ApiResponse> {
 // Send email verification code
 export async function sendEmailVerification(
   email: string,
-  turnstile?: string
+  turnstile?: string,
+  language?: string
 ): Promise<ApiResponse> {
   const res = await api.get('/api/verification', {
-    params: { email, turnstile },
+    params: { email, turnstile, lang: language || currentEmailLanguage() },
   })
   return res.data
 }

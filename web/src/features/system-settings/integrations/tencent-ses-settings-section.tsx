@@ -181,7 +181,7 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
             )} />
           </div>
           <FormField control={form.control} name='TencentSESTemplates' render={({ field }) => (
-            <FormItem><FormLabel>{t('Template ID mapping')}</FormLabel><FormControl><Textarea className='min-h-48 font-mono' placeholder='{"password_reset":123,"email_verification":456}' {...field} /></FormControl><FormDescription>{t('JSON mapping from business scene to approved Tencent SES TemplateID. Domain verification is managed in Tencent Cloud.')}</FormDescription><FormMessage /></FormItem>
+            <FormItem><FormLabel>{t('Template ID mapping')}</FormLabel><FormControl><Textarea className='min-h-48 font-mono' placeholder='{"email_verification":{"zhCN":123,"en":456},"password_reset":{"zhCN":789,"en":790}}' {...field} /></FormControl><FormDescription>{t('Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.')}</FormDescription><FormMessage /></FormItem>
           )} />
         </SettingsForm>
       </Form>

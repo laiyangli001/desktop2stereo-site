@@ -38,22 +38,29 @@ var requiredTencentSESTemplateVariables = map[string][]string{
 	"system_notification": {"title", "content"},
 }
 
+type TencentSESTemplateMapping struct {
+	Default   map[string]uint64
+	Localized map[string]map[string]uint64
+}
+
 type TencentSESTemplateConfig struct {
-	Enabled        bool              `json:"enabled"`
-	Region         string            `json:"region"`
-	SecretID       string            `json:"secret_id"`
-	SecretKey      string            `json:"secret_key"`
-	FromEmail      string            `json:"from_email"`
-	FromName       string            `json:"from_name"`
-	ReplyTo        string            `json:"reply_to"`
-	SubjectPrefix  string            `json:"subject_prefix"`
-	TimeoutSeconds int               `json:"timeout_seconds"`
-	RetryCount     int               `json:"retry_count"`
-	Templates      map[string]uint64 `json:"templates"`
+	Enabled            bool                         `json:"enabled"`
+	Region             string                       `json:"region"`
+	SecretID           string                       `json:"secret_id"`
+	SecretKey          string                       `json:"secret_key"`
+	FromEmail          string                       `json:"from_email"`
+	FromName           string                       `json:"from_name"`
+	ReplyTo            string                       `json:"reply_to"`
+	SubjectPrefix      string                       `json:"subject_prefix"`
+	TimeoutSeconds     int                          `json:"timeout_seconds"`
+	RetryCount         int                          `json:"retry_count"`
+	Templates          map[string]uint64            `json:"templates"`
+	LocalizedTemplates map[string]map[string]uint64 `json:"localized_templates"`
 }
 
 type TemplateEmailMessage struct {
 	Scene        string
+	Language     string
 	TemplateID   uint64
 	To           []string
 	Cc           []string
@@ -99,23 +106,27 @@ func GetTencentSESConfig() TencentSESTemplateConfig {
 	OptionMapRWMutex.RLock()
 	defer OptionMapRWMutex.RUnlock()
 	config := TencentSESTemplateConfig{
-		Enabled:        OptionMap["TencentSESEnabled"] == "true",
-		Region:         strings.TrimSpace(OptionMap["TencentSESRegion"]),
-		SecretID:       strings.TrimSpace(OptionMap["TencentSESSecretId"]),
-		SecretKey:      strings.TrimSpace(OptionMap["TencentSESSecretKey"]),
-		FromEmail:      strings.TrimSpace(OptionMap["TencentSESFromEmail"]),
-		FromName:       strings.TrimSpace(OptionMap["TencentSESFromName"]),
-		ReplyTo:        strings.TrimSpace(OptionMap["TencentSESReplyTo"]),
-		SubjectPrefix:  strings.TrimSpace(OptionMap["TencentSESSubjectPrefix"]),
-		TimeoutSeconds: positiveIntOption(OptionMap["TencentSESTimeoutSeconds"], 10),
-		RetryCount:     nonNegativeIntOption(OptionMap["TencentSESRetryCount"], 1),
-		Templates:      map[string]uint64{},
+		Enabled:            OptionMap["TencentSESEnabled"] == "true",
+		Region:             strings.TrimSpace(OptionMap["TencentSESRegion"]),
+		SecretID:           strings.TrimSpace(OptionMap["TencentSESSecretId"]),
+		SecretKey:          strings.TrimSpace(OptionMap["TencentSESSecretKey"]),
+		FromEmail:          strings.TrimSpace(OptionMap["TencentSESFromEmail"]),
+		FromName:           strings.TrimSpace(OptionMap["TencentSESFromName"]),
+		ReplyTo:            strings.TrimSpace(OptionMap["TencentSESReplyTo"]),
+		SubjectPrefix:      strings.TrimSpace(OptionMap["TencentSESSubjectPrefix"]),
+		TimeoutSeconds:     positiveIntOption(OptionMap["TencentSESTimeoutSeconds"], 10),
+		RetryCount:         nonNegativeIntOption(OptionMap["TencentSESRetryCount"], 1),
+		Templates:          map[string]uint64{},
+		LocalizedTemplates: map[string]map[string]uint64{},
 	}
 	if config.Region == "" {
 		config.Region = "ap-guangzhou"
 	}
 	if raw := strings.TrimSpace(OptionMap["TencentSESTemplates"]); raw != "" {
-		_ = json.Unmarshal([]byte(raw), &config.Templates)
+		if mapping, err := parseTencentSESTemplateMapping(raw); err == nil {
+			config.Templates = mapping.Default
+			config.LocalizedTemplates = mapping.Localized
+		}
 	}
 	return config
 }
@@ -123,18 +134,87 @@ func GetTencentSESConfig() TencentSESTemplateConfig {
 func TencentSESConfigPublic() map[string]any {
 	config := GetTencentSESConfig()
 	return map[string]any{
-		"enabled":         config.Enabled,
-		"region":          config.Region,
-		"secret_id":       maskSecret(config.SecretID),
-		"has_secret_key":  config.SecretKey != "",
-		"from_email":      config.FromEmail,
-		"from_name":       config.FromName,
-		"reply_to":        config.ReplyTo,
-		"subject_prefix":  config.SubjectPrefix,
-		"timeout_seconds": config.TimeoutSeconds,
-		"retry_count":     config.RetryCount,
-		"templates":       config.Templates,
+		"enabled":             config.Enabled,
+		"region":              config.Region,
+		"secret_id":           maskSecret(config.SecretID),
+		"has_secret_key":      config.SecretKey != "",
+		"from_email":          config.FromEmail,
+		"from_name":           config.FromName,
+		"reply_to":            config.ReplyTo,
+		"subject_prefix":      config.SubjectPrefix,
+		"timeout_seconds":     config.TimeoutSeconds,
+		"retry_count":         config.RetryCount,
+		"templates":           config.Templates,
+		"localized_templates": config.LocalizedTemplates,
 	}
+}
+
+func parseTencentSESTemplateMapping(raw string) (TencentSESTemplateMapping, error) {
+	var entries map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		return TencentSESTemplateMapping{}, err
+	}
+	mapping := TencentSESTemplateMapping{
+		Default:   map[string]uint64{},
+		Localized: map[string]map[string]uint64{},
+	}
+	for scene, value := range entries {
+		if strings.TrimSpace(scene) == "" {
+			return TencentSESTemplateMapping{}, errors.New("scene cannot be empty")
+		}
+		var templateID uint64
+		if err := json.Unmarshal(value, &templateID); err == nil {
+			if templateID == 0 {
+				return TencentSESTemplateMapping{}, fmt.Errorf("scene %q has an invalid TemplateID", scene)
+			}
+			mapping.Default[scene] = templateID
+			continue
+		}
+		var localized map[string]uint64
+		if err := json.Unmarshal(value, &localized); err != nil || len(localized) == 0 {
+			return TencentSESTemplateMapping{}, fmt.Errorf("scene %q must map to a TemplateID or language mapping", scene)
+		}
+		for language, id := range localized {
+			if normalizeTencentSESLanguage(language) == "" || id == 0 {
+				return TencentSESTemplateMapping{}, fmt.Errorf("scene %q has an invalid language or TemplateID", scene)
+			}
+		}
+		mapping.Localized[scene] = localized
+	}
+	return mapping, nil
+}
+
+func ParseTencentSESTemplateMapping(raw string) error {
+	_, err := parseTencentSESTemplateMapping(raw)
+	return err
+}
+
+func normalizeTencentSESLanguage(language string) string {
+	normalized := strings.ToLower(strings.TrimSpace(strings.ReplaceAll(language, "_", "-")))
+	switch normalized {
+	case "zh", "zhcn", "zh-cn", "zh-hans":
+		return "zhCN"
+	case "zhtw", "zh-tw", "zh-hant", "zh-hk":
+		return "zhCN"
+	case "en":
+		return "en"
+	default:
+		if strings.HasPrefix(normalized, "en-") {
+			return "en"
+		}
+		return ""
+	}
+}
+
+func resolveTencentSESTemplateID(config TencentSESTemplateConfig, scene, language string) uint64 {
+	localized := config.LocalizedTemplates[scene]
+	requested := normalizeTencentSESLanguage(language)
+	for _, candidate := range []string{requested, "zhCN", "en"} {
+		if candidate != "" && localized[candidate] != 0 {
+			return localized[candidate]
+		}
+	}
+	return config.Templates[scene]
 }
 
 func SendTencentSESTemplate(ctx context.Context, message TemplateEmailMessage) (TencentSESSendResult, error) {
@@ -146,7 +226,7 @@ func SendTencentSESTemplate(ctx context.Context, message TemplateEmailMessage) (
 		return TencentSESSendResult{}, err
 	}
 	if message.TemplateID == 0 && message.Scene != "" {
-		message.TemplateID = config.Templates[message.Scene]
+		message.TemplateID = resolveTencentSESTemplateID(config, message.Scene, message.Language)
 	}
 	if message.TemplateID == 0 {
 		return TencentSESSendResult{}, fmt.Errorf("%w: %s", ErrTencentSESTemplateMissing, message.Scene)

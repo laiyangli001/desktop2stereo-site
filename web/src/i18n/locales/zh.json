@@ -5658,6 +5658,7 @@
     "Test email failed": "测试邮件发送失败",
     "Template mapping must be a JSON object of positive numeric IDs": "模板映射必须是由正数 ID 组成的 JSON 对象",
     "Invalid template mapping": "模板映射无效",
-    "Leave blank to keep existing credential": "留空以保留现有凭证"
+    "Leave blank to keep existing credential": "留空以保留现有凭证",
+    "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.": "请使用 zhCN、en 等语言映射配置多语言模板；旧版的业务场景到模板 ID JSON 格式仍然兼容。"
   }
 }
