@@ -3,6 +3,8 @@ package router
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -22,7 +24,11 @@ func TestGetOpenAIVideoRouteRendersJimengTask(t *testing.T) {
 	previousSQLitePath := common.SQLitePath
 	previousMasterNode := common.IsMasterNode
 	previousRedisEnabled := common.RedisEnabled
-	common.SQLitePath = t.TempDir() + "/router-video.db"
+	testDir := filepath.Join(".test-work", "router-video")
+	require.NoError(t, os.RemoveAll(testDir))
+	require.NoError(t, os.MkdirAll(testDir, 0o755))
+	t.Cleanup(func() { _ = os.RemoveAll(testDir) })
+	common.SQLitePath = filepath.Join(testDir, "router-video.db")
 	common.IsMasterNode = false
 	common.RedisEnabled = false
 	t.Setenv("SQL_DSN", "")

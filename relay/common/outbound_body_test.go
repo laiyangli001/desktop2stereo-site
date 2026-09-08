@@ -2,6 +2,8 @@ package common
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -136,11 +138,15 @@ func TestNewOutboundJSONBody_GetBodyReadersAreIndependent(t *testing.T) {
 // payload takes the diskStorage path.
 func TestNewOutboundJSONBody_GetBodyReadersAreIndependent_DiskStorage(t *testing.T) {
 	prev := common.GetDiskCacheConfig()
+	testDir := filepath.Join(".test-work", "relay", "outbound-body-disk")
+	require.NoError(t, os.RemoveAll(testDir))
+	require.NoError(t, os.MkdirAll(testDir, 0o755))
+	t.Cleanup(func() { _ = os.RemoveAll(testDir) })
 	common.SetDiskCacheConfig(common.DiskCacheConfig{
 		Enabled:     true,
 		ThresholdMB: 0,
 		MaxSizeMB:   64,
-		Path:        t.TempDir(),
+		Path:        testDir,
 	})
 	defer common.SetDiskCacheConfig(prev)
 

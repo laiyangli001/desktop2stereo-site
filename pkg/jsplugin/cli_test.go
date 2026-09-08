@@ -11,7 +11,7 @@ import (
 )
 
 func TestPluginCLI(t *testing.T) {
-	tempDir := t.TempDir()
+	tempDir := fixedPluginTestDir(t, "cli")
 	pluginPath := filepath.Join(tempDir, "fixture.js")
 	fixturePath := filepath.Join(tempDir, "fixture.json")
 	require.NoError(t, os.WriteFile(pluginPath, []byte(cliFixturePluginSource), 0o600))
@@ -29,7 +29,7 @@ func TestPluginCLI(t *testing.T) {
 }
 
 func TestPluginCLIWarnsOnParseTaskResultInProgressFallback(t *testing.T) {
-	tempDir := t.TempDir()
+	tempDir := fixedPluginTestDir(t, "fallback")
 	pluginPath := filepath.Join(tempDir, "fallback.js")
 	require.NoError(t, os.WriteFile(pluginPath, []byte(`
 export const meta = { apiVersion: 1, key: "fallback", name: "Fallback", version: "1.0.0", author: {name: "Test"}, models: ["m"], fetchMode: "per_task" };
@@ -45,6 +45,15 @@ const statuses = { done: "SUCCESS" };
 	assert.Equal(t, 0, RunCLI([]string{"lint", pluginPath}, &stdout, &stderr))
 	assert.Contains(t, stdout.String(), "plugin fallback@1.0.0 is valid")
 	assert.Contains(t, stderr.String(), `|| "IN_PROGRESS"`)
+}
+
+func fixedPluginTestDir(t *testing.T, name string) string {
+	t.Helper()
+	testDir := filepath.Join(".test-work", "jsplugin", name)
+	require.NoError(t, os.RemoveAll(testDir))
+	require.NoError(t, os.MkdirAll(testDir, 0o755))
+	t.Cleanup(func() { _ = os.RemoveAll(testDir) })
+	return testDir
 }
 
 const cliFixturePluginSource = `
