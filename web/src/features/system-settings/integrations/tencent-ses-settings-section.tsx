@@ -59,7 +59,7 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
       if (response.data.success) toast.success(response.data.message)
       else toast.error(response.data.message)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Connection test failed')
+      toast.error(error instanceof Error ? error.message : t('Connection test failed'))
     }
   }
 
@@ -77,12 +77,12 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
       }
       const response = await api.post<{ success: boolean; message: string }>(
         '/api/option/tencent-ses/test-send',
-        { scene, template_id: Number(templateId), to: testRecipient.trim(), subject: 'Tencent SES test', data: {} }
+        { scene, template_id: Number(templateId), to: testRecipient.trim(), subject: t('Tencent SES test'), data: {} }
       )
       if (response.data.success) toast.success(response.data.message)
       else toast.error(response.data.message)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Test email failed')
+      toast.error(error instanceof Error ? error.message : t('Test email failed'))
     }
   }
 
@@ -91,10 +91,10 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
     try {
       templates = JSON.parse(values.TencentSESTemplates || '{}')
       if (!templates || Array.isArray(templates) || Object.values(templates).some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
-        throw new Error('Template mapping must be a JSON object of positive numeric IDs')
+        throw new Error(t('Template mapping must be a JSON object of positive numeric IDs'))
       }
     } catch (error) {
-      form.setError('TencentSESTemplates', { message: error instanceof Error ? error.message : 'Invalid template mapping' })
+      form.setError('TencentSESTemplates', { message: error instanceof Error ? error.message : t('Invalid template mapping') })
       return
     }
 
@@ -116,14 +116,14 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
 
   return (
     <div className='space-y-8'>
-    <SettingsSection title={t('Tencent SES Email Delivery')}>
+    <SettingsSection title={t('Email delivery')}>
       <Form {...form}>
         <SettingsForm onSubmit={form.handleSubmit(onSubmit)} autoComplete='off'>
-          <SettingsPageFormActions onSave={form.handleSubmit(onSubmit)} isSaving={updateOption.isPending} saveLabel='Save Tencent SES settings' />
+          <SettingsPageFormActions onSave={form.handleSubmit(onSubmit)} isSaving={updateOption.isPending} saveLabel={t('Save email delivery settings')} />
           <FormField control={form.control} name='TencentSESEnabled' render={({ field }) => (
             <SettingsSwitchItem>
               <SettingsSwitchContent>
-                <FormLabel>{t('Enable Tencent SES')}</FormLabel>
+                <FormLabel>{t('Enable email delivery')}</FormLabel>
                 <FormDescription>{t('Use approved Tencent Cloud templates for transactional email')}</FormDescription>
               </SettingsSwitchContent>
               <FormControl><Switch checked={field.value} onCheckedChange={field.onChange} /></FormControl>
@@ -131,14 +131,14 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
           )} />
           <div className='flex flex-wrap gap-2'>
             <Button type='button' variant='outline' onClick={testConnection} disabled={updateOption.isPending}>
-              {t('Test Tencent SES connection')}
+              {t('Test email delivery connection')}
             </Button>
             <FormDescription className='self-center'>
               {t('Save credentials and at least one TemplateID before testing.')}
             </FormDescription>
           </div>
           <FormItem>
-            <FormLabel>{t('Test Recipient')}</FormLabel>
+            <FormLabel>{t('Test recipient')}</FormLabel>
             <FormControl>
               <Input value={testRecipient} onChange={(event) => setTestRecipient(event.target.value)} placeholder='you@example.com' />
             </FormControl>
@@ -151,19 +151,19 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
           </div>
           <div className='grid gap-6 md:grid-cols-2'>
             <FormField control={form.control} name='TencentSESRegion' render={({ field }) => (
-              <FormItem><FormLabel>{t('Tencent Cloud Region')}</FormLabel><FormControl><Input placeholder='ap-guangzhou' {...field} /></FormControl><FormDescription>ap-guangzhou or ap-hongkong</FormDescription><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('Tencent Cloud region')}</FormLabel><FormControl><Input placeholder='ap-guangzhou' {...field} /></FormControl><FormDescription>{t('For example, ap-guangzhou or ap-hongkong')}</FormDescription><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name='TencentSESFromEmail' render={({ field }) => (
-              <FormItem><FormLabel>{t('From Address')}</FormLabel><FormControl><Input placeholder='noreply@example.com' {...field} /></FormControl><FormDescription>{t('Must belong to the verified SES identity')}</FormDescription><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('From address')}</FormLabel><FormControl><Input placeholder='noreply@example.com' {...field} /></FormControl><FormDescription>{t('Must belong to the verified SES identity')}</FormDescription><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name='TencentSESFromName' render={({ field }) => (
-              <FormItem><FormLabel>{t('Sender Name')}</FormLabel><FormControl><Input placeholder='New API' {...field} /></FormControl><FormDescription>{t('Optional display name shown before the verified sender address')}</FormDescription><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('Sender name')}</FormLabel><FormControl><Input placeholder='New API' {...field} /></FormControl><FormDescription>{t('Optional display name shown before the verified sender address')}</FormDescription><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name='TencentSESReplyTo' render={({ field }) => (
-              <FormItem><FormLabel>{t('Reply-To Address')}</FormLabel><FormControl><Input placeholder='support@example.com' {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('Reply-to address')}</FormLabel><FormControl><Input placeholder='support@example.com' {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name='TencentSESSubjectPrefix' render={({ field }) => (
-              <FormItem><FormLabel>{t('Subject Prefix')}</FormLabel><FormControl><Input placeholder='[New API] ' {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('Subject prefix')}</FormLabel><FormControl><Input placeholder='[New API] ' {...field} /></FormControl><FormMessage /></FormItem>
             )} />
           </div>
           <FormField control={form.control} name='TencentSESSecretId' render={({ field }) => (
@@ -174,14 +174,14 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
           )} />
           <div className='grid gap-6 md:grid-cols-2'>
             <FormField control={form.control} name='TencentSESTimeoutSeconds' render={({ field }) => (
-              <FormItem><FormLabel>{t('Request Timeout (seconds)')}</FormLabel><FormControl><Input type='number' min='1' {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('Request timeout (seconds)')}</FormLabel><FormControl><Input type='number' min='1' {...field} /></FormControl><FormMessage /></FormItem>
             )} />
             <FormField control={form.control} name='TencentSESRetryCount' render={({ field }) => (
-              <FormItem><FormLabel>{t('Retry Count')}</FormLabel><FormControl><Input type='number' min='0' max='5' {...field} /></FormControl><FormMessage /></FormItem>
+              <FormItem><FormLabel>{t('Retry count')}</FormLabel><FormControl><Input type='number' min='0' max='5' {...field} /></FormControl><FormMessage /></FormItem>
             )} />
           </div>
           <FormField control={form.control} name='TencentSESTemplates' render={({ field }) => (
-            <FormItem><FormLabel>{t('Template ID Mapping')}</FormLabel><FormControl><Textarea className='min-h-48 font-mono' placeholder='{"password_reset":123,"email_verification":456}' {...field} /></FormControl><FormDescription>{t('JSON mapping from business scene to approved Tencent SES TemplateID. Domain verification is managed in Tencent Cloud.')}</FormDescription><FormMessage /></FormItem>
+            <FormItem><FormLabel>{t('Template ID mapping')}</FormLabel><FormControl><Textarea className='min-h-48 font-mono' placeholder='{"password_reset":123,"email_verification":456}' {...field} /></FormControl><FormDescription>{t('JSON mapping from business scene to approved Tencent SES TemplateID. Domain verification is managed in Tencent Cloud.')}</FormDescription><FormMessage /></FormItem>
           )} />
         </SettingsForm>
       </Form>

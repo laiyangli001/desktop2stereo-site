@@ -81,7 +81,7 @@ const OPERATIONS_SECTIONS = [
   },
   {
     id: 'tencent-ses',
-    titleKey: 'Tencent SES Email Delivery',
+    titleKey: 'Email delivery',
     build: (settings: OperationsSettings) => (
       <TencentSESSettingsSection
         defaultValues={{
