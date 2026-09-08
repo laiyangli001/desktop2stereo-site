@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -35,6 +36,7 @@ type projectUpdateConfig struct {
 	Enabled      bool
 	Script       string
 	BackupScript string
+	RequestFile  string
 }
 
 type projectUpdateCommit struct {
@@ -65,6 +67,7 @@ func getProjectUpdateConfig() projectUpdateConfig {
 		Enabled:      common.GetEnvOrDefaultBool("D2S_UPDATE_ENABLED", false),
 		Script:       script,
 		BackupScript: backupScript,
+		RequestFile:  strings.TrimSpace(os.Getenv("D2S_UPDATE_REQUEST_FILE")),
 	}
 }
 
@@ -74,6 +77,7 @@ func GetProjectUpdateStatus(c *gin.Context) {
 	backupStat, backupStatErr := os.Stat(config.BackupScript)
 	scriptReady := statErr == nil && stat.Mode().Perm()&0111 != 0
 	backupReady := backupStatErr == nil && backupStat.Mode().Perm()&0111 != 0
+	requestReady := config.RequestFile != "" && updateRequestDirectoryReady(config.RequestFile)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -81,7 +85,8 @@ func GetProjectUpdateStatus(c *gin.Context) {
 			"repository": projectUpdateRepository,
 			"branch":     projectUpdateBranch,
 			"enabled":    config.Enabled,
-			"configured": config.Enabled && scriptReady && backupReady,
+			"configured": config.Enabled && ((scriptReady && backupReady) || requestReady),
+			"mode":       map[bool]string{true: "request-file", false: "script"}[config.RequestFile != ""],
 			"script":     config.Script,
 			"version":    common.Version,
 		},
@@ -111,9 +116,15 @@ func ApplyProjectUpdate(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "项目更新功能未启用"})
 		return
 	}
-	stat, err := os.Stat(config.Script)
-	if err != nil || stat.Mode().Perm()&0111 == 0 {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "服务器更新脚本未安装: " + config.Script})
+	if config.RequestFile == "" {
+		stat, err := os.Stat(config.Script)
+		backupStat, backupErr := os.Stat(config.BackupScript)
+		if err != nil || stat.Mode().Perm()&0111 == 0 || backupErr != nil || backupStat.Mode().Perm()&0111 == 0 {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "服务器更新脚本或数据库备份脚本未正确安装"})
+			return
+		}
+	} else if !updateRequestDirectoryReady(config.RequestFile) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "服务器更新请求目录未正确挂载"})
 		return
 	}
 	if !projectUpdateMu.TryLock() {
@@ -138,20 +149,45 @@ func ApplyProjectUpdate(c *gin.Context) {
 		return
 	}
 
-	cmd := exec.Command(config.Script, strings.ToLower(request.SHA))
-	cmd.Dir = "/"
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	if err := cmd.Start(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "无法启动服务器更新脚本: " + err.Error()})
-		return
+	sha := strings.ToLower(request.SHA)
+	if config.RequestFile != "" {
+		if err := queueProjectUpdateRequest(config.RequestFile, sha); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "无法写入服务器更新请求: " + err.Error()})
+			return
+		}
+	} else {
+		cmd := exec.Command(config.Script, sha)
+		cmd.Dir = "/"
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		if err := cmd.Start(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "无法启动服务器更新脚本: " + err.Error()})
+			return
+		}
 	}
-	common.SysLog("project update started: repository=" + projectUpdateRepository + ", sha=" + strings.ToLower(request.SHA))
+	common.SysLog("project update started: repository=" + projectUpdateRepository + ", sha=" + sha)
 	c.JSON(http.StatusAccepted, gin.H{
 		"success": true,
-		"message": "项目更新已启动，服务将在构建和健康检查完成后切换版本",
-		"data":    gin.H{"sha": strings.ToLower(request.SHA)},
+		"message": "项目更新请求已提交，服务将在备份、构建和健康检查完成后切换版本",
+		"data":    gin.H{"sha": sha},
 	})
+}
+
+func updateRequestDirectoryReady(requestFile string) bool {
+	info, err := os.Stat(filepath.Dir(requestFile))
+	return err == nil && info.IsDir()
+}
+
+func queueProjectUpdateRequest(requestFile string, sha string) error {
+	temporary := requestFile + ".tmp"
+	if err := os.WriteFile(temporary, []byte(sha+"\n"), 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(temporary, requestFile); err != nil {
+		_ = os.Remove(temporary)
+		return err
+	}
+	return nil
 }
 
 func fetchProjectUpdateCommit(parent context.Context) (projectUpdateCommit, error) {

@@ -32,6 +32,7 @@ electron/dist
 /data/
 .gomodcache/
 .gocache-temp
+.go-test-tmp/
 .gopath
 .test
 token_estimator_test.go

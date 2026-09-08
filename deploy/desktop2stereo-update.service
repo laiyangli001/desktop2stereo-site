@@ -1,0 +1,9 @@
+[Unit]
+Description=Desktop2Stereo Docker project update
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/sbin/desktop2stereo-update-watcher /opt/desktop2stereo-site/update-requests/request

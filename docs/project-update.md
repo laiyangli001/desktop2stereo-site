@@ -40,7 +40,19 @@ install -o root -g root -m 0750 deploy/desktop2stereo-update.sh \
   /usr/local/sbin/desktop2stereo-update
 ```
 
-另外安装 `/usr/local/sbin/desktop2stereo-db-backup`。该脚本必须先完成 PostgreSQL/MySQL/SQLite 备份，再返回成功；失败时必须返回非零退出码。备份脚本不应放在 GitHub 工作目录中。
+另外安装 `/usr/local/sbin/desktop2stereo-db-backup`。Docker 部署可以直接使用仓库中的 `deploy/desktop2stereo-db-backup-docker.sh`，该脚本先完成 PostgreSQL 备份，再返回成功；失败时必须返回非零退出码。备份脚本不应放在 GitHub 工作目录中。
+
+Docker 部署不把 Docker socket 暴露给应用容器，而是使用宿主机 systemd path watcher：
+
+```bash
+install -o root -g root -m 0750 deploy/desktop2stereo-db-backup-docker.sh /usr/local/sbin/desktop2stereo-db-backup
+install -o root -g root -m 0750 deploy/desktop2stereo-docker-update.sh /usr/local/sbin/desktop2stereo-docker-update
+install -o root -g root -m 0750 deploy/desktop2stereo-update-watcher.sh /usr/local/sbin/desktop2stereo-update-watcher
+install -o root -g root -m 0644 deploy/desktop2stereo-update.service /etc/systemd/system/desktop2stereo-update.service
+install -o root -g root -m 0644 deploy/desktop2stereo-update.path /etc/systemd/system/desktop2stereo-update.path
+systemctl daemon-reload
+systemctl enable --now desktop2stereo-update.path
+```
 
 宝塔 Go 项目应指向：
 
