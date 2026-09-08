@@ -57,7 +57,7 @@ if [[ ! -x "$BACKUP_SCRIPT" ]]; then
   echo "database backup script is missing: $BACKUP_SCRIPT" >&2
   exit 3
 fi
-for command_name in curl docker tar timeout; do
+for command_name in cmp curl docker tar timeout; do
   command -v "$command_name" >/dev/null || { echo "required command is missing: $command_name" >&2; exit 4; }
 done
 if [[ ! "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -134,9 +134,17 @@ for _ in $(seq 1 30); do
   if [[ "$status" == "healthy" ]]; then
     if [[ -f "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
 	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"
+	  if ! cmp -s "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"; then
+	    echo "installed Docker update script does not match release" >&2
+	    exit 9
+	  fi
 	fi
 	if [[ -f "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" ]]; then
 	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" "$BACKUP_SCRIPT"
+	  if ! cmp -s "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" "$BACKUP_SCRIPT"; then
+	    echo "installed database backup script does not match release" >&2
+	    exit 9
+	  fi
 	fi
 	touch "$RELEASE_MARKER"
 	write_status "succeeded" "completed" "更新完成，应用健康检查通过"
