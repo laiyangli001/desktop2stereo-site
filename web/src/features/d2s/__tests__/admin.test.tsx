@@ -375,4 +375,71 @@ describe('D2SAdminWorkspace', () => {
     })
     expect(region.closest('[aria-busy="true"]')).toBeNull()
   })
+
+  it('submits the correct review status and note for withdrawal and unbind requests', async () => {
+    apiMocks.getD2SAdminLicenses.mockResolvedValue(
+      response({ licenses: [] })
+    )
+    apiMocks.getD2SAdminOrders.mockResolvedValue(response({ orders: [] }))
+    apiMocks.getD2SAdminPaymentEvents.mockResolvedValue(
+      response({ events: [] })
+    )
+    apiMocks.getD2SAdminBalances.mockResolvedValue(response({ accounts: [] }))
+    apiMocks.getD2SAdminWithdrawals.mockResolvedValue(
+      response({
+        withdrawals: [
+          {
+            id: 'withdrawal-review',
+            user_id: 11,
+            status: 'pending',
+            amount_minor: 6000,
+          },
+        ],
+      })
+    )
+    apiMocks.getD2SAdminUnbindRequests.mockResolvedValue(
+      response({
+        requests: [
+          {
+            id: 'unbind-review',
+            user_id: 12,
+            status: 'pending',
+            reason: 'device replacement',
+          },
+        ],
+      })
+    )
+    apiMocks.getD2SAdminSigningKeys.mockResolvedValue(response({ keys: [] }))
+    apiMocks.getD2SAdminReconciliation.mockResolvedValue(
+      response({ mismatches: [] })
+    )
+    apiMocks.reviewD2SWithdrawal.mockResolvedValue(response({}))
+    apiMocks.reviewD2SUnbind.mockResolvedValue(response({}))
+
+    renderAdminWorkspace()
+
+    const notes = await screen.findAllByRole('textbox', {
+      name: /^Review note /,
+    })
+    expect(notes).toHaveLength(2)
+    fireEvent.change(notes[0], { target: { value: 'Payout verified' } })
+    fireEvent.change(notes[1], { target: { value: 'Evidence reviewed' } })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Approve withdrawal-review' })
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Reject unbind-review' }))
+
+    await waitFor(() => {
+      expect(apiMocks.reviewD2SWithdrawal).toHaveBeenCalledWith(
+        'withdrawal-review',
+        'paid',
+        'Payout verified'
+      )
+      expect(apiMocks.reviewD2SUnbind).toHaveBeenCalledWith(
+        'unbind-review',
+        'rejected',
+        'Evidence reviewed'
+      )
+    })
+  })
 })
