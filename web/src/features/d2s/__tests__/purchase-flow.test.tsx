@@ -117,6 +117,113 @@ describe('D2SWorkspace purchase flow', () => {
     expect(apiMocks.createD2SOrderCheckout).toHaveBeenCalledWith('order-1')
   })
 
+  it('previews a balance order and submits the quoted amount without checkout redirect', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ providers: ['balance'] })
+    )
+    apiMocks.getD2SBalance.mockResolvedValue(
+      response({
+        accounts: [
+          {
+            id: 'balance-cny',
+            currency: 'CNY',
+            available_minor: 10000,
+            reserved_minor: 0,
+          },
+        ],
+      })
+    )
+    apiMocks.previewD2SOrder.mockResolvedValue(
+      response({
+        product: 'license',
+        provider: 'balance',
+        region: 'CN',
+        currency: 'CNY',
+        amount_minor: 9900,
+      })
+    )
+
+    renderWorkspace()
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Buy with balance' })
+    )
+
+    await waitFor(() => {
+      expect(apiMocks.previewD2SOrder).toHaveBeenCalledWith({
+        product: 'license',
+        license_id: undefined,
+        provider: 'balance',
+      })
+      expect(apiMocks.createD2SOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          product: 'license',
+          provider: 'balance',
+          balance_minor: 9900,
+        })
+      )
+    })
+    expect(apiMocks.createD2SOrderCheckout).not.toHaveBeenCalled()
+  })
+
+  it('passes the selected license when starting a paid revoke order', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ providers: ['creem'] })
+    )
+    apiMocks.getD2SLicenses.mockResolvedValue(
+      response({
+        licenses: [
+          {
+            id: 'license-revoke',
+            license_code: 'D2S-REVOKE-1',
+            kind: 'paid',
+            status: 'active',
+            mode: 'online',
+            device_hash: 'a'.repeat(64),
+            fingerprint_version: 1,
+          },
+        ],
+      })
+    )
+    apiMocks.previewD2SOrder.mockResolvedValue(
+      response({
+        product: 'paid_revoke',
+        provider: 'creem',
+        region: 'INTL',
+        currency: 'USD',
+        amount_minor: 299,
+      })
+    )
+
+    renderWorkspace()
+    fireEvent.change(screen.getByRole('combobox', { name: 'Purchase type' }), {
+      target: { value: 'paid_revoke' },
+    })
+    await screen.findByRole('option', {
+      name: 'D2S-REVOKE-1',
+    })
+    fireEvent.change(screen.getByRole('combobox', { name: 'License' }), {
+      target: { value: 'license-revoke' },
+    })
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Pay with Creem' })
+    )
+
+    await waitFor(() => {
+      expect(apiMocks.previewD2SOrder).toHaveBeenCalledWith({
+        product: 'paid_revoke',
+        license_id: 'license-revoke',
+        provider: 'creem',
+      })
+      expect(apiMocks.createD2SOrder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          product: 'paid_revoke',
+          license_id: 'license-revoke',
+          provider: 'creem',
+        })
+      )
+    })
+  })
+
   it('never renders unsupported PayPal or Paddle checkout controls', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
       response({ providers: ['paypal', 'paddle', 'stripe'] })
