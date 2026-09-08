@@ -166,6 +166,12 @@ jobs:
             $script = Get-Content -Raw -Encoding UTF8 $path
             [void][scriptblock]::Create($script)
           }
+      - name: Validate deployment shell scripts
+        shell: bash
+        run: |
+          for path in deploy/*.sh; do
+            bash -n "$path"
+          done
       - name: Run production readiness secret smoke test
         shell: pwsh
         run: |

@@ -94,6 +94,19 @@ curl -H 'Authorization: Bearer <admin-token>' \
 4. 灰度上一版本镜像，确认回调、租约和错误率恢复正常；不删除已接收支付事件。
 5. 记录切换耗时、RTO、RPO、回滚触发条件和最终操作者。
 
+Docker 部署可先用仓库脚本在隔离的 PostgreSQL 容器中验证备份可恢复；脚本使用固定容器名，
+不会连接或修改生产 `postgres` 容器，验证完成后自动删除隔离容器：
+
+```bash
+export D2S_RECOVERY_POSTGRES_PASSWORD='<recovery-only-password>'
+deploy/desktop2stereo-db-restore-verify-docker.sh \
+  /opt/desktop2stereo-site/backups/pre-<commit-sha>-<timestamp>.dump
+```
+
+执行前必须确认对应 `.sha256` 文件存在；恢复密码只能注入当前进程或 Secret 管理器，不能写入
+仓库、备份文件或日志。该脚本只证明备份可在隔离库恢复，仍需记录真实 COS 跨故障域复制和
+恢复库数据核对结果。
+
 ## 5. 监控和告警
 
 演练中人为触发一次签名失败、金额不符、租约冲突、拒付和负余额，确认告警包含订单/事件
