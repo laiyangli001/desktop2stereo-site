@@ -60,7 +60,7 @@ func TestTencentSESConfigPublicDoesNotExposeSecretKey(t *testing.T) {
 	})
 
 	public := TencentSESConfigPublic()
-	require.Equal(t, "se****ue", public["secret_id"])
+	require.Equal(t, "fa****id", public["secret_id"])
 	require.Equal(t, true, public["has_secret_key"])
 	require.NotContains(t, public, "secret_key")
 }
