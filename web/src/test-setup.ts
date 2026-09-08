@@ -59,12 +59,12 @@ function hasStorageMethods(value: unknown): value is Storage {
 }
 
 function isUsableStorage(storage: Storage): boolean {
-  const probeKey = `__vitest_storage_probe__${Math.random().toString(36).slice(2)}`
+  const probeKey = '__vitest_storage_probe__'
   try {
     storage.setItem(probeKey, '1')
+    const isStored = storage.getItem(probeKey) === '1'
     storage.removeItem(probeKey)
-    storage.clear()
-    return true
+    return isStored
   } catch {
     return false
   }
