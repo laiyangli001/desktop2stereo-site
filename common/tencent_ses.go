@@ -33,8 +33,8 @@ var (
 )
 
 var requiredTencentSESTemplateVariables = map[string][]string{
-	"email_verification":  {"code"},
-	"password_reset":      {"reset_url"},
+	"email_verification":  {"token"},
+	"password_reset":      {"token"},
 	"system_notification": {"title", "content"},
 }
 
@@ -247,10 +247,8 @@ func SendTencentSESTemplate(ctx context.Context, message TemplateEmailMessage) (
 	if message.TemplateID == 0 {
 		return TencentSESSendResult{}, fmt.Errorf("%w: %s", ErrTencentSESTemplateMissing, message.Scene)
 	}
-	for _, variable := range requiredTencentSESTemplateVariables[message.Scene] {
-		if strings.TrimSpace(message.TemplateData[variable]) == "" {
-			return TencentSESSendResult{}, fmt.Errorf("%w: %s", ErrTencentSESVariableMissing, variable)
-		}
+	if err := validateTencentSESTemplateData(message.Scene, message.TemplateData); err != nil {
+		return TencentSESSendResult{}, err
 	}
 	if len(message.To) == 0 {
 		return TencentSESSendResult{}, errors.New("at least one email recipient is required")
@@ -315,6 +313,23 @@ func SendTencentSESTemplate(ctx context.Context, message TemplateEmailMessage) (
 		}
 	}
 	return TencentSESSendResult{}, lastErr
+}
+
+func validateTencentSESTemplateData(scene string, data map[string]string) error {
+	variables := requiredTencentSESTemplateVariables[scene]
+	for _, variable := range variables {
+		if strings.TrimSpace(data[variable]) != "" {
+			continue
+		}
+		if scene == "email_verification" && strings.TrimSpace(data["code"]) != "" {
+			continue
+		}
+		if scene == "password_reset" && strings.TrimSpace(data["reset_url"]) != "" {
+			continue
+		}
+		return fmt.Errorf("%w: %s", ErrTencentSESVariableMissing, variable)
+	}
+	return nil
 }
 
 func TestTencentSESConnection(ctx context.Context) error {

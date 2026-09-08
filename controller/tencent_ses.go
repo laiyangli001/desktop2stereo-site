@@ -89,6 +89,7 @@ func fillTencentSESTestData(scene string, data map[string]string) map[string]str
 
 	switch scene {
 	case "email_verification":
+		setDefault("token", "123456")
 		setDefault("code", "123456")
 		setDefault("expire_minutes", fmt.Sprintf("%d", common.VerificationValidMinutes))
 		setDefault("system_name", common.SystemName)
@@ -97,7 +98,8 @@ func fillTencentSESTestData(scene string, data map[string]string) map[string]str
 		if baseURL == "" {
 			baseURL = "https://example.com"
 		}
-		setDefault("reset_url", baseURL+"/user/reset?email=test%40example.com&token=test-token")
+		setDefault("token", baseURL+"/user/reset?email=test%40example.com&token=test-token")
+		setDefault("reset_url", filled["token"])
 		setDefault("expire_minutes", fmt.Sprintf("%d", common.VerificationValidMinutes))
 		setDefault("system_name", common.SystemName)
 	case "system_notification":

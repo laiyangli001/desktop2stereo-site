@@ -279,7 +279,11 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	code := common.GenerateVerificationCode(6)
 	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
+	language := requestEmailLanguage(c)
 	subject := fmt.Sprintf("%s邮箱验证邮件", common.SystemName)
+	if strings.HasPrefix(strings.ToLower(language), "en") {
+		subject = fmt.Sprintf("Verify your %s email", common.SystemName)
+	}
 	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
 		"<p>您的验证码为: <strong>%s</strong></p>"+
 		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
@@ -289,10 +293,10 @@ func SendEmailVerification(c *gin.Context) {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 		delivery, err = common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
 			Scene:        "email_verification",
-			Language:     requestEmailLanguage(c),
+			Language:     language,
 			To:           []string{email},
 			Subject:      subject,
-			TemplateData: map[string]string{"code": code, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
+			TemplateData: map[string]string{"token": code, "code": code, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
 		})
 		cancel()
 	} else {
@@ -320,7 +324,14 @@ func SendPasswordResetEmail(c *gin.Context) {
 		code := common.GenerateVerificationCode(0)
 		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
 		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
+		language := model.GetUserLanguage(user.Id)
+		if language == "" {
+			language = requestEmailLanguage(c)
+		}
 		subject := fmt.Sprintf("%s密码重置", common.SystemName)
+		if strings.HasPrefix(strings.ToLower(language), "en") {
+			subject = fmt.Sprintf("Reset your %s password", common.SystemName)
+		}
 		content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
 			"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
 			"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
@@ -330,16 +341,11 @@ func SendPasswordResetEmail(c *gin.Context) {
 		if common.GetTencentSESConfig().Enabled {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 			delivery, err = common.SendTencentSESTemplate(ctx, common.TemplateEmailMessage{
-				Scene: "password_reset",
-				Language: func() string {
-					if language := model.GetUserLanguage(user.Id); language != "" {
-						return language
-					}
-					return requestEmailLanguage(c)
-				}(),
+				Scene:        "password_reset",
+				Language:     language,
 				To:           []string{email},
 				Subject:      subject,
-				TemplateData: map[string]string{"reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
+				TemplateData: map[string]string{"token": link, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
 			})
 			cancel()
 		} else {
