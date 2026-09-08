@@ -62,7 +62,9 @@ export function BehaviorCaptcha({ value, onChange }: BehaviorCaptchaProps) {
 
   function handlePointerDown(event: PointerEvent<HTMLImageElement>) {
     if (!data || loading) return
-    event.currentTarget.setPointerCapture(event.pointerId)
+    if (typeof event.currentTarget.setPointerCapture === 'function') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    }
     dragRef.current = { pointerX: event.clientX, tileX }
     setDragging(true)
   }
