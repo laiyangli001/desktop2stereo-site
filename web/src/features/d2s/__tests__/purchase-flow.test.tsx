@@ -224,6 +224,54 @@ describe('D2SWorkspace purchase flow', () => {
     })
   })
 
+  it('renders every supported checkout provider returned by the server', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({
+        providers: [
+          'alipay',
+          'paymentfm',
+          'wechat',
+          'waffo',
+          'waffo_pancake',
+          'stripe',
+          'creem',
+        ],
+      })
+    )
+
+    renderWorkspace()
+
+    for (const name of [
+      'Pay with Alipay',
+      'Pay with Payment FM',
+      'Pay with WeChat',
+      'Pay with Waffo',
+      'Pay with Waffo Pancake',
+      'Pay with Stripe',
+      'Pay with Creem',
+    ]) {
+      expect(await screen.findByRole('button', { name })).toBeEnabled()
+    }
+  })
+
+  it('restores checkout controls when server price preview fails', async () => {
+    apiMocks.previewD2SOrder.mockRejectedValue(new Error('preview unavailable'))
+
+    renderWorkspace()
+    const payButton = await screen.findByRole('button', {
+      name: 'Pay with Stripe',
+    })
+    fireEvent.click(payButton)
+
+    await waitFor(() => {
+      expect(apiMocks.previewD2SOrder).toHaveBeenCalledOnce()
+      expect(
+        screen.getByRole('button', { name: 'Pay with Stripe' })
+      ).toBeEnabled()
+    })
+    expect(apiMocks.createD2SOrder).not.toHaveBeenCalled()
+  })
+
   it('never renders unsupported PayPal or Paddle checkout controls', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
       response({ providers: ['paypal', 'paddle', 'stripe'] })
