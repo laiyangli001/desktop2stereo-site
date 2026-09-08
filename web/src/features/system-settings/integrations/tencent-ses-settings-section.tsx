@@ -34,11 +34,58 @@ const schema = z.object({
 })
 
 type TencentSESFormValues = z.infer<typeof schema>
+type TemplateMappingValue = number | Record<string, number>
+type TemplateMapping = Record<string, TemplateMappingValue>
+
+function parseTemplateMapping(raw: string, invalidMessage: string): TemplateMapping {
+  const parsed: unknown = JSON.parse(raw || '{}')
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(invalidMessage)
+  }
+  const mapping: TemplateMapping = {}
+  for (const [scene, value] of Object.entries(parsed)) {
+    if (!scene.trim()) throw new Error(invalidMessage)
+    if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+      mapping[scene] = value
+      continue
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error(invalidMessage)
+    }
+    const localized: Record<string, number> = {}
+    for (const [language, templateId] of Object.entries(value)) {
+      if (!language.trim() || typeof templateId !== 'number' || !Number.isInteger(templateId) || templateId <= 0) {
+        throw new Error(invalidMessage)
+      }
+      localized[language] = templateId
+    }
+    if (Object.keys(localized).length === 0) throw new Error(invalidMessage)
+    mapping[scene] = localized
+  }
+  if (Object.keys(mapping).length === 0) throw new Error(invalidMessage)
+  return mapping
+}
+
+function firstTemplateId(mapping: TemplateMapping, language: string): [string, number] | null {
+  const normalizedLanguage = language.toLowerCase().replace('_', '-')
+  const languageCandidates = normalizedLanguage.startsWith('en')
+    ? ['en', 'zhCN']
+    : ['zhCN', 'en']
+  for (const [scene, value] of Object.entries(mapping)) {
+    if (typeof value === 'number') return [scene, value]
+    for (const candidate of languageCandidates) {
+      if (value[candidate]) return [scene, value[candidate]]
+    }
+    const fallback = Object.values(value)[0]
+    if (fallback) return [scene, fallback]
+  }
+  return null
+}
 
 type Props = { defaultValues: TencentSESFormValues }
 
 export function TencentSESSettingsSection({ defaultValues }: Props) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const updateOption = useUpdateOption()
   const form = useForm<TencentSESFormValues>({ resolver: zodResolver(schema), defaultValues })
   useResetForm(form, defaultValues)
@@ -69,12 +116,16 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
       return
     }
     try {
-      const templates = JSON.parse(form.getValues('TencentSESTemplates') || '{}') as Record<string, number>
-      const [scene, templateId] = Object.entries(templates)[0] ?? []
-      if (!scene || !templateId) {
+      const templates = parseTemplateMapping(
+        form.getValues('TencentSESTemplates'),
+        t('Template mapping must be a JSON object of positive numeric IDs')
+      )
+      const selected = firstTemplateId(templates, i18n.resolvedLanguage || i18n.language)
+      if (!selected) {
         toast.error(t('Configure at least one TemplateID first'))
         return
       }
+      const [scene, templateId] = selected
       const response = await api.post<{ success: boolean; message: string }>(
         '/api/option/tencent-ses/test-send',
         { scene, template_id: Number(templateId), to: testRecipient.trim(), subject: t('Tencent SES test'), data: {} }
@@ -87,12 +138,12 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
   }
 
   const onSubmit = async (values: TencentSESFormValues) => {
-    let templates: Record<string, number>
+    let templates: TemplateMapping
     try {
-      templates = JSON.parse(values.TencentSESTemplates || '{}')
-      if (!templates || Array.isArray(templates) || Object.values(templates).some((id) => !Number.isInteger(Number(id)) || Number(id) <= 0)) {
-        throw new Error(t('Template mapping must be a JSON object of positive numeric IDs'))
-      }
+      templates = parseTemplateMapping(
+        values.TencentSESTemplates,
+        t('Template mapping must be a JSON object of positive numeric IDs')
+      )
     } catch (error) {
       form.setError('TencentSESTemplates', { message: error instanceof Error ? error.message : t('Invalid template mapping') })
       return
