@@ -39,7 +39,7 @@ describe('BehaviorCaptcha', () => {
     const onChange = vi.fn<(value?: BehaviorCaptchaValue) => void>()
     render(<BehaviorCaptcha onChange={onChange} />)
 
-    const tile = await screen.findByRole('img', { name: '可拖动拼图' })
+    const tile = await screen.findByRole('slider', { name: '调整拼图位置' })
     fireEvent.pointerDown(tile, { pointerId: 1, clientX: 20 })
     fireEvent.pointerMove(tile, { pointerId: 1, clientX: 105 })
     fireEvent.pointerUp(tile, { pointerId: 1, clientX: 105 })
@@ -55,10 +55,27 @@ describe('BehaviorCaptcha', () => {
     const onChange = vi.fn<(value?: BehaviorCaptchaValue) => void>()
     render(<BehaviorCaptcha value={{ captcha_id: 'old', captcha_x: 1, captcha_y: 2 }} onChange={onChange} />)
 
-    await screen.findByRole('img', { name: '可拖动拼图' })
+    await screen.findByRole('slider', { name: '调整拼图位置' })
     fireEvent.click(screen.getByRole('button', { name: '刷新验证码' }))
 
     await waitFor(() => expect(apiMocks.get).toHaveBeenCalledTimes(2))
     expect(onChange).toHaveBeenCalledWith(undefined)
+  })
+
+  it('supports keyboard positioning and submission', async () => {
+    const onChange = vi.fn<(value?: BehaviorCaptchaValue) => void>()
+    render(<BehaviorCaptcha onChange={onChange} />)
+
+    const tile = await screen.findByRole('slider', { name: '调整拼图位置' })
+    fireEvent.keyDown(tile, { key: 'ArrowRight' })
+    fireEvent.keyDown(tile, { key: 'End' })
+    fireEvent.keyDown(tile, { key: 'Enter' })
+
+    expect(tile).toHaveAttribute('aria-valuenow', '272')
+    expect(onChange).toHaveBeenLastCalledWith({
+      captcha_id: 'captcha-id',
+      captcha_x: 272,
+      captcha_y: 40,
+    })
   })
 })

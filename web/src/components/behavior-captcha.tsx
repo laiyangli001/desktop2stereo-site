@@ -80,10 +80,32 @@ export function BehaviorCaptcha({ value, onChange }: BehaviorCaptchaProps) {
     setTileX(nextX)
   }
 
+  function submitPosition() {
+    if (!data) return
+    onChange({ captcha_id: data.id, captcha_x: Math.round(dragRef.current.tileX), captcha_y: data.tile_start_y })
+  }
+
   function handlePointerUp() {
     if (!dragging || !data) return
     setDragging(false)
-    onChange({ captcha_id: data.id, captcha_x: Math.round(dragRef.current.tileX), captcha_y: data.tile_start_y })
+    submitPosition()
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLImageElement>) {
+    if (!data || loading) return
+    const maxX = Math.max(0, data.width - data.tile_width)
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
+      event.preventDefault()
+      const step = event.key === 'ArrowLeft' ? -5 : event.key === 'ArrowRight' ? 5 : 0
+      const nextX = event.key === 'Home' ? 0 : event.key === 'End' ? maxX : Math.min(maxX, Math.max(0, tileX + step))
+      setTileX(nextX)
+      dragRef.current.tileX = nextX
+      return
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      submitPosition()
+    }
   }
 
   return (
@@ -104,6 +126,12 @@ export function BehaviorCaptcha({ value, onChange }: BehaviorCaptchaProps) {
           <img
             src={data.tile_image}
             alt='可拖动拼图'
+            role='slider'
+            tabIndex={0}
+            aria-label='调整拼图位置'
+            aria-valuemin={0}
+            aria-valuemax={Math.max(0, data.width - data.tile_width)}
+            aria-valuenow={Math.round(tileX)}
             className='absolute cursor-grab active:cursor-grabbing'
             style={{ left: tileX, top: data.tile_start_y, width: data.tile_width, height: data.tile_height }}
             draggable={false}
@@ -111,6 +139,7 @@ export function BehaviorCaptcha({ value, onChange }: BehaviorCaptchaProps) {
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
+            onKeyDown={handleKeyDown}
           />
         </div>
       ) : (
