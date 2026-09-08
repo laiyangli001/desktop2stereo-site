@@ -5,6 +5,7 @@ REPOSITORY="laiyangli001/desktop2stereo-site"
 APP_ROOT="${D2S_DOCKER_APP_ROOT:-/opt/desktop2stereo-site}"
 RELEASE_ROOT="${D2S_DOCKER_RELEASE_ROOT:-/opt/desktop2stereo-releases}"
 BACKUP_SCRIPT="${D2S_UPDATE_BACKUP_SCRIPT:-/usr/local/sbin/desktop2stereo-db-backup}"
+UPDATE_SCRIPT_PATH="${D2S_DOCKER_UPDATE_SCRIPT:-/usr/local/sbin/desktop2stereo-docker-update}"
 SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
 CURRENT_PHASE="starting"
@@ -116,6 +117,9 @@ write_status "running" "$CURRENT_PHASE" "正在执行健康检查"
 for _ in $(seq 1 30); do
   status="$(docker inspect -f '{{.State.Health.Status}}' new-api 2>/dev/null || true)"
   if [[ "$status" == "healthy" ]]; then
+	if [[ -x "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
+	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"
+	fi
 	write_status "succeeded" "completed" "更新完成，应用健康检查通过"
     echo "Docker update succeeded: $SHA"
     exit 0

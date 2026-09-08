@@ -15,6 +15,8 @@ https://github.com/laiyangli001/desktop2stereo-site
 - 更新脚本固定从 `/usr/local/sbin/desktop2stereo-update` 执行，不接受任意 shell 命令。
 - 代码发布目录和运行数据目录分离。
 - 发布归档使用目标 commit 自带的 `Dockerfile`；不会被服务器工作目录中的旧 Dockerfile 覆盖。
+- 成功健康检查后，固定更新器会同步安装该 commit 自带的
+  `deploy/desktop2stereo-docker-update.sh`，后续发布不会继续使用旧更新器。
 - `.env`、数据库、上传文件、日志和备份不会被 Git checkout 覆盖。
 - 数据库备份脚本不存在或不可执行时，更新会在构建前停止。
 - 构建失败、服务启动失败或健康检查失败时回滚到旧版本。
