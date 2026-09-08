@@ -167,4 +167,18 @@ describe('D2SWorkspace purchase flow', () => {
         ?.value
     ).toBe('test-signature')
   })
+
+  it('marks the purchase controls busy and disables competing checkouts while pending', async () => {
+    renderWorkspace()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Pay with Stripe' })
+    )
+
+    const pendingButton = await screen.findByRole('button', {
+      name: 'Creating checkout…',
+    })
+    expect(pendingButton).toBeDisabled()
+    expect(pendingButton.closest('[aria-busy="true"]')).not.toBeNull()
+  })
 })

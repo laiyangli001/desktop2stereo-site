@@ -566,7 +566,13 @@ export function D2SWorkspace() {
                 {t('Use your locked-region balance for a full payment.')}
               </CardDescription>
             </CardHeader>
-            <CardContent className='flex flex-wrap items-center gap-3'>
+            <CardContent
+              className='flex flex-wrap items-center gap-3'
+              aria-busy={
+                balancePurchaseMutation.isPending ||
+                externalPurchaseMutation.isPending
+              }
+            >
               <label className='flex items-center gap-2 text-sm'>
                 <span>{t('Purchase type')}</span>
                 <select
