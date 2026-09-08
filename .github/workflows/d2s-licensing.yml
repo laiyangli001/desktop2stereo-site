@@ -109,12 +109,16 @@ jobs:
         env:
           POSTGRES_PASSWORD: ci-postgres-password
           REDIS_PASSWORD: ci-redis-password
+          SESSION_SECRET: ci-session-secret
+          SESSION_COOKIE_TRUSTED_URL: https://ci.example.test
         run: docker compose config --quiet
       - name: Verify production Compose requires database credentials
         shell: pwsh
         run: |
           Remove-Item Env:POSTGRES_PASSWORD -ErrorAction SilentlyContinue
           Remove-Item Env:REDIS_PASSWORD -ErrorAction SilentlyContinue
+          $env:SESSION_SECRET = 's' * 32
+          $env:SESSION_COOKIE_TRUSTED_URL = 'https://ci.example.test'
           $PSNativeCommandUseErrorActionPreference = $false
           docker compose config --quiet
           $composeExitCode = $LASTEXITCODE
