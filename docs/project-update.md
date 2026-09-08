@@ -14,6 +14,7 @@ https://github.com/laiyangli001/desktop2stereo-site
 - 页面只能提交 GitHub 返回的 40 位 commit SHA，服务端会再次向 GitHub 校验 SHA 是否仍为 `main` 最新提交。
 - 更新脚本固定从 `/usr/local/sbin/desktop2stereo-update` 执行，不接受任意 shell 命令。
 - 代码发布目录和运行数据目录分离。
+- 发布归档使用目标 commit 自带的 `Dockerfile`；不会被服务器工作目录中的旧 Dockerfile 覆盖。
 - `.env`、数据库、上传文件、日志和备份不会被 Git checkout 覆盖。
 - 数据库备份脚本不存在或不可执行时，更新会在构建前停止。
 - 构建失败、服务启动失败或健康检查失败时回滚到旧版本。

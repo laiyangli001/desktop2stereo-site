@@ -96,9 +96,6 @@ fi
 mv "$SOURCE_DIR" "$RELEASE"
 rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
 
-if [[ -f "$APP_ROOT/Dockerfile" ]]; then
-  cp "$APP_ROOT/Dockerfile" "$RELEASE/Dockerfile"
-fi
 ln -s "$APP_ROOT/.env" "$RELEASE/.env"
 ln -s "$APP_ROOT/data" "$RELEASE/data"
 ln -s "$APP_ROOT/logs" "$RELEASE/logs"
