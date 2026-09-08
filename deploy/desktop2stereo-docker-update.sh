@@ -8,6 +8,7 @@ BACKUP_SCRIPT="${D2S_UPDATE_BACKUP_SCRIPT:-/usr/local/sbin/desktop2stereo-db-bac
 UPDATE_SCRIPT_PATH="${D2S_DOCKER_UPDATE_SCRIPT:-/usr/local/sbin/desktop2stereo-docker-update}"
 BUILD_GOPROXY="${D2S_BUILD_GOPROXY:-https://goproxy.cn,direct}"
 BUILD_GOSUMDB="${D2S_BUILD_GOSUMDB:-off}"
+BUILD_TIMEOUT_SECONDS="${D2S_BUILD_TIMEOUT_SECONDS:-900}"
 SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
 CURRENT_PHASE="starting"
@@ -56,9 +57,13 @@ if [[ ! -x "$BACKUP_SCRIPT" ]]; then
   echo "database backup script is missing: $BACKUP_SCRIPT" >&2
   exit 3
 fi
-for command_name in curl docker tar; do
+for command_name in curl docker tar timeout; do
   command -v "$command_name" >/dev/null || { echo "required command is missing: $command_name" >&2; exit 4; }
 done
+if [[ ! "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "D2S_BUILD_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 4
+fi
 
 mkdir -p "$RELEASE_ROOT" "$APP_ROOT/update-requests"
 exec > >(tee -a "$APP_ROOT/logs/update-$SHA.log") 2>&1
@@ -112,6 +117,7 @@ ln -s "$APP_ROOT/update-requests" "$RELEASE/update-requests"
 docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:pre-$SHA"
 CURRENT_PHASE="build"
 write_status "running" "$CURRENT_PHASE" "正在构建 Docker 镜像"
+timeout --foreground --signal=TERM --kill-after=30 "$BUILD_TIMEOUT_SECONDS" \
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" build \
   --build-arg "D2S_BUILD_VERSION=$SHA" \
   --build-arg "GOPROXY=$BUILD_GOPROXY" \
