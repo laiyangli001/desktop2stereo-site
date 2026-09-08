@@ -94,6 +94,8 @@ D2S_UPDATE_HEALTH_URL=http://127.0.0.1:3000/api/status
 4. 服务端启动固定更新脚本。
 5. 脚本先备份数据库，再下载指定 commit。
 6. 在独立 release 目录编译前端和 Go 程序。
+   构建时将目标完整 commit SHA 注入前端版本、Go `common.Version` 和
+   `org.opencontainers.image.revision`，并额外保留 `new-api-desktop2stereo-site:<commit-sha>` 镜像标签。
 7. 原子切换 `current` 软链接。
 8. 重启服务并请求健康接口。
 9. 健康检查失败时恢复旧软链接并重启旧版本。

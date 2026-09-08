@@ -107,7 +107,9 @@ ln -s "$APP_ROOT/update-requests" "$RELEASE/update-requests"
 docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:pre-$SHA"
 CURRENT_PHASE="build"
 write_status "running" "$CURRENT_PHASE" "正在构建 Docker 镜像"
-docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" build new-api
+docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" build \
+  --build-arg "D2S_BUILD_VERSION=$SHA" new-api
+docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:$SHA"
 CURRENT_PHASE="restart"
 write_status "running" "$CURRENT_PHASE" "正在重启应用容器"
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" up -d --no-deps new-api
