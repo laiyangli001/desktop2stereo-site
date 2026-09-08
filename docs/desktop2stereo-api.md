@@ -7,13 +7,18 @@ access token。
 
 ## 账号兼容入口
 
+- `GET /api/captcha`：生成自托管拖动拼图验证码。响应中的 `id`、`master_image`、
+  `tile_image`、尺寸和起始坐标仅用于当前验证；验证码默认 5 分钟有效且只能成功消费一次。
 - `POST /api/v1/auth/register`
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/password-reset/confirm`
 
-发送邮箱验证码和请求密码重置继续复用 `/api/verification`、`/api/reset_password`。
+登录和注册请求必须携带 `captcha_id`、`captcha_x`、`captcha_y`，分别对应验证码 ID、
+拼图提交的横坐标和纵坐标；缺失、过期、重复消费或坐标误差超过服务端容差时返回
+`BEHAVIOR_CAPTCHA_REQUIRED`，不会创建会话或账号。发送邮箱验证码和请求密码重置继续复用
+`/api/verification`、`/api/reset_password`，其现有 Turnstile 防护保持不变。
 这些账号接口保持 new-api 契约，不承诺 D2S `version/request_id/error` 外层结构。
 
 ## 设备码
