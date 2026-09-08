@@ -132,6 +132,7 @@ GORM 维护以下表：
 - SQLite、MySQL、PostgreSQL 新建库连续执行两次迁移：`verified`。
 - 已在 SQLite、MySQL、PostgreSQL 验证并发试用、绑定、租约、订单、区域锁、余额和支付幂等。
 - CI 中保留真实 MySQL/PostgreSQL 服务测试。
+- 2026-09-09 已将本地与 GitHub Actions 的 Go、Vitest 缓存及临时目录固定到工作区路径；扫描确认 D2S 测试不再调用 `t.TempDir`、`os.MkdirTemp` 或 `os.CreateTemp`，Actions `34278684231` 已通过固定目录回归。
 
 ### S3：支付渠道
 
