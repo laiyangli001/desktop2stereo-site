@@ -161,6 +161,7 @@ GORM 维护以下表：
 - 已建立 [`d2s-production-drill.md`](d2s-production-drill.md) 和无破坏性的生产就绪检查脚本；真实基础设施、渠道沙箱和三平台端到端证据仍待执行。
 - 已部署固定路径的日终对账脚本和 systemd 单元；服务器尚未配置 root-only 对账令牌，因此定时器和真实日终告警演练仍待执行。
 - 2026-09-09 已通过固定 `/opt/desktop2stereo-site/update-requests/request` 更新流程将生产 Docker 实例更新到 `e57086b041fb9158cf42e0a71c68a5d66018ce3e`；状态文件为 `succeeded`，`/api/status` 返回同一版本且容器健康。该记录只证明一次更新链路成功，不替代完整灰度、回滚和告警演练。
+- 2026-09-09 已将 `d55293350ec204d35ce268764481a81d900e7d2a` 部署到生产；状态为 `succeeded`，应用容器 healthy，且宿主机更新器和数据库备份脚本均已通过 SHA 与该发布目录文件逐字一致校验。
 - 2026-09-09 已使用该版本更新前生成的 PostgreSQL 备份，在固定恢复容器中完成隔离恢复验证，恢复出 17 张 D2S 表；关键表行数和 19 项关键关联完整性检查均通过（孤儿记录为 0），恢复容器已由脚本清理。该证据不替代 COS 跨故障域复制和业务语义完整性核对。
 - 2026-09-09 已将带 COS 上传能力的备份脚本同步到固定宿主机路径 `/usr/local/sbin/desktop2stereo-db-backup`，并现场生成带 SHA 校验的备份；服务器尚未配置 COSCLI 与 COS 上传 URI，因此 COS 跨故障域复制仍未宣称完成。
 - 2026-09-09 已将官方 COSCLI v1.0.9（Linux amd64，发布 SHA256 已核对）安装到固定 `/usr/local/bin/coscli`；COS 桶 URI 和最小权限认证仍待配置，配置前不执行真实上传。
