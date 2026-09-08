@@ -21,6 +21,7 @@ new-api
 tiktoken_cache
 .eslintcache
 .gocache
+.go-build-cache-d2s/
 .gomodcache/
 .cache
 .plans
