@@ -121,6 +121,10 @@ export function UpdateCheckerSection({
 
   const uptime = startTime ? formatTimestamp(startTime) : t('Unknown')
   const version = displayVersion || updateStatus?.current_sha || t('Unknown')
+  const currentSHA = (updateStatus?.current_sha || updateStatus?.runtime?.sha || '').toLowerCase()
+  const isUpToDate = Boolean(
+    latestCommit && currentSHA && latestCommit.sha.toLowerCase() === currentSHA
+  )
   const updatePhases = [
     ['backup', t('Backup database')],
     ['download', t('Download project')],
@@ -159,6 +163,10 @@ export function UpdateCheckerSection({
     }
     if (!updateStatus?.configured) {
       toast.error(t('Server update is not configured'))
+      return
+    }
+    if (isUpToDate) {
+      toast.info(t('The server is already up to date'))
       return
     }
     if (!window.confirm(t('Start the project update now? The service will restart after backup and health checks.'))) {
@@ -224,10 +232,16 @@ export function UpdateCheckerSection({
               <div className='mt-3 space-y-1'>
                 <div className='font-mono text-xs'>{latestCommit.sha}</div>
                 <div>{latestCommit.commit.message.split('\n')[0]}</div>
-                <Button type='button' className='mt-2' onClick={handleApplyUpdate} disabled={applying || checking}>
-                  <RocketIcon className='me-2 h-4 w-4' />
-                  {applying ? t('Updating...') : t('Update server to this commit')}
-                </Button>
+                {isUpToDate ? (
+                  <div className='text-muted-foreground mt-3'>
+                    {t('The server is already running this commit. No update is needed.')}
+                  </div>
+                ) : (
+                  <Button type='button' className='mt-2' onClick={handleApplyUpdate} disabled={applying || checking}>
+                    <RocketIcon className='me-2 h-4 w-4' />
+                    {applying ? t('Updating...') : t('Update server to this commit')}
+                  </Button>
+                )}
               </div>
             )}
             {applying && updateStatus?.runtime && (
