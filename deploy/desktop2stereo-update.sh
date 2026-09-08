@@ -43,8 +43,8 @@ trap cleanup EXIT
 
 RELEASE="$RELEASES/$SHA"
 if [[ -e "$RELEASE" ]]; then
-  echo "release already exists: $RELEASE" >&2
-  exit 7
+  echo "release already prepared: $RELEASE"
+  exit 0
 fi
 
 "$BACKUP_SCRIPT" "$SHARED/backups" "$SHA"
