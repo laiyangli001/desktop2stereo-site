@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -319,7 +320,8 @@ func SendPasswordResetEmail(c *gin.Context) {
 	if user, err := model.GetUniqueUserByEmail(email); err == nil {
 		code := common.GenerateVerificationCode(0)
 		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", system_setting.ServerAddress, email, code)
+		escapedEmail := url.QueryEscape(email)
+		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", strings.TrimRight(system_setting.ServerAddress, "/"), escapedEmail, code)
 		language := model.GetUserLanguage(user.Id)
 		if language == "" {
 			language = requestEmailLanguage(c)
@@ -338,7 +340,7 @@ func SendPasswordResetEmail(c *gin.Context) {
 			Language:     language,
 			To:           []string{email},
 			Subject:      subject,
-			TemplateData: map[string]string{"token": link, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
+			TemplateData: map[string]string{"email": escapedEmail, "token": code, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
 			HTMLBody:     content,
 		})
 		cancel()

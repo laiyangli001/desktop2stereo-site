@@ -48,10 +48,10 @@ SecretKey 不会回显到接口或页面。留空 SecretId/SecretKey 后保存�
 | 场景 | 必填变量 | 用途 |
 | --- | --- | --- |
 | `email_verification` | `token` | 邮箱验证码 |
-| `password_reset` | `token` | 完整密码重置链接 |
+| `password_reset` | `email`, `token` | 拼接完整密码重置链接 |
 | `system_notification` | `title`, `content` | 系统通知 |
 
-现有模板如果还要求 `expire_minutes`、`system_name`、订单号或金额等变量，应在腾讯云模板中保持变量名与业务发送参数一致，并由对应业务入口补齐。邮箱验证的 `token` 值是验证码；密码重置的 `token` 值是已经包含邮箱和一次性令牌的完整 URL。密码重置模板应使用 `href="{{token}}"`，不要再拼接 `?token=`。系统仍兼容旧模板中的 `code` 和 `reset_url` 变量。新增业务场景必须先创建并审核腾讯云模板，再配置其 `TemplateID`。
+现有模板如果还要求 `expire_minutes`、`system_name`、订单号或金额等变量，应在腾讯云模板中保持变量名与业务发送参数一致，并由对应业务入口补齐。邮箱验证的 `token` 值是验证码；密码重置模板必须使用完整链接 `https://100393.com/user/reset?email={{email}}&token={{token}}`。系统仍兼容旧模板中的 `code` 和 `reset_url` 变量。新增业务场景必须先创建并审核腾讯云模板，再配置其 `TemplateID`。
 
 密码重置和邮箱验证使用已经在腾讯云配置的模板；系统不会调用 `CreateEmailIdentity`，也不会执行域名验证。
 
