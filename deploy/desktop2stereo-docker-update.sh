@@ -126,7 +126,7 @@ write_status "running" "$CURRENT_PHASE" "正在执行健康检查"
 for _ in $(seq 1 30); do
   status="$(docker inspect -f '{{.State.Health.Status}}' new-api 2>/dev/null || true)"
   if [[ "$status" == "healthy" ]]; then
-	if [[ -x "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
+	if [[ -f "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
 	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"
 	fi
 	touch "$RELEASE_MARKER"
