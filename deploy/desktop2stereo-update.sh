@@ -67,7 +67,8 @@ OLD_TARGET=""
 if [[ -L "$CURRENT" ]]; then
   OLD_TARGET="$(readlink "$CURRENT")"
 fi
-NEXT_LINK="$ROOT/.current.next.$$"
+NEXT_LINK="$ROOT/.current.next"
+rm -f -- "$NEXT_LINK"
 ln -s "$RELEASE" "$NEXT_LINK"
 mv -Tf "$NEXT_LINK" "$CURRENT"
 
@@ -84,7 +85,8 @@ if [[ "$RESTART_MODE" != "manual" ]]; then
   if ! restart_service; then
     echo "service restart failed; rolling back" >&2
     if [[ -n "$OLD_TARGET" ]]; then
-      ROLLBACK_LINK="$ROOT/.current.rollback.$$"
+      ROLLBACK_LINK="$ROOT/.current.rollback"
+      rm -f -- "$ROLLBACK_LINK"
       ln -s "$OLD_TARGET" "$ROLLBACK_LINK"
       mv -Tf "$ROLLBACK_LINK" "$CURRENT"
       restart_service || true
@@ -101,7 +103,8 @@ if [[ "$RESTART_MODE" != "manual" ]]; then
     done
     echo "health check failed; rolling back" >&2
     if [[ -n "$OLD_TARGET" ]]; then
-      ROLLBACK_LINK="$ROOT/.current.rollback.$$"
+      ROLLBACK_LINK="$ROOT/.current.rollback"
+      rm -f -- "$ROLLBACK_LINK"
       ln -s "$OLD_TARGET" "$ROLLBACK_LINK"
       mv -Tf "$ROLLBACK_LINK" "$CURRENT"
       restart_service || true
