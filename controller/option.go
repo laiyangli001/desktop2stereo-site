@@ -92,6 +92,7 @@ func GetOptions(c *gin.Context) {
 		isSensitiveKey := strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
 			strings.HasSuffix(k, "Key") ||
+			strings.HasSuffix(k, "SecretId") ||
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key")
 		if isSensitiveKey {
@@ -335,6 +336,18 @@ func UpdateOption(c *gin.Context) {
 				"message": err.Error(),
 			})
 			return
+		}
+	case "TencentSESTemplates":
+		var templates map[string]uint64
+		if err = common.UnmarshalJsonStr(option.Value.(string), &templates); err != nil {
+			common.ApiErrorMsg(c, "腾讯云 SES 模板配置必须是业务场景到正整数 TemplateID 的 JSON 对象: "+err.Error())
+			return
+		}
+		for scene, templateID := range templates {
+			if strings.TrimSpace(scene) == "" || templateID == 0 {
+				common.ApiErrorMsg(c, "腾讯云 SES 模板配置包含无效的业务场景或 TemplateID")
+				return
+			}
 		}
 	case "billing_setting.billing_expr":
 		expressions := make(map[string]string)

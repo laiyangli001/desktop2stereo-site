@@ -1,0 +1,95 @@
+# Desktop2Stereo 项目更新功能
+
+New API“运维 → 系统维护”中的更新功能只更新本项目：
+
+```text
+https://github.com/laiyangli001/desktop2stereo-site
+```
+
+不会检查或下载 `Calcium-Ion/new-api` 上游版本。
+
+## 安全边界
+
+- 更新仓库、分支和执行脚本不由浏览器传入，仓库固定为 Desktop2Stereo 项目。
+- 页面只能提交 GitHub 返回的 40 位 commit SHA，服务端会再次向 GitHub 校验 SHA 是否仍为 `main` 最新提交。
+- 更新脚本固定从 `/usr/local/sbin/desktop2stereo-update` 执行，不接受任意 shell 命令。
+- 代码发布目录和运行数据目录分离。
+- `.env`、数据库、上传文件、日志和备份不会被 Git checkout 覆盖。
+- 数据库备份脚本不存在或不可执行时，更新会在构建前停止。
+- 构建失败、服务启动失败或健康检查失败时回滚到旧版本。
+
+## 服务器初始化
+
+建议使用以下目录：
+
+```text
+/opt/desktop2stereo/
+├── current -> releases/<commit-sha>
+├── releases/
+└── shared/
+    ├── .env
+    ├── uploads/
+    ├── logs/
+    └── backups/
+```
+
+将 `deploy/desktop2stereo-update.sh` 安装为固定脚本并限制权限：
+
+```bash
+install -o root -g root -m 0750 deploy/desktop2stereo-update.sh \
+  /usr/local/sbin/desktop2stereo-update
+```
+
+另外安装 `/usr/local/sbin/desktop2stereo-db-backup`。该脚本必须先完成 PostgreSQL/MySQL/SQLite 备份，再返回成功；失败时必须返回非零退出码。备份脚本不应放在 GitHub 工作目录中。
+
+宝塔 Go 项目应指向：
+
+```text
+运行目录：/opt/desktop2stereo/current
+启动文件：/opt/desktop2stereo/current/desktop2stereo-site
+环境文件：/opt/desktop2stereo/shared/.env
+```
+
+如果宝塔项目由 Supervisor 管理，设置：
+
+```text
+D2S_UPDATE_RESTART_MODE=supervisor
+D2S_UPDATE_SERVICE=<宝塔项目对应的 Supervisor 名称>
+```
+
+如果使用 systemd，则设置：
+
+```text
+D2S_UPDATE_RESTART_MODE=systemd
+D2S_UPDATE_SERVICE=desktop2stereo
+```
+
+更新功能默认关闭。确认固定脚本、数据库备份脚本、运行目录和重启方式都完成后，在 `.env` 中设置：
+
+```text
+D2S_UPDATE_ENABLED=true
+D2S_UPDATE_SCRIPT=/usr/local/sbin/desktop2stereo-update
+D2S_UPDATE_ROOT=/opt/desktop2stereo
+D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
+D2S_UPDATE_HEALTH_URL=http://127.0.0.1:3000/api/status
+```
+
+## 页面操作流程
+
+1. 点击“检查项目更新”。服务器从固定项目的 `main` 分支读取最新 commit。
+2. 核对 commit SHA 和提交说明。
+3. 点击“更新服务器到此提交”。
+4. 服务端启动固定更新脚本。
+5. 脚本先备份数据库，再下载指定 commit。
+6. 在独立 release 目录编译前端和 Go 程序。
+7. 原子切换 `current` 软链接。
+8. 重启服务并请求健康接口。
+9. 健康检查失败时恢复旧软链接并重启旧版本。
+
+禁止在服务器更新时执行以下操作：
+
+```bash
+git clean -fdx
+rm -rf /opt/desktop2stereo/shared
+rsync --delete ./ /opt/desktop2stereo/shared/
+```

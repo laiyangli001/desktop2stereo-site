@@ -351,6 +351,17 @@ export type OperationsSettings = {
   SMTPStartTLSEnabled: boolean
   SMTPInsecureSkipVerify: boolean
   SMTPForceAuthLogin: boolean
+  TencentSESEnabled: boolean
+  TencentSESRegion: string
+  TencentSESSecretId: string
+  TencentSESSecretKey: string
+  TencentSESFromEmail: string
+  TencentSESFromName: string
+  TencentSESReplyTo: string
+  TencentSESSubjectPrefix: string
+  TencentSESTimeoutSeconds: string
+  TencentSESRetryCount: string
+  TencentSESTemplates: string
   WorkerUrl: string
   WorkerValidKey: string
   WorkerAllowHttpImageRequestEnabled: boolean

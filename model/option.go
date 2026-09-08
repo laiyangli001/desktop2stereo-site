@@ -75,6 +75,17 @@ func InitOptionMap() {
 	common.OptionMap["SMTPStartTLSEnabled"] = strconv.FormatBool(common.SMTPStartTLSEnabled)
 	common.OptionMap["SMTPInsecureSkipVerify"] = strconv.FormatBool(common.SMTPInsecureSkipVerify)
 	common.OptionMap["SMTPForceAuthLogin"] = strconv.FormatBool(common.SMTPForceAuthLogin)
+	common.OptionMap["TencentSESEnabled"] = "false"
+	common.OptionMap["TencentSESRegion"] = "ap-guangzhou"
+	common.OptionMap["TencentSESSecretId"] = ""
+	common.OptionMap["TencentSESSecretKey"] = ""
+	common.OptionMap["TencentSESFromEmail"] = ""
+	common.OptionMap["TencentSESFromName"] = ""
+	common.OptionMap["TencentSESReplyTo"] = ""
+	common.OptionMap["TencentSESSubjectPrefix"] = ""
+	common.OptionMap["TencentSESTimeoutSeconds"] = "10"
+	common.OptionMap["TencentSESRetryCount"] = "1"
+	common.OptionMap["TencentSESTemplates"] = "{}"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""

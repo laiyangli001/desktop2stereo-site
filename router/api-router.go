@@ -196,6 +196,13 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.PUT("/", controller.UpdateOption)
+			optionRoute.GET("/tencent-ses", controller.GetTencentSESSettings)
+			optionRoute.POST("/tencent-ses/test-connection", controller.TestTencentSESConnection)
+			optionRoute.POST("/tencent-ses/test-send", controller.TestTencentSESSend)
+		optionRoute.GET("/tencent-ses/logs", controller.GetTencentSESDeliveryLogs)
+		optionRoute.GET("/project-update/status", controller.GetProjectUpdateStatus)
+		optionRoute.POST("/project-update/check", controller.CheckProjectUpdate)
+		optionRoute.POST("/project-update/apply", controller.ApplyProjectUpdate)
 			optionRoute.POST("/payment_compliance", controller.ConfirmPaymentCompliance)
 			optionRoute.GET("/channel_affinity_cache", controller.GetChannelAffinityCacheStats)
 			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)

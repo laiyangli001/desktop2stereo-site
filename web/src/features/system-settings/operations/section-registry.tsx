@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { SystemBehaviorSection } from '../general/system-behavior-section'
 import { EmailSettingsSection } from '../integrations/email-settings-section'
+import { TencentSESSettingsSection } from '../integrations/tencent-ses-settings-section'
 import { MonitoringSettingsSection } from '../integrations/monitoring-settings-section'
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
 import { LogSettingsSection } from '../maintenance/log-settings-section'
@@ -74,6 +75,27 @@ const OPERATIONS_SECTIONS = [
           SMTPStartTLSEnabled: settings.SMTPStartTLSEnabled,
           SMTPInsecureSkipVerify: settings.SMTPInsecureSkipVerify,
           SMTPForceAuthLogin: settings.SMTPForceAuthLogin,
+        }}
+      />
+    ),
+  },
+  {
+    id: 'tencent-ses',
+    titleKey: 'Tencent SES Email Delivery',
+    build: (settings: OperationsSettings) => (
+      <TencentSESSettingsSection
+        defaultValues={{
+          TencentSESEnabled: settings.TencentSESEnabled,
+          TencentSESRegion: settings.TencentSESRegion,
+          TencentSESSecretId: settings.TencentSESSecretId,
+          TencentSESSecretKey: settings.TencentSESSecretKey,
+          TencentSESFromEmail: settings.TencentSESFromEmail,
+          TencentSESFromName: settings.TencentSESFromName,
+          TencentSESReplyTo: settings.TencentSESReplyTo,
+          TencentSESSubjectPrefix: settings.TencentSESSubjectPrefix,
+          TencentSESTimeoutSeconds: settings.TencentSESTimeoutSeconds,
+          TencentSESRetryCount: settings.TencentSESRetryCount,
+          TencentSESTemplates: settings.TencentSESTemplates,
         }}
       />
     ),
