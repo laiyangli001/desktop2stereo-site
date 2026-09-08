@@ -209,7 +209,7 @@ export function RechargeFormCard({
             onClick={onOpenBilling}
             className='w-full gap-2 sm:w-auto'
           >
-            <Receipt className='h-4 w-4' />
+            <Receipt className='h-4 w-4' aria-hidden='true' />
             {t('Order History')}
           </Button>
         ) : null
@@ -222,10 +222,10 @@ export function RechargeFormCard({
           {hasConfigurableTopup && (
             <>
               {presetAmounts.length > 0 && (
-                <div className='space-y-2.5 sm:space-y-3'>
-                  <Label className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
+                <fieldset className='space-y-2.5 sm:space-y-3'>
+                  <legend className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
                     {t('Amount')}
-                  </Label>
+                  </legend>
                   <div className='grid grid-cols-2 gap-1.5 sm:gap-3 md:grid-cols-4'>
                     {presetAmounts.map((preset) => {
                       const discount =
@@ -278,16 +278,13 @@ export function RechargeFormCard({
                       )
                     })}
                   </div>
-                </div>
+                </fieldset>
               )}
 
-              <div className='space-y-2.5 sm:space-y-3'>
-                <Label
-                  htmlFor='topup-amount'
-                  className='text-muted-foreground text-xs font-medium tracking-wider uppercase'
-                >
+              <fieldset className='space-y-2.5 sm:space-y-3'>
+                <legend className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
                   {t('Custom Amount')}
-                </Label>
+                </legend>
                 <div className='grid grid-cols-[minmax(0,1fr)_minmax(110px,0.55fr)] gap-2 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center'>
                   <Input
                     id='topup-amount'
@@ -296,9 +293,14 @@ export function RechargeFormCard({
                     onChange={(e) => handleAmountChange(e.target.value)}
                     min={minTopup}
                     placeholder={`Minimum ${minTopup}`}
+                    aria-describedby='topup-amount-description'
                     className='h-9 text-base sm:h-10 sm:text-lg'
                   />
-                  <div className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'>
+                  <div
+                    className='bg-muted/30 flex min-h-9 items-center justify-between gap-2 rounded-md border px-3 lg:min-w-52'
+                    aria-live='polite'
+                    aria-atomic='true'
+                  >
                     <span className='text-muted-foreground truncate text-xs'>
                       {t('Amount to pay:')}
                     </span>
@@ -311,12 +313,18 @@ export function RechargeFormCard({
                     )}
                   </div>
                 </div>
-              </div>
+                <p
+                  id='topup-amount-description'
+                  className='text-muted-foreground text-xs'
+                >
+                  {t('Minimum topup amount: {{amount}}', { amount: minTopup })}
+                </p>
+              </fieldset>
 
-              <div className='space-y-2.5 sm:space-y-3'>
-                <Label className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
+              <fieldset className='space-y-2.5 sm:space-y-3'>
+                <legend className='text-muted-foreground text-xs font-medium tracking-wider uppercase'>
                   {t('Payment Method')}
-                </Label>
+                </legend>
                 {hasStandardPaymentMethods ? (
                   <div className='grid grid-cols-2 gap-1.5 sm:gap-3 lg:grid-cols-3'>
                     {topupInfo?.pay_methods?.map((method) => {
@@ -393,7 +401,7 @@ export function RechargeFormCard({
                     </AlertDescription>
                   </Alert>
                 )}
-              </div>
+              </fieldset>
 
               {enableWaffoTopup &&
                 hasWaffoPaymentMethods &&
