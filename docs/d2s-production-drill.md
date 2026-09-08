@@ -15,7 +15,7 @@
 先在应用节点执行：
 
 ```powershell
-.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
+.\scripts\d2s-production-readiness.ps1 -BaseUrl https://100393.com -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
 ```
 
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
@@ -63,7 +63,7 @@ When HTTP checks are enabled, the script also rejects an `http://` `-BaseUrl`.
 
 ```bash
 curl -H 'Authorization: Bearer <admin-token>' \
-  'https://d2s.site/api/v1/admin/reconciliation'
+  'https://100393.com/api/v1/admin/reconciliation'
 ```
 
 也可以用仓库脚本保存不可变的 JSON 报告；脚本不会打印或写入管理员令牌，也不会修改订单或

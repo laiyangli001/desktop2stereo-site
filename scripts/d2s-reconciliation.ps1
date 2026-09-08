@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$AdminToken,
-    [string]$BaseUrl = "https://d2s.site",
+    [string]$BaseUrl = "https://100393.com",
     [long]$StartAt,
     [long]$EndAt,
     [string]$OutputPath,

@@ -1,4 +1,4 @@
-# d2s.site 服务端部署与运维方案
+# 100393.com 服务端部署与运维方案
 
 ## 1. 文档定位
 
@@ -90,12 +90,12 @@ flowchart TD
 
 ## 3. 域名、网络与 TLS
 
-- 正式域名：`d2s.site`，DNS 托管在 Cloudflare，并开启代理、WAF、DDoS 防护和限流。
+- 正式域名：`100393.com`，DNS 托管在 Cloudflare，并开启代理、WAF、DDoS 防护和限流。
 - TLS：Cloudflare 使用“完全（严格）”，源站安装可信证书或 Cloudflare Origin Certificate。
 - 源站：优先用 Cloudflare Tunnel 隐藏公网入口；如使用 CLB/CVM 公网 IP，仅开放 80/443，
   且 80 只跳转 HTTPS。
 - 数据库 5432/3306 和 Redis 6379 只允许应用子网访问。
-- `100393.com` 只作为预留灾备或管理域名；启用前必须具备独立访问控制，不能绕过 WAF。
+- `www.100393.com` 作为正式域名别名时必须保持同等 TLS、WAF 和访问控制策略，不能绕过 WAF。
 - Nginx 只信任实际负载均衡/代理地址传入的客户端 IP；`TRUSTED_PROXIES` 不得配置为全网。
 
 ## 4. 支付回调链路
@@ -103,7 +103,7 @@ flowchart TD
 支付渠道回调地址指向 Cloudflare Worker。Worker 或源站渠道适配器必须先按渠道官方规则验证
 签名、时间戳和重放条件，再把规范化事件转发到：
 
-`POST https://d2s.site/api/v1/webhooks/{provider}`
+`POST https://100393.com/api/v1/webhooks/{provider}`
 
 转发请求使用与渠道 Secret 分离的 `D2S_PAYMENT_BRIDGE_SECRET[_PROVIDER]` 生成
 `X-D2S-Signature`；例如 Stripe 使用 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`。服务端优先使用
@@ -126,7 +126,7 @@ PayPal/Paddle 在完成适配器前不开放。
 并创建 root-only 的 `/etc/desktop2stereo/reconciliation.env`：
 
 ```text
-D2S_RECONCILIATION_BASE_URL=https://d2s.site
+D2S_RECONCILIATION_BASE_URL=https://100393.com
 D2S_RECONCILIATION_ROOT=/opt/desktop2stereo-site
 D2S_RECONCILIATION_REPORT_ROOT=/opt/desktop2stereo-site/reconciliation-reports
 D2S_ADMIN_TOKEN=<admin-token>
@@ -159,12 +159,12 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 - `REDIS_CONN_STRING`：生产 Redis 连接串。
 - `SESSION_SECRET`：所有节点一致的高熵 Secret。
 - `SESSION_COOKIE_SECURE=true`。
-- `SESSION_COOKIE_TRUSTED_URL=https://d2s.site`。
+- `SESSION_COOKIE_TRUSTED_URL=https://100393.com`。
 - `TRUSTED_PROXIES`：实际 CLB、Nginx 或 Tunnel 网络范围。
 
 授权与商业配置：
 
-- `D2S_DEVICE_VERIFICATION_URI=https://d2s.site/device`。
+- `D2S_DEVICE_VERIFICATION_URI=https://100393.com/device`。
 - `D2S_LICENSE_KEY_ID`。
 - `D2S_LICENSE_PRIVATE_KEY_B64`，内容为 P-256 PKCS#8 DER 私钥的 Base64；运行时也兼容
   Base64 编码的 PEM，以便平滑迁移既有部署。
@@ -189,7 +189,7 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
 ## 6. 首次部署
 
 1. 创建腾讯云 CVM/VPC、安全组、PostgreSQL、Redis 和 COS 备份桶。
-2. 将 `d2s.site` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
+2. 将 `100393.com` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
 3. 克隆本仓库并从 `.env.example` 创建生产 Secret 配置。
    至少设置 `POSTGRES_PASSWORD` 和 `REDIS_PASSWORD`；生产 Compose 不再提供数据库或 Redis
    密码默认值，执行 `docker compose config` 可提前检查变量是否齐全。
@@ -229,8 +229,8 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
 8. 执行健康检查：
 
    ```bash
-   curl -fsS https://d2s.site/api/status
-   curl -fsS https://d2s.site/api/v1/license/keys
+   curl -fsS https://100393.com/api/status
+   curl -fsS https://100393.com/api/v1/license/keys
    ```
 
 9. 用测试账号完成注册、邮箱验证、试用创建、设备码登录、绑定、离线签发、在线租约和沙箱

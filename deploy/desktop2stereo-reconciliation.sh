@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 APP_ROOT="${D2S_RECONCILIATION_ROOT:-/opt/desktop2stereo-site}"
 REPORT_ROOT="${D2S_RECONCILIATION_REPORT_ROOT:-$APP_ROOT/reconciliation-reports}"
-BASE_URL="${D2S_RECONCILIATION_BASE_URL:-https://d2s.site}"
+BASE_URL="${D2S_RECONCILIATION_BASE_URL:-https://100393.com}"
 ADMIN_TOKEN="${D2S_ADMIN_TOKEN:-}"
 REPORT_DATE="$(date -u +%Y%m%d)"
 REPORT_PATH="$REPORT_ROOT/reconciliation-$REPORT_DATE.json"

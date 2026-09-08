@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$BaseUrl = "https://d2s.site",
+    [string]$BaseUrl = "https://100393.com",
     [switch]$RequireSecrets,
     [switch]$SkipHttp,
     [string[]]$RequiredPaymentProviders = @()
