@@ -102,7 +102,10 @@ export function LicenseCard(props: {
         <CardTitle>{props.license.license_code}</CardTitle>
         <CardDescription>{props.license.kind}</CardDescription>
       </CardHeader>
-      <CardContent className='grid gap-2 sm:grid-cols-2'>
+      <CardContent
+        className='grid gap-2 sm:grid-cols-2'
+        aria-busy={props.actionPending}
+      >
         <div>
           {t('Status')}: <StatusBadge value={props.license.status} />
         </div>

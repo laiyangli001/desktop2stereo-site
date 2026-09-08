@@ -53,7 +53,7 @@ function ReviewActions(props: {
   })
 
   return (
-    <div className='flex min-w-52 gap-2'>
+    <div className='flex min-w-52 gap-2' aria-busy={mutation.isPending}>
       <Input
         aria-label={`${t('Review note')} ${props.id}`}
         value={note}
@@ -392,11 +392,15 @@ export function D2SAdminWorkspace() {
             <CardHeader>
               <CardTitle>{t('License region controls')}</CardTitle>
             </CardHeader>
-            <CardContent className='space-y-2 text-sm'>
+            <CardContent
+              className='space-y-2 text-sm'
+              aria-busy={regionMutation.isPending}
+            >
               {(licenses.data?.data?.licenses || []).map((license) => (
                 <RegionRow
                   key={license.id}
                   license={license}
+                  saving={regionMutation.isPending}
                   onSave={(region) =>
                     license.user_id &&
                     regionMutation.mutate({ userID: license.user_id, region })
@@ -425,7 +429,10 @@ export function D2SAdminWorkspace() {
             <CardHeader>
               <CardTitle>{t('Signing public keys')}</CardTitle>
             </CardHeader>
-            <CardContent className='space-y-2 text-sm'>
+            <CardContent
+              className='space-y-2 text-sm'
+              aria-busy={signingKeyMutation.isPending}
+            >
               {(keys.data?.data?.keys || []).map((key) => (
                 <div
                   key={key.key_id}
@@ -526,6 +533,7 @@ function RegionRow(props: {
     region?: string
   }
   onSave: (region: string) => void
+  saving: boolean
 }) {
   const { t } = useTranslation()
   const [region, setRegion] = useState(props.license.region || '')
@@ -557,6 +565,7 @@ function RegionRow(props: {
         aria-label={`${t('Region')} ${props.license.license_code}`}
         value={region}
         onChange={(event) => setRegion(event.target.value)}
+        disabled={props.saving}
         className='h-8 rounded-lg border bg-transparent px-2 text-sm'
       >
         <option value=''>{t('Not locked')}</option>
@@ -568,7 +577,7 @@ function RegionRow(props: {
         size='sm'
         aria-label={`${t('Save region')} ${props.license.license_code}`}
         onClick={() => props.onSave(region)}
-        disabled={!props.license.user_id || !region}
+        disabled={!props.license.user_id || !region || props.saving}
       >
         {t('Save region')}
       </Button>

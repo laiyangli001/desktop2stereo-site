@@ -260,4 +260,59 @@ describe('D2SAdminWorkspace', () => {
       'Unable to load Desktop2Stereo admin data'
     )
   })
+
+  it('keeps region controls disabled while the save request is pending', async () => {
+    apiMocks.getD2SAdminLicenses.mockResolvedValue(
+      response({
+        licenses: [
+          {
+            id: 'license-region',
+            user_id: 7,
+            license_code: 'D2S-REGION-1',
+            status: 'active',
+            mode: 'online',
+            region: 'INTL',
+          },
+        ],
+      })
+    )
+    for (const query of [
+      apiMocks.getD2SAdminOrders,
+      apiMocks.getD2SAdminPaymentEvents,
+      apiMocks.getD2SAdminBalances,
+      apiMocks.getD2SAdminWithdrawals,
+      apiMocks.getD2SAdminUnbindRequests,
+      apiMocks.getD2SAdminSigningKeys,
+      apiMocks.getD2SAdminReconciliation,
+    ]) {
+      query.mockResolvedValue(response({
+        orders: [],
+        events: [],
+        accounts: [],
+        withdrawals: [],
+        requests: [],
+        keys: [],
+        mismatches: [],
+      }))
+    }
+    apiMocks.setD2SUserRegion.mockReturnValue(new Promise(() => {}))
+
+    renderAdminWorkspace()
+
+    const region = await screen.findByRole('combobox', {
+      name: 'Region D2S-REGION-1',
+    })
+    fireEvent.change(region, { target: { value: 'CN' } })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save region D2S-REGION-1' })
+    )
+
+    await waitFor(() => {
+      expect(region).toBeDisabled()
+      expect(
+        screen.getByRole('button', { name: 'Save region D2S-REGION-1' })
+      ).toBeDisabled()
+      expect(region.closest('[aria-busy="true"]')).not.toBeNull()
+    })
+  })
 })

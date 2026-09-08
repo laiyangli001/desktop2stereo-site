@@ -118,6 +118,36 @@ describe('LicenseCard', () => {
     ).toBeDisabled()
   })
 
+  it('marks the card busy and disables all mutating controls during an action', () => {
+    render(
+      <LicenseCard
+        license={activeBoundLicense}
+        actionPending
+        onChangeMode={vi.fn()}
+        onConfirmPermanent={vi.fn()}
+        onFreeRevoke={vi.fn()}
+        onManualUnbind={vi.fn()}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Online mode D2S-TEST-0001' }))
+      .toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Offline mode D2S-TEST-0001' }))
+      .toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Make permanent D2S-TEST-0001' }))
+      .toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Free revoke D2S-TEST-0001' }))
+      .toBeDisabled()
+    expect(
+      screen.getByRole('combobox', { name: 'Offline period D2S-TEST-0001' })
+    ).toBeDisabled()
+    expect(
+      screen
+        .getByRole('button', { name: 'Online mode D2S-TEST-0001' })
+        .closest('[aria-busy="true"]')
+    ).not.toBeNull()
+  })
+
   it('exposes permanent binding as an explicit action', () => {
     const onConfirmPermanent = vi.fn()
     render(
