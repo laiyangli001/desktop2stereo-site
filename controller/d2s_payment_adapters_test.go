@@ -129,6 +129,105 @@ func TestD2SPaymentWebhookSandboxMatrix(t *testing.T) {
 	assert.Equal(t, model.D2SOrderPaid, order.Status)
 }
 
+func TestD2SPaymentWebhookMultiProviderBridge(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_multi_provider_bridge_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()
+	model.DB, model.LOG_DB = db, db
+	common.SetDatabaseTypes(common.DatabaseTypeSQLite, common.DatabaseTypeSQLite)
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+		common.SetDatabaseTypes(previousMainType, previousLogType)
+	})
+	require.NoError(t, db.AutoMigrate(
+		&model.User{}, &model.D2SUserProfile{}, &model.D2SLicense{}, &model.D2SLicenseEvent{},
+		&model.D2SOrder{}, &model.D2SPaymentEvent{}, &model.D2SInviteReward{},
+		&model.D2SBalanceAccount{}, &model.D2SBalanceTransaction{},
+	))
+
+	const now = int64(2_001_000_000)
+	type bridgeCase struct {
+		provider   string
+		secretName string
+		currency   string
+		amount     int64
+	}
+	cases := []bridgeCase{
+		{provider: "epay", secretName: "D2S_PAYMENT_BRIDGE_SECRET_EPAY", currency: "CNY", amount: 9900},
+		{provider: "paymentfm", secretName: "D2S_PAYMENT_BRIDGE_SECRET_PAYMENTFM", currency: "CNY", amount: 9900},
+		{provider: "alipay", secretName: "D2S_PAYMENT_BRIDGE_SECRET_ALIPAY", currency: "CNY", amount: 9900},
+		{provider: "wechat", secretName: "D2S_PAYMENT_BRIDGE_SECRET_WECHAT", currency: "CNY", amount: 9900},
+		{provider: "waffo", secretName: "D2S_PAYMENT_BRIDGE_SECRET_WAFFO", currency: "CNY", amount: 9900},
+		{provider: "stripe", secretName: "D2S_PAYMENT_BRIDGE_SECRET_STRIPE", currency: "USD", amount: 2990},
+		{provider: "creem", secretName: "D2S_PAYMENT_BRIDGE_SECRET_CREEM", currency: "USD", amount: 2990},
+		{provider: "waffo_pancake", secretName: "D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE", currency: "USD", amount: 2990},
+	}
+
+	// Force every case to use its provider-specific secret instead of the shared fallback.
+	t.Setenv("D2S_PAYMENT_BRIDGE_SECRET", "")
+	for _, testCase := range cases {
+		t.Setenv(testCase.secretName, "")
+	}
+
+	call := func(provider, body, secret string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		context, _ := gin.CreateTestContext(recorder)
+		context.Request = httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/"+provider, bytes.NewBufferString(body))
+		context.Params = gin.Params{{Key: "provider", Value: provider}}
+		context.Request.Header.Set("X-D2S-Signature", validD2SBridgeSignature(body, secret))
+		D2SPaymentWebhook(context)
+		return recorder
+	}
+
+	for index, testCase := range cases {
+		t.Run(testCase.provider, func(t *testing.T) {
+			secret := "provider-bridge-secret-" + testCase.provider
+			t.Setenv(testCase.secretName, secret)
+			orderID := "multi-provider-" + testCase.provider
+			eventID := "multi-provider-event-" + testCase.provider
+			userID := 1401 + index
+			require.NoError(t, db.Create(&model.User{
+				Id: userID, Username: "multi-provider-" + testCase.provider,
+				Email: testCase.provider + "@example.com", Password: "unused-hash",
+				AffCode: "multi-provider-aff-" + testCase.provider,
+				Role:    common.RoleCommonUser, Status: common.UserStatusEnabled,
+				Group: "default", AuthVersion: 1,
+			}).Error)
+			require.NoError(t, db.Create(&model.D2SUserProfile{
+				UserID: userID, EmailVerified: true, CreatedAt: now, UpdatedAt: now,
+			}).Error)
+			require.NoError(t, db.Create(&model.D2SOrder{
+				ID: orderID, UserID: userID, Product: model.D2SOrderProductLicense,
+				Provider: testCase.provider, Region: func() string {
+					region, _ := model.D2SProviderRegion(testCase.provider)
+					return region
+				}(), Currency: testCase.currency, AmountMinor: testCase.amount,
+				GatewayMinor: testCase.amount, Status: model.D2SOrderPending,
+				CreatedAt: now, ExpiresAt: now + 1800,
+			}).Error)
+
+			bodyBytes, err := json.Marshal(d2sPaymentBridgeEvent{
+				EventID: eventID, OrderID: orderID, EventType: "paid",
+				AmountMinor: testCase.amount, Currency: testCase.currency,
+			})
+			require.NoError(t, err)
+			body := string(bodyBytes)
+			assert.Equal(t, http.StatusOK, call(testCase.provider, body, secret).Code)
+			assert.Equal(t, http.StatusOK, call(testCase.provider, body, secret).Code)
+			assert.Equal(t, http.StatusBadRequest, call(testCase.provider, body, "wrong-secret").Code)
+
+			var eventCount int64
+			require.NoError(t, db.Model(&model.D2SPaymentEvent{}).
+				Where("provider_event_id = ?", eventID).Count(&eventCount).Error)
+			assert.EqualValues(t, 1, eventCount)
+			var order model.D2SOrder
+			require.NoError(t, db.First(&order, "id = ?", orderID).Error)
+			assert.Equal(t, model.D2SOrderPaid, order.Status)
+		})
+	}
+}
+
 func validD2SBridgeSignature(body, secret string) string {
 	hash := hmac.New(sha256.New, []byte(secret))
 	_, _ = hash.Write([]byte(body))
