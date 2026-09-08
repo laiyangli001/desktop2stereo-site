@@ -12,6 +12,14 @@
 主题：`验证 Desktop2Stereo 邮箱`
 
 ```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>验证 Desktop2Stereo 邮箱</title>
+</head>
+<body style="margin:0;padding:0;">
 <div style="background-color:#f4f7ff;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;color:#172033;line-height:1.55;">
   <div style="max-width:560px;margin:0 auto;overflow:hidden;background-color:#ffffff;border:1px solid #dfe7ff;border-radius:18px;padding:40px 40px 32px;box-shadow:0 16px 40px rgba(37,57,128,0.10);">
     <div style="margin:-40px -40px 32px;padding:25px 32px;background-color:#5b5ce2;background-image:linear-gradient(135deg,#0891b2 0%,#4f46e5 55%,#7c3aed 100%);"><a href="https://100393.com/" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:20px;font-weight:750;"><span style="display:inline-block;width:10px;height:10px;margin-right:11px;border-radius:999px;background:#a5f3fc;vertical-align:1px;"></span>Desktop2Stereo</a></div>
@@ -21,6 +29,8 @@
     <p style="margin:0;font-size:13px;color:#66728f;">验证码 10 分钟内有效。如果这不是您的操作，请忽略此邮件。</p>
   </div>
 </div>
+</body>
+</html>
 ```
 
 ## English email verification
@@ -28,6 +38,14 @@
 Subject: `Verify your Desktop2Stereo email`
 
 ```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify your Desktop2Stereo email</title>
+</head>
+<body style="margin:0;padding:0;">
 <div style="background-color:#f4f7ff;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;color:#172033;line-height:1.55;">
   <div style="max-width:560px;margin:0 auto;overflow:hidden;background-color:#ffffff;border:1px solid #dfe7ff;border-radius:18px;padding:40px 40px 32px;box-shadow:0 16px 40px rgba(37,57,128,0.10);">
     <div style="margin:-40px -40px 32px;padding:25px 32px;background-color:#5b5ce2;background-image:linear-gradient(135deg,#0891b2 0%,#4f46e5 55%,#7c3aed 100%);"><a href="https://100393.com/" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:20px;font-weight:750;"><span style="display:inline-block;width:10px;height:10px;margin-right:11px;border-radius:999px;background:#a5f3fc;vertical-align:1px;"></span>Desktop2Stereo</a></div>
@@ -37,6 +55,8 @@ Subject: `Verify your Desktop2Stereo email`
     <p style="margin:0;font-size:13px;color:#66728f;">This code expires in 10 minutes. If you did not request this email, you can safely ignore it.</p>
   </div>
 </div>
+</body>
+</html>
 ```
 
 ## 中文密码重置
@@ -44,6 +64,14 @@ Subject: `Verify your Desktop2Stereo email`
 主题：`重置 Desktop2Stereo 密码`
 
 ```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>重置 Desktop2Stereo 密码</title>
+</head>
+<body style="margin:0;padding:0;">
 <div style="background-color:#f4f7ff;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;color:#172033;line-height:1.55;">
   <div style="max-width:560px;margin:0 auto;overflow:hidden;background-color:#ffffff;border:1px solid #dfe7ff;border-radius:18px;padding:40px 40px 32px;box-shadow:0 16px 40px rgba(37,57,128,0.10);">
     <div style="margin:-40px -40px 32px;padding:25px 32px;background-color:#5b5ce2;background-image:linear-gradient(135deg,#0891b2 0%,#4f46e5 55%,#7c3aed 100%);"><a href="https://100393.com/" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:20px;font-weight:750;"><span style="display:inline-block;width:10px;height:10px;margin-right:11px;border-radius:999px;background:#a5f3fc;vertical-align:1px;"></span>Desktop2Stereo</a></div>
@@ -53,6 +81,8 @@ Subject: `Verify your Desktop2Stereo email`
     <p style="margin:0;font-size:13px;color:#66728f;">该链接 10 分钟内有效且只能使用一次。如果这不是您的操作，请忽略此邮件。</p>
   </div>
 </div>
+</body>
+</html>
 ```
 
 ## English password reset
@@ -60,6 +90,14 @@ Subject: `Verify your Desktop2Stereo email`
 Subject: `Reset your Desktop2Stereo password`
 
 ```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your Desktop2Stereo password</title>
+</head>
+<body style="margin:0;padding:0;">
 <div style="background-color:#f4f7ff;padding:40px 16px;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;color:#172033;line-height:1.55;">
   <div style="max-width:560px;margin:0 auto;overflow:hidden;background-color:#ffffff;border:1px solid #dfe7ff;border-radius:18px;padding:40px 40px 32px;box-shadow:0 16px 40px rgba(37,57,128,0.10);">
     <div style="margin:-40px -40px 32px;padding:25px 32px;background-color:#5b5ce2;background-image:linear-gradient(135deg,#0891b2 0%,#4f46e5 55%,#7c3aed 100%);"><a href="https://100393.com/" style="display:inline-block;color:#ffffff;text-decoration:none;font-size:20px;font-weight:750;"><span style="display:inline-block;width:10px;height:10px;margin-right:11px;border-radius:999px;background:#a5f3fc;vertical-align:1px;"></span>Desktop2Stereo</a></div>
@@ -69,4 +107,6 @@ Subject: `Reset your Desktop2Stereo password`
     <p style="margin:0;font-size:13px;color:#66728f;">This link expires in 10 minutes and can only be used once. If you did not request a password reset, you can safely ignore this email.</p>
   </div>
 </div>
+</body>
+</html>
 ```
