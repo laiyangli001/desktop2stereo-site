@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { RefreshCcwIcon, RocketIcon } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -34,6 +34,15 @@ type ProjectUpdateStatus = {
   configured: boolean
   script: string
   version: string
+  current_sha?: string
+  runtime?: {
+    state: 'idle' | 'running' | 'succeeded' | 'failed'
+    phase: string
+    message: string
+    error?: string
+    sha?: string
+    updated_at?: string
+  }
 }
 
 type ProjectUpdateCommit = {
@@ -59,9 +68,68 @@ export function UpdateCheckerSection({
   const [applying, setApplying] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<ProjectUpdateStatus | null>(null)
   const [latestCommit, setLatestCommit] = useState<ProjectUpdateCommit | null>(null)
+  const [displayVersion, setDisplayVersion] = useState(currentVersion || '')
+  const [activeSHA, setActiveSHA] = useState<string | null>(null)
+
+  useEffect(() => {
+    setDisplayVersion(currentVersion || '')
+  }, [currentVersion])
+
+  useEffect(() => {
+    if (!applying) return
+
+    let stopped = false
+    let finished = false
+    const poll = async () => {
+      try {
+        const response = await api.get<{
+          success: boolean
+          data: ProjectUpdateStatus
+        }>('/api/option/project-update/status')
+        if (stopped) return
+        const status = response.data.data
+        setUpdateStatus(status)
+        const runtime = status.runtime
+        if (!runtime || runtime.state === 'running') return
+        if (activeSHA && runtime.sha && runtime.sha.toLowerCase() !== activeSHA.toLowerCase()) {
+          return
+        }
+        if (runtime.state === 'succeeded') {
+          finished = true
+          setApplying(false)
+          setDisplayVersion(status.current_sha || runtime.sha || status.version)
+          toast.success(t('Project update completed successfully'))
+        } else if (runtime.state === 'failed') {
+          finished = true
+          setApplying(false)
+          toast.error(runtime.error || runtime.message || t('Project update failed'))
+        }
+      } catch {
+        // The application may be restarting. Keep polling until the status file reports a result.
+      }
+    }
+
+    void poll()
+    const timer = window.setInterval(() => {
+      if (!finished) void poll()
+    }, 2000)
+    return () => {
+      stopped = true
+      window.clearInterval(timer)
+    }
+  }, [activeSHA, applying, t])
 
   const uptime = startTime ? formatTimestamp(startTime) : t('Unknown')
-  const version = currentVersion || t('Unknown')
+  const version = displayVersion || updateStatus?.current_sha || t('Unknown')
+  const updatePhases = [
+    ['backup', t('Backup database')],
+    ['download', t('Download project')],
+    ['build', t('Build Docker image')],
+    ['restart', t('Restart application')],
+    ['health', t('Health check')],
+  ] as const
+  const activePhase = updateStatus?.runtime?.phase
+  const activePhaseIndex = updatePhases.findIndex(([phase]) => phase === activePhase)
 
   const handleCheckUpdates = async () => {
     setChecking(true)
@@ -96,6 +164,7 @@ export function UpdateCheckerSection({
     if (!window.confirm(t('Start the project update now? The service will restart after backup and health checks.'))) {
       return
     }
+    setActiveSHA(latestCommit.sha)
     setApplying(true)
     try {
       const response = await api.post<{ success: boolean; message: string }>(
@@ -103,11 +172,13 @@ export function UpdateCheckerSection({
         { sha: latestCommit.sha }
       )
       if (response.data.success) toast.success(response.data.message)
-      else toast.error(response.data.message)
+      else {
+        setApplying(false)
+        toast.error(response.data.message)
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('Failed to start project update'))
-    } finally {
       setApplying(false)
+      toast.error(error instanceof Error ? error.message : t('Failed to start project update'))
     }
   }
 
@@ -155,8 +226,35 @@ export function UpdateCheckerSection({
                 <div>{latestCommit.commit.message.split('\n')[0]}</div>
                 <Button type='button' className='mt-2' onClick={handleApplyUpdate} disabled={applying || checking}>
                   <RocketIcon className='me-2 h-4 w-4' />
-                  {applying ? t('Starting update...') : t('Update server to this commit')}
+                  {applying ? t('Updating...') : t('Update server to this commit')}
                 </Button>
+              </div>
+            )}
+            {applying && updateStatus?.runtime && (
+              <div className='mt-4 rounded-md bg-muted p-3'>
+                <div className='font-medium'>{updateStatus.runtime.message}</div>
+                <div className='text-muted-foreground mt-1 text-xs'>
+                  {updateStatus.runtime.phase} · {t('Status is refreshed every 2 seconds')}
+                </div>
+                <div className='mt-3 grid gap-2 sm:grid-cols-5'>
+                  {updatePhases.map(([phase, label], index) => (
+                    <div
+                      key={phase}
+                      className={
+                        index <= activePhaseIndex
+                          ? 'rounded border border-primary bg-primary/10 px-2 py-1 text-xs'
+                          : 'rounded border px-2 py-1 text-xs text-muted-foreground'
+                      }
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!applying && updateStatus?.runtime?.state === 'failed' && (
+              <div className='mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm'>
+                {updateStatus.runtime.error || updateStatus.runtime.message}
               </div>
             )}
           </div>

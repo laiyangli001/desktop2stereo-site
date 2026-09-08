@@ -37,6 +37,16 @@ type projectUpdateConfig struct {
 	Script       string
 	BackupScript string
 	RequestFile  string
+	StatusFile   string
+}
+
+type projectUpdateRuntimeStatus struct {
+	State     string `json:"state"`
+	Phase     string `json:"phase"`
+	Message   string `json:"message"`
+	Error     string `json:"error,omitempty"`
+	SHA       string `json:"sha,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
 type projectUpdateCommit struct {
@@ -63,11 +73,17 @@ func getProjectUpdateConfig() projectUpdateConfig {
 	if backupScript == "" {
 		backupScript = "/usr/local/sbin/desktop2stereo-db-backup"
 	}
+	requestFile := strings.TrimSpace(os.Getenv("D2S_UPDATE_REQUEST_FILE"))
+	statusFile := strings.TrimSpace(os.Getenv("D2S_UPDATE_STATUS_FILE"))
+	if statusFile == "" && requestFile != "" {
+		statusFile = filepath.Join(filepath.Dir(requestFile), "status.json")
+	}
 	return projectUpdateConfig{
 		Enabled:      common.GetEnvOrDefaultBool("D2S_UPDATE_ENABLED", false),
 		Script:       script,
 		BackupScript: backupScript,
-		RequestFile:  strings.TrimSpace(os.Getenv("D2S_UPDATE_REQUEST_FILE")),
+		RequestFile:  requestFile,
+		StatusFile:   statusFile,
 	}
 }
 
@@ -78,19 +94,37 @@ func GetProjectUpdateStatus(c *gin.Context) {
 	scriptReady := statErr == nil && stat.Mode().Perm()&0111 != 0
 	backupReady := backupStatErr == nil && backupStat.Mode().Perm()&0111 != 0
 	requestReady := config.RequestFile != "" && updateRequestDirectoryReady(config.RequestFile)
+	runtimeStatus := readProjectUpdateRuntimeStatus(config.StatusFile)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"repository": projectUpdateRepository,
-			"branch":     projectUpdateBranch,
-			"enabled":    config.Enabled,
-			"configured": config.Enabled && ((scriptReady && backupReady) || requestReady),
-			"mode":       map[bool]string{true: "request-file", false: "script"}[config.RequestFile != ""],
-			"script":     config.Script,
-			"version":    common.Version,
+			"repository":  projectUpdateRepository,
+			"branch":      projectUpdateBranch,
+			"enabled":     config.Enabled,
+			"configured":  config.Enabled && ((scriptReady && backupReady) || requestReady),
+			"mode":        map[bool]string{true: "request-file", false: "script"}[config.RequestFile != ""],
+			"script":      config.Script,
+			"version":     common.Version,
+			"current_sha": runtimeStatus.SHA,
+			"runtime":     runtimeStatus,
 		},
 	})
+}
+
+func readProjectUpdateRuntimeStatus(filename string) projectUpdateRuntimeStatus {
+	if filename == "" {
+		return projectUpdateRuntimeStatus{State: "idle"}
+	}
+	contents, err := os.ReadFile(filename)
+	if err != nil {
+		return projectUpdateRuntimeStatus{State: "idle"}
+	}
+	var status projectUpdateRuntimeStatus
+	if err := json.Unmarshal(contents, &status); err != nil || status.State == "" {
+		return projectUpdateRuntimeStatus{State: "idle"}
+	}
+	return status
 }
 
 func CheckProjectUpdate(c *gin.Context) {

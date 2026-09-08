@@ -6,6 +6,44 @@ APP_ROOT="${D2S_DOCKER_APP_ROOT:-/opt/desktop2stereo-site}"
 RELEASE_ROOT="${D2S_DOCKER_RELEASE_ROOT:-/opt/desktop2stereo-releases}"
 BACKUP_SCRIPT="${D2S_UPDATE_BACKUP_SCRIPT:-/usr/local/sbin/desktop2stereo-db-backup}"
 SHA="${1:-}"
+STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
+CURRENT_PHASE="starting"
+
+write_status() {
+  local state="$1" phase="$2" message="$3" error_message="${4:-}"
+  local temporary="${STATUS_FILE}.tmp"
+  mkdir -p "$(dirname "$STATUS_FILE")"
+  STATUS_STATE="$state" STATUS_PHASE="$phase" STATUS_MESSAGE="$message" \
+    STATUS_ERROR="$error_message" STATUS_SHA="$SHA" STATUS_UPDATED_AT="$(date -Is)" \
+    python3 - "$temporary" <<'PY'
+import json
+import os
+import sys
+
+payload = {
+    "state": os.environ["STATUS_STATE"],
+    "phase": os.environ["STATUS_PHASE"],
+    "message": os.environ["STATUS_MESSAGE"],
+    "sha": os.environ["STATUS_SHA"],
+    "updated_at": os.environ["STATUS_UPDATED_AT"],
+}
+if os.environ["STATUS_ERROR"]:
+    payload["error"] = os.environ["STATUS_ERROR"]
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(payload, handle, ensure_ascii=False)
+    handle.write("\n")
+PY
+  mv -f -- "$temporary" "$STATUS_FILE"
+}
+
+handle_error() {
+  local exit_code=$?
+  set +e
+  write_status "failed" "$CURRENT_PHASE" "更新失败" "更新脚本在阶段 ${CURRENT_PHASE} 退出，代码 ${exit_code}"
+  exit "$exit_code"
+}
+
+trap handle_error ERR
 
 if [[ ! "$SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "invalid commit SHA" >&2
@@ -31,17 +69,24 @@ trap cleanup EXIT
 
 RELEASE="$RELEASE_ROOT/$SHA"
 if [[ -e "$RELEASE" ]]; then
+	write_status "succeeded" "completed" "该版本已部署，无需重复更新"
   echo "release already prepared: $RELEASE"
   exit 0
 fi
 
+CURRENT_PHASE="backup"
+write_status "running" "$CURRENT_PHASE" "正在备份数据库"
 "$BACKUP_SCRIPT" "$APP_ROOT/backups" "$SHA"
 ARCHIVE="$RELEASE_ROOT/.desktop2stereo-$SHA.tar.gz"
 EXTRACT_ROOT="$RELEASE_ROOT/.desktop2stereo-$SHA"
 rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
 mkdir -p "$EXTRACT_ROOT"
+CURRENT_PHASE="download"
+write_status "running" "$CURRENT_PHASE" "正在下载项目代码"
 curl --fail --location --retry 3 --connect-timeout 10 --max-time 300 \
   -o "$ARCHIVE" "https://codeload.github.com/$REPOSITORY/tar.gz/$SHA"
+CURRENT_PHASE="extract"
+write_status "running" "$CURRENT_PHASE" "正在解压项目代码"
 tar -xzf "$ARCHIVE" -C "$EXTRACT_ROOT"
 SOURCE_DIR="$(find "$EXTRACT_ROOT" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 if [[ -z "$SOURCE_DIR" ]]; then
@@ -60,12 +105,19 @@ ln -s "$APP_ROOT/logs" "$RELEASE/logs"
 ln -s "$APP_ROOT/update-requests" "$RELEASE/update-requests"
 
 docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:pre-$SHA"
+CURRENT_PHASE="build"
+write_status "running" "$CURRENT_PHASE" "正在构建 Docker 镜像"
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" build new-api
+CURRENT_PHASE="restart"
+write_status "running" "$CURRENT_PHASE" "正在重启应用容器"
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" up -d --no-deps new-api
 
+CURRENT_PHASE="health"
+write_status "running" "$CURRENT_PHASE" "正在执行健康检查"
 for _ in $(seq 1 30); do
   status="$(docker inspect -f '{{.State.Health.Status}}' new-api 2>/dev/null || true)"
   if [[ "$status" == "healthy" ]]; then
+	write_status "succeeded" "completed" "更新完成，应用健康检查通过"
     echo "Docker update succeeded: $SHA"
     exit 0
   fi
@@ -73,6 +125,9 @@ for _ in $(seq 1 30); do
 done
 
 echo "health check failed; restoring previous image" >&2
+CURRENT_PHASE="rollback"
+write_status "running" "$CURRENT_PHASE" "健康检查失败，正在恢复旧版本"
 docker tag "new-api-desktop2stereo-site:pre-$SHA" new-api-desktop2stereo-site:local
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" up -d --no-deps new-api || true
+write_status "failed" "rollback" "健康检查失败，已尝试恢复旧版本" "新版本健康检查未通过"
 exit 8
