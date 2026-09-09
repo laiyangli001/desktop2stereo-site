@@ -31,6 +31,8 @@ import {
 } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Switch } from '@/components/ui/switch'
+import { parseSidebarConfig } from '@/hooks/use-sidebar-config'
+import { useStatus } from '@/hooks/use-status'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -54,6 +56,7 @@ export function SidebarModulesCard() {
   const [config, setConfig] = useState<SidebarModulesConfig>({})
   const currentUser = useAuthStore((s) => s.auth.user)
   const setUser = useAuthStore((s) => s.auth.setUser)
+  const { status } = useStatus()
 
   const sectionDefs: SectionDef[] = [
     {
@@ -123,6 +126,22 @@ export function SidebarModulesCard() {
       ],
     },
   ]
+
+  // The administrator configuration is authoritative. Do not expose a
+  // personal switch for a section or module that the administrator disabled;
+  // the user cannot enable it and seeing a misleading switch is confusing.
+  const adminSidebarConfig = parseSidebarConfig(status?.SidebarModulesAdmin)
+  const visibleSectionDefs = sectionDefs
+    .map((section) => {
+      const adminSection = adminSidebarConfig[section.key]
+      if (!adminSection?.enabled) return null
+
+      const modules = section.modules.filter(
+        (module) => adminSection[module.key] === true
+      )
+      return modules.length > 0 ? { ...section, modules } : null
+    })
+    .filter((section): section is SectionDef => section !== null)
 
   const loadConfig = useCallback(async () => {
     try {
@@ -219,7 +238,7 @@ export function SidebarModulesCard() {
         </div>
       </CardHeader>
       <CardContent className='space-y-4 p-3 sm:space-y-5 sm:p-5'>
-        {sectionDefs.map((section) => {
+        {visibleSectionDefs.map((section) => {
           const sectionEnabled = config[section.key]?.enabled !== false
           return (
             <div
