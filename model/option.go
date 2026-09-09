@@ -86,6 +86,8 @@ func InitOptionMap() {
 	common.OptionMap["TencentSESTimeoutSeconds"] = "10"
 	common.OptionMap["TencentSESRetryCount"] = "1"
 	common.OptionMap["TencentSESTemplates"] = "{}"
+	common.OptionMap["D2SUpdateRepository"] = "laiyangli001/desktop2stereo-site"
+	common.OptionMap["D2SUpdateBranch"] = "main"
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""

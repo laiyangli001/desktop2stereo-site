@@ -20,16 +20,16 @@ import (
 )
 
 const (
-	projectUpdateRepository = "laiyangli001/desktop2stereo-site"
-	projectUpdateBranch     = "main"
-	projectUpdateAPIURL     = "https://api.github.com/repos/" + projectUpdateRepository + "/commits/" + projectUpdateBranch
-	projectUpdateScript     = "/usr/local/sbin/desktop2stereo-update"
+	projectUpdateRepositoryDefault = "laiyangli001/desktop2stereo-site"
+	projectUpdateBranchDefault     = "main"
+	projectUpdateScript            = "/usr/local/sbin/desktop2stereo-update"
 )
 
 var (
-	projectUpdateSHAPattern  = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
-	projectUpdateMu          sync.Mutex
-	projectUpdateAPIEndpoint = projectUpdateAPIURL
+	projectUpdateSHAPattern        = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
+	projectUpdateMu                sync.Mutex
+	projectUpdateRepositoryPattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
+	projectUpdateBranchPattern     = regexp.MustCompile(`^[A-Za-z0-9._/-]+$`)
 )
 
 type projectUpdateConfig struct {
@@ -38,6 +38,9 @@ type projectUpdateConfig struct {
 	BackupScript string
 	RequestFile  string
 	StatusFile   string
+	SourceFile   string
+	Repository   string
+	Branch       string
 }
 
 type projectUpdateRuntimeStatus struct {
@@ -78,12 +81,35 @@ func getProjectUpdateConfig() projectUpdateConfig {
 	if statusFile == "" && requestFile != "" {
 		statusFile = filepath.Join(filepath.Dir(requestFile), "status.json")
 	}
+	sourceFile := strings.TrimSpace(os.Getenv("D2S_UPDATE_SOURCE_FILE"))
+	if sourceFile == "" && requestFile != "" {
+		sourceFile = filepath.Join(filepath.Dir(requestFile), "source")
+	}
+	repository := strings.TrimSpace(os.Getenv("D2S_UPDATE_REPOSITORY"))
+	branch := strings.TrimSpace(os.Getenv("D2S_UPDATE_BRANCH"))
+	common.OptionMapRWMutex.RLock()
+	if value, ok := common.OptionMap["D2SUpdateRepository"]; ok && strings.TrimSpace(value) != "" {
+		repository = strings.TrimSpace(value)
+	}
+	if value, ok := common.OptionMap["D2SUpdateBranch"]; ok && strings.TrimSpace(value) != "" {
+		branch = strings.TrimSpace(value)
+	}
+	common.OptionMapRWMutex.RUnlock()
+	if repository == "" {
+		repository = projectUpdateRepositoryDefault
+	}
+	if branch == "" {
+		branch = projectUpdateBranchDefault
+	}
 	return projectUpdateConfig{
 		Enabled:      common.GetEnvOrDefaultBool("D2S_UPDATE_ENABLED", false),
 		Script:       script,
 		BackupScript: backupScript,
 		RequestFile:  requestFile,
 		StatusFile:   statusFile,
+		SourceFile:   sourceFile,
+		Repository:   repository,
+		Branch:       branch,
 	}
 }
 
@@ -99,8 +125,8 @@ func GetProjectUpdateStatus(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"repository": projectUpdateRepository,
-			"branch":     projectUpdateBranch,
+			"repository": config.Repository,
+			"branch":     config.Branch,
 			"enabled":    config.Enabled,
 			"configured": config.Enabled && ((scriptReady && backupReady) || requestReady),
 			"mode":       map[bool]string{true: "request-file", false: "script"}[config.RequestFile != ""],
@@ -130,7 +156,12 @@ func readProjectUpdateRuntimeStatus(filename string) projectUpdateRuntimeStatus 
 }
 
 func CheckProjectUpdate(c *gin.Context) {
-	commit, err := fetchProjectUpdateCommit(c.Request.Context())
+	config := getProjectUpdateConfig()
+	if err := validateProjectUpdateSource(config.Repository, config.Branch); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	commit, err := fetchProjectUpdateCommit(c.Request.Context(), config)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
@@ -139,8 +170,8 @@ func CheckProjectUpdate(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"repository": projectUpdateRepository,
-			"branch":     projectUpdateBranch,
+			"repository": config.Repository,
+			"branch":     config.Branch,
 			"commit":     commit,
 		},
 	})
@@ -175,7 +206,11 @@ func ApplyProjectUpdate(c *gin.Context) {
 		return
 	}
 
-	commit, err := fetchProjectUpdateCommit(c.Request.Context())
+	if err := validateProjectUpdateSource(config.Repository, config.Branch); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	commit, err := fetchProjectUpdateCommit(c.Request.Context(), config)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"success": false, "message": err.Error()})
 		return
@@ -187,12 +222,12 @@ func ApplyProjectUpdate(c *gin.Context) {
 
 	sha := strings.ToLower(request.SHA)
 	if config.RequestFile != "" {
-		if err := queueProjectUpdateRequest(config.RequestFile, sha); err != nil {
+		if err := queueProjectUpdateRequest(config.RequestFile, config.SourceFile, sha, config.Repository, config.Branch); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "无法写入服务器更新请求: " + err.Error()})
 			return
 		}
 	} else {
-		cmd := exec.Command(config.Script, sha)
+		cmd := exec.Command(config.Script, sha, config.Repository, config.Branch)
 		cmd.Dir = "/"
 		cmd.Stdout = io.Discard
 		cmd.Stderr = io.Discard
@@ -201,7 +236,7 @@ func ApplyProjectUpdate(c *gin.Context) {
 			return
 		}
 	}
-	common.SysLog("project update started: repository=" + projectUpdateRepository + ", sha=" + sha)
+	common.SysLog("project update started: repository=" + config.Repository + ", branch=" + config.Branch + ", sha=" + sha)
 	c.JSON(http.StatusAccepted, gin.H{
 		"success": true,
 		"message": "项目更新请求已提交，服务将在备份、构建和健康检查完成后切换版本",
@@ -214,7 +249,15 @@ func updateRequestDirectoryReady(requestFile string) bool {
 	return err == nil && info.IsDir()
 }
 
-func queueProjectUpdateRequest(requestFile string, sha string) error {
+func queueProjectUpdateRequest(requestFile string, sourceFile string, sha string, repository string, branch string) error {
+	sourceTemporary := sourceFile + ".tmp"
+	if err := os.WriteFile(sourceTemporary, []byte(repository+"\n"+branch+"\n"), 0600); err != nil {
+		return err
+	}
+	if err := os.Rename(sourceTemporary, sourceFile); err != nil {
+		_ = os.Remove(sourceTemporary)
+		return err
+	}
 	temporary := requestFile + ".tmp"
 	if err := os.WriteFile(temporary, []byte(sha+"\n"), 0600); err != nil {
 		return err
@@ -226,10 +269,21 @@ func queueProjectUpdateRequest(requestFile string, sha string) error {
 	return nil
 }
 
-func fetchProjectUpdateCommit(parent context.Context) (projectUpdateCommit, error) {
+func validateProjectUpdateSource(repository string, branch string) error {
+	if !projectUpdateRepositoryPattern.MatchString(repository) {
+		return errors.New("更新仓库必须是 owner/repository 格式")
+	}
+	if !projectUpdateBranchPattern.MatchString(branch) || strings.Contains(branch, "..") || strings.HasPrefix(branch, "/") || strings.HasSuffix(branch, "/") {
+		return errors.New("更新分支名称无效")
+	}
+	return nil
+}
+
+func fetchProjectUpdateCommit(parent context.Context, config projectUpdateConfig) (projectUpdateCommit, error) {
 	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, projectUpdateAPIEndpoint, nil)
+	endpoint := "https://api.github.com/repos/" + config.Repository + "/commits/" + config.Branch
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return projectUpdateCommit{}, err
 	}

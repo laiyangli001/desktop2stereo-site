@@ -3,8 +3,8 @@ set -Eeuo pipefail
 
 # This script is intentionally fixed to the Desktop2Stereo repository.
 # It never copies shared data into a release directory.
-REPOSITORY="https://github.com/laiyangli001/desktop2stereo-site.git"
-BRANCH="main"
+REPOSITORY="${2:-${D2S_UPDATE_REPOSITORY:-laiyangli001/desktop2stereo-site}}"
+BRANCH="${3:-${D2S_UPDATE_BRANCH:-main}}"
 ROOT="${D2S_UPDATE_ROOT:-/opt/desktop2stereo}"
 RELEASES="$ROOT/releases"
 SHARED="$ROOT/shared"
@@ -17,6 +17,10 @@ SHA="${1:-}"
 
 if [[ ! "$SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "invalid commit SHA" >&2
+  exit 2
+fi
+if [[ ! "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ || "$BRANCH" == /* || "$BRANCH" == */ || "$BRANCH" == *..* ]]; then
+  echo "invalid update source" >&2
   exit 2
 fi
 if [[ ! -d "$SHARED" || ! -f "$SHARED/.env" ]]; then
@@ -49,7 +53,7 @@ fi
 
 "$BACKUP_SCRIPT" "$SHARED/backups" "$SHA"
 
-git clone --filter=blob:none --no-checkout --branch "$BRANCH" --single-branch "$REPOSITORY" "$RELEASE"
+git clone --filter=blob:none --no-checkout --branch "$BRANCH" --single-branch "https://github.com/$REPOSITORY.git" "$RELEASE"
 git -C "$RELEASE" checkout --detach "$SHA"
 ln -s "$SHARED/.env" "$RELEASE/.env"
 if [[ -d "$SHARED/uploads" ]]; then

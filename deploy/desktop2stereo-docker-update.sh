@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPOSITORY="laiyangli001/desktop2stereo-site"
+REPOSITORY="${2:-${D2S_UPDATE_REPOSITORY:-laiyangli001/desktop2stereo-site}}"
+BRANCH="${3:-${D2S_UPDATE_BRANCH:-main}}"
 APP_ROOT="${D2S_DOCKER_APP_ROOT:-/opt/desktop2stereo-site}"
 RELEASE_ROOT="${D2S_DOCKER_RELEASE_ROOT:-/opt/desktop2stereo-releases}"
 BACKUP_SCRIPT="${D2S_UPDATE_BACKUP_SCRIPT:-/usr/local/sbin/desktop2stereo-db-backup}"
@@ -11,7 +12,15 @@ BUILD_GOSUMDB="${D2S_BUILD_GOSUMDB:-off}"
 BUILD_TIMEOUT_SECONDS="${D2S_BUILD_TIMEOUT_SECONDS:-900}"
 SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
+SOURCE_FILE="${D2S_UPDATE_SOURCE_FILE:-$APP_ROOT/update-requests/source}"
 CURRENT_PHASE="starting"
+
+if [[ -z "${2:-}" && -f "$SOURCE_FILE" ]]; then
+  mapfile -t SOURCE_FIELDS < "$SOURCE_FILE"
+  REPOSITORY="${SOURCE_FIELDS[0]//[[:space:]]/}"
+  BRANCH="${SOURCE_FIELDS[1]//[[:space:]]/}"
+  rm -f -- "$SOURCE_FILE"
+fi
 
 write_status() {
   local state="$1" phase="$2" message="$3" error_message="${4:-}"
@@ -51,6 +60,10 @@ trap handle_error ERR
 
 if [[ ! "$SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
   echo "invalid commit SHA" >&2
+  exit 2
+fi
+if [[ ! "$REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || ! "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ || "$BRANCH" == /* || "$BRANCH" == */ || "$BRANCH" == *..* ]]; then
+  echo "invalid update source" >&2
   exit 2
 fi
 if [[ ! -x "$BACKUP_SCRIPT" ]]; then

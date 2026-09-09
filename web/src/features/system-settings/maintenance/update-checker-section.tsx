@@ -22,9 +22,12 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { formatTimestamp } from '@/lib/format'
 
+import { updateSystemOption } from '../api'
 import { SettingsSection } from '../components/settings-section'
 
 type ProjectUpdateStatus = {
@@ -74,6 +77,9 @@ export function UpdateCheckerSection({
   )
   const [displayVersion, setDisplayVersion] = useState(currentVersion || '')
   const [activeSHA, setActiveSHA] = useState<string | null>(null)
+  const [sourceRepository, setSourceRepository] = useState('')
+  const [sourceBranch, setSourceBranch] = useState('')
+  const [savingSource, setSavingSource] = useState(false)
 
   useEffect(() => {
     setDisplayVersion(currentVersion || '')
@@ -91,6 +97,8 @@ export function UpdateCheckerSection({
         if (stopped) return
         const status = response.data.data
         setUpdateStatus(status)
+        setSourceRepository(status.repository)
+        setSourceBranch(status.branch)
         const runtime = status.runtime
         if (!runtime) return
         if (runtime.state === 'running') {
@@ -172,6 +180,8 @@ export function UpdateCheckerSection({
         ),
       ])
       setUpdateStatus(statusResponse.data.data)
+      setSourceRepository(statusResponse.data.data.repository)
+      setSourceBranch(statusResponse.data.data.branch)
       setLatestCommit(commitResponse.data.data.commit)
       toast.success(t('Project update source checked successfully'))
     } catch (error) {
@@ -182,6 +192,42 @@ export function UpdateCheckerSection({
       toast.error(message)
     } finally {
       setChecking(false)
+    }
+  }
+
+  const handleSaveSource = async () => {
+    const repository = sourceRepository.trim()
+    const branch = sourceBranch.trim()
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)) {
+      toast.error(t('Repository must use the owner/repository format'))
+      return
+    }
+    if (
+      !/^[A-Za-z0-9._\/-]+$/.test(branch) ||
+      branch.includes('..') ||
+      branch.startsWith('/') ||
+      branch.endsWith('/')
+    ) {
+      toast.error(t('Branch name is invalid'))
+      return
+    }
+    setSavingSource(true)
+    try {
+      await updateSystemOption({
+        key: 'D2SUpdateRepository',
+        value: repository,
+      })
+      await updateSystemOption({ key: 'D2SUpdateBranch', value: branch })
+      setLatestCommit(null)
+      toast.success(t('Project update source saved'))
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to save project update source')
+      )
+    } finally {
+      setSavingSource(false)
     }
   }
 
@@ -265,9 +311,33 @@ export function UpdateCheckerSection({
         )}
         <div className='rounded-lg border p-4 text-sm'>
           <div className='font-semibold'>{t('Project update source')}</div>
-          <div className='text-muted-foreground mt-2'>
-            {updateStatus?.repository ?? 'laiyangli001/desktop2stereo-site'}:
-            {updateStatus?.branch ?? 'main'}
+          <div className='mt-3 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] md:items-end'>
+            <div className='space-y-1'>
+              <Label>{t('Repository')}</Label>
+              <Input
+                value={sourceRepository}
+                onChange={(event) => setSourceRepository(event.target.value)}
+                placeholder='owner/repository'
+                disabled={applying || savingSource}
+              />
+            </div>
+            <div className='space-y-1'>
+              <Label>{t('Branch')}</Label>
+              <Input
+                value={sourceBranch}
+                onChange={(event) => setSourceBranch(event.target.value)}
+                placeholder='main'
+                disabled={applying || savingSource}
+              />
+            </div>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={handleSaveSource}
+              disabled={checking || applying || savingSource}
+            >
+              {savingSource ? t('Saving...') : t('Save source')}
+            </Button>
           </div>
           <div className='text-muted-foreground mt-1'>
             {updateStatus?.configured
@@ -279,11 +349,23 @@ export function UpdateCheckerSection({
                 )}
           </div>
           {latestCommit && (
-            <div className='mt-3 space-y-1'>
-              <div className='font-mono text-xs'>{latestCommit.sha}</div>
-              <div>{latestCommit.commit.message.split('\n')[0]}</div>
+            <div className='mt-4 space-y-3'>
+              <div className='border-border border-t' />
+              <div className='font-medium'>{t('Detected new commit')}</div>
+              <div className='space-y-1 rounded-md border p-3'>
+                <div className='text-muted-foreground text-xs'>
+                  {t('Commit SHA')}
+                </div>
+                <div className='font-mono text-xs break-all'>
+                  {latestCommit.sha}
+                </div>
+                <div className='text-muted-foreground mt-2 text-xs'>
+                  {t('Commit message')}
+                </div>
+                <div>{latestCommit.commit.message.split('\n')[0]}</div>
+              </div>
               {isUpToDate ? (
-                <div className='text-muted-foreground mt-3'>
+                <div className='text-muted-foreground'>
                   {t(
                     'The server is already running this commit. No update is needed.'
                   )}

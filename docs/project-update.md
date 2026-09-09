@@ -2,16 +2,14 @@
 
 New API“运维 → 系统维护”中的更新功能只更新本项目：
 
-```text
-https://github.com/laiyangli001/desktop2stereo-site
-```
+默认更新源为 `laiyangli001/desktop2stereo-site:main`，可在“运维 → 系统维护”的“项目更新源”中修改仓库和分支。
 
 不会检查或下载 `Calcium-Ion/new-api` 上游版本。
 
 ## 安全边界
 
-- 更新仓库、分支和执行脚本不由浏览器传入，仓库固定为 Desktop2Stereo 项目。
-- 页面只能提交 GitHub 返回的 40 位 commit SHA，服务端会再次向 GitHub 校验 SHA 是否仍为 `main` 最新提交。
+- 更新仓库和分支保存在服务端系统配置中，不接受 shell 命令；页面输入会经过 owner/repository、分支字符和路径校验。
+- 页面只能提交 GitHub 返回的 40 位 commit SHA，服务端会再次向 GitHub 校验 SHA 是否仍为已配置分支的最新提交。
 - Docker 部署通过固定的 `/opt/desktop2stereo-site/update-requests/request` 请求文件触发更新；宿主机
   `desktop2stereo-update-watcher` 只读取并删除该文件，再调用固定的
   `/usr/local/sbin/desktop2stereo-docker-update`，不接受浏览器传入的 shell 命令。
@@ -88,6 +86,7 @@ D2S_UPDATE_SERVICE=desktop2stereo
 D2S_UPDATE_ENABLED=true
 D2S_UPDATE_REQUEST_FILE=/opt/desktop2stereo-site/update-requests/request
 D2S_UPDATE_STATUS_FILE=/opt/desktop2stereo-site/update-requests/status.json
+D2S_UPDATE_SOURCE_FILE=/opt/desktop2stereo-site/update-requests/source
 D2S_DOCKER_APP_ROOT=/opt/desktop2stereo-site
 D2S_DOCKER_RELEASE_ROOT=/opt/desktop2stereo-releases
 D2S_DOCKER_UPDATE_SCRIPT=/usr/local/sbin/desktop2stereo-docker-update
@@ -99,12 +98,13 @@ D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
 
 ## 页面操作流程
 
-1. 点击“检查项目更新”。服务器从固定项目的 `main` 分支读取最新 commit。
-2. 核对 commit SHA 和提交说明。
-3. 点击“更新服务器到此提交”。
-4. 服务端启动固定更新脚本。
-5. 脚本先备份数据库，再下载指定 commit。
-6. 在独立 release 目录编译前端和 Go 程序。
+1. 在“项目更新源”中填写 GitHub `owner/repository` 和分支，点击“保存更新源”。
+2. 点击“检查项目更新”。服务器从已保存的仓库分支读取最新 commit。
+3. 核对 commit SHA 和提交说明。
+4. 点击“更新服务器到此提交”。
+5. 服务端启动固定更新脚本，并把已校验的仓库、分支和 commit SHA 传给脚本。
+6. 脚本先备份数据库，再下载指定 commit。
+7. 在独立 release 目录编译前端和 Go 程序。
    构建时将目标完整 commit SHA 注入前端版本、Go `common.Version` 和
    `org.opencontainers.image.revision`，并额外保留 `new-api-desktop2stereo-site:<commit-sha>` 镜像标签。
    服务器更新器默认使用腾讯云可达的 `https://goproxy.cn,direct`；由于生产服务器可能无法访问
@@ -115,9 +115,9 @@ D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
    超时会进入失败状态并保留旧容器，不会继续等待或切换未完成镜像。
    只有健康检查通过后，发布目录才会写入 `.update-complete` 标记；中途失败或被终止留下的
    不完整目录会在同一 SHA 重试时清理并重新构建，不会被误判为“已部署”。
-7. 原子切换 `current` 软链接。
-8. 重启服务并请求健康接口。
-9. 健康检查失败时恢复旧软链接并重启旧版本。
+8. 原子切换 `current` 软链接。
+9. 重启服务并请求健康接口。
+10. 健康检查失败时恢复旧软链接并重启旧版本。
 
 禁止在服务器更新时执行以下操作：
 

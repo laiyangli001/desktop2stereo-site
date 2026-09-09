@@ -147,6 +147,16 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	switch option.Key {
+	case "D2SUpdateRepository":
+		if !projectUpdateRepositoryPattern.MatchString(strings.TrimSpace(option.Value.(string))) {
+			common.ApiErrorMsg(c, "更新仓库必须是 owner/repository 格式")
+			return
+		}
+	case "D2SUpdateBranch":
+		if err := validateProjectUpdateSource(projectUpdateRepositoryDefault, strings.TrimSpace(option.Value.(string))); err != nil {
+			common.ApiErrorMsg(c, err.Error())
+			return
+		}
 	case "QuotaForInviter", "QuotaForInvitee":
 		if isPositiveOptionValue(option.Value.(string)) && !operation_setting.IsPaymentComplianceConfirmed() {
 			common.ApiErrorI18n(c, i18n.MsgPaymentComplianceRequired)
