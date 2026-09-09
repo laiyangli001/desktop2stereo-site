@@ -16,9 +16,6 @@ import {
 
 import {
   getD2SBalance,
-  getD2SBalanceTransactions,
-  getD2SInvite,
-  getD2SInviteRecords,
   getD2SLicenses,
   getD2SOrders,
   getD2SCheckoutProviders,
@@ -295,21 +292,6 @@ export function D2SWorkspace(
     queryFn: getD2SBalance,
     enabled: view === 'wallet',
   })
-  const balanceTransactions = useQuery({
-    queryKey: ['d2s', 'balance-transactions'],
-    queryFn: getD2SBalanceTransactions,
-    enabled: view === 'wallet',
-  })
-  const invite = useQuery({
-    queryKey: ['d2s', 'invite'],
-    queryFn: getD2SInvite,
-    enabled: view === 'wallet',
-  })
-  const inviteRecords = useQuery({
-    queryKey: ['d2s', 'invite-records'],
-    queryFn: getD2SInviteRecords,
-    enabled: view === 'wallet',
-  })
   const withdrawals = useQuery({
     queryKey: ['d2s', 'withdrawals'],
     queryFn: getD2SWithdrawals,
@@ -385,9 +367,6 @@ export function D2SWorkspace(
           orders,
           checkoutProviders,
           balance,
-          balanceTransactions,
-          invite,
-          inviteRecords,
           withdrawals,
           manualUnbinds,
         ]
@@ -396,7 +375,6 @@ export function D2SWorkspace(
   const d2sDataFailed = d2sQueries.some((query) => query.isError)
 
   const accountRows = balance.data?.data?.accounts ?? []
-  const transactionRows = balanceTransactions.data?.data?.transactions ?? []
   const orderRows = orders.data?.data?.orders ?? []
   const withdrawalRows = withdrawals.data?.data?.withdrawals ?? []
   const purchasableLicenses = (licenses.data?.data?.licenses ?? []).filter(
@@ -419,21 +397,11 @@ export function D2SWorkspace(
   useEffect(() => {
     if (view !== 'wallet' || !props.onWalletSummaryChange) return
     props.onWalletSummaryChange({
-      accounts: accountRows,
-      transactions: transactionRows,
       orders: orderRows,
-      invite: invite.data?.data,
-      inviteRecords: inviteRecords.data?.data?.records ?? [],
-      minWithdrawalMinor: balance.data?.data?.min_withdrawal_minor ?? 5000,
     })
   }, [
-    accountRows,
-    balance.data?.data?.min_withdrawal_minor,
-    invite.data?.data,
-    inviteRecords.data?.data?.records,
     orderRows,
     props.onWalletSummaryChange,
-    transactionRows,
     view,
   ])
   const enabledCheckoutProviders = checkoutProviders.data?.data?.providers ?? []
@@ -556,46 +524,6 @@ export function D2SWorkspace(
                     </div>
                   </div>
                 ))}
-              </CardContent>
-            </Card>
-          )}
-
-          {showStandaloneWalletLedgers && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('Balance transactions')}</CardTitle>
-                <CardDescription>
-                  {t('Recent currency ledger entries.')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {transactionRows.length === 0 ? (
-                  <p className='text-muted-foreground'>
-                    {t('No balance transactions')}
-                  </p>
-                ) : (
-                  transactionRows.map((transaction) => (
-                    <div
-                      key={transaction.id}
-                      className='flex flex-wrap justify-between gap-2 border-b py-3 text-sm last:border-0'
-                    >
-                      <span>
-                        {transaction.kind}
-                        {transaction.order_id && ` · ${transaction.order_id}`}
-                      </span>
-                      <span>
-                        {transaction.amount_minor > 0 ? '+' : ''}
-                        {formatMoney(
-                          transaction.amount_minor,
-                          transaction.currency
-                        )}{' '}
-                        <span className='text-muted-foreground text-xs'>
-                          {formatDate(transaction.created_at)}
-                        </span>
-                      </span>
-                    </div>
-                  ))
-                )}
               </CardContent>
             </Card>
           )}
@@ -879,52 +807,6 @@ export function D2SWorkspace(
               (licenses.data?.data?.licenses?.length ?? 0) === 0 && (
                 <p className='text-muted-foreground'>{t('No licenses')}</p>
               )}
-          </section>
-        )}
-        {view === 'wallet' && !props.embeddedWallet && (
-          <section className='space-y-3' aria-labelledby='d2s-invite-title'>
-            <h2 id='d2s-invite-title' className='text-lg font-semibold'>
-              {t('Invitations')}
-            </h2>
-            <Card>
-              <CardContent className='space-y-2 pt-4'>
-                <div>
-                  {t('Invite code')}:{' '}
-                  <span className='font-mono'>
-                    {invite.data?.data?.invite_code ?? '—'}
-                  </span>
-                </div>
-                <div>
-                  {t('Rewarded accounts')}:{' '}
-                  {invite.data?.data?.rewarded_invitees ?? 0}
-                </div>
-                <div className='border-t pt-2'>
-                  <div className='font-medium'>{t('Reward history')}</div>
-                  {(inviteRecords.data?.data?.records?.length ?? 0) === 0 ? (
-                    <p className='text-muted-foreground text-sm'>
-                      {t('No invite rewards')}
-                    </p>
-                  ) : (
-                    <div className='space-y-1 text-sm'>
-                      {inviteRecords.data?.data?.records.map((record) => (
-                        <div
-                          key={record.id}
-                          className='flex flex-wrap justify-between gap-2'
-                        >
-                          <span>
-                            {t('Invitee')} #{record.invitee_user_id} ·{' '}
-                            <StatusBadge value={record.status} />
-                          </span>
-                          <span>
-                            +{formatMoney(record.amount_minor, record.currency)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
           </section>
         )}
       </div>

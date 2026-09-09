@@ -21,14 +21,12 @@ import { useTranslation } from 'react-i18next'
 
 import { IconBadge, type IconBadgeTone } from '@/components/ui/icon-badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { D2SWalletSummary } from '@/features/d2s/types'
 import { formatUserQuotaAmount } from '@/lib/quota-display'
 
 import type { UserWalletData } from '../types'
 
 interface WalletStatsCardProps {
   user: UserWalletData | null
-  d2sSummary?: D2SWalletSummary | null
   loading?: boolean
 }
 
@@ -97,49 +95,6 @@ export function WalletStatsCard(props: WalletStatsCardProps) {
           <div className='text-muted-foreground/60 mt-1 hidden text-xs md:block'>
             {item.description}
           </div>
-          {item.label === t('Current Balance') && props.d2sSummary ? (
-            <div className='mt-3 space-y-2 border-t pt-2 text-xs'>
-              <div className='font-medium'>{t('D2S balances')}</div>
-              {props.d2sSummary.accounts.length === 0 ? (
-                <div className='text-muted-foreground'>
-                  {t('No balance accounts')}
-                </div>
-              ) : (
-                props.d2sSummary.accounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className='flex justify-between gap-2 tabular-nums'
-                  >
-                    <span>{account.currency}</span>
-                    <span>
-                      {(account.available_minor / 100).toFixed(2)}{' '}
-                      {account.currency}
-                    </span>
-                  </div>
-                ))
-              )}
-              <div className='font-medium'>{t('Balance transactions')}</div>
-              {props.d2sSummary.transactions.length === 0 ? (
-                <div className='text-muted-foreground'>
-                  {t('No balance transactions')}
-                </div>
-              ) : (
-                props.d2sSummary.transactions.slice(0, 3).map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className='flex justify-between gap-2 border-b pb-1 last:border-0'
-                  >
-                    <span className='truncate'>{transaction.kind}</span>
-                    <span className='shrink-0 tabular-nums'>
-                      {transaction.amount_minor > 0 ? '+' : ''}
-                      {(transaction.amount_minor / 100).toFixed(2)}{' '}
-                      {transaction.currency}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          ) : null}
         </div>
       ))}
     </div>

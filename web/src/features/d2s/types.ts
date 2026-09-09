@@ -57,12 +57,7 @@ export type D2SBalanceAccount = {
 }
 
 export type D2SWalletSummary = {
-  accounts: D2SBalanceAccount[]
-  transactions: D2SBalanceTransaction[]
   orders: D2SOrder[]
-  invite?: D2SInviteInfo
-  inviteRecords: D2SInviteReward[]
-  minWithdrawalMinor: number
 }
 
 export type D2SBalanceTransaction = {
