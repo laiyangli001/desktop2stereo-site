@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
 
 type EmailDeliveryLog struct {
@@ -41,4 +42,46 @@ func ListEmailDeliveryLogs(limit int) ([]*EmailDeliveryLog, error) {
 	var logs []*EmailDeliveryLog
 	err := DB.Order("created_at DESC").Limit(limit).Find(&logs).Error
 	return logs, err
+}
+
+type EmailDeliveryLogPage struct {
+	Logs       []*EmailDeliveryLog `json:"logs"`
+	Total      int64               `json:"total"`
+	Page       int                 `json:"page"`
+	PageSize   int                 `json:"page_size"`
+	TotalPages int                 `json:"total_pages"`
+}
+
+func PageEmailDeliveryLogs(page, pageSize int) (EmailDeliveryLogPage, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize <= 0 || pageSize > 20 {
+		pageSize = 20
+	}
+
+	var total int64
+	if err := DB.Model(&EmailDeliveryLog{}).Count(&total).Error; err != nil {
+		return EmailDeliveryLogPage{}, err
+	}
+	result := EmailDeliveryLogPage{Total: total, Page: page, PageSize: pageSize}
+	if total > 0 {
+		result.TotalPages = int((total + int64(pageSize) - 1) / int64(pageSize))
+	} else {
+		result.TotalPages = 1
+	}
+
+	var logs []*EmailDeliveryLog
+	err := DB.Order("created_at DESC").Limit(pageSize).
+		Offset((page - 1) * pageSize).Find(&logs).Error
+	result.Logs = logs
+	return result, err
+}
+
+func DeleteEmailDeliveryLog(id int64) error {
+	return DB.Delete(&EmailDeliveryLog{}, id).Error
+}
+
+func DeleteAllEmailDeliveryLogs() error {
+	return DB.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&EmailDeliveryLog{}).Error
 }

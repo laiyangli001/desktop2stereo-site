@@ -27,13 +27,34 @@ func GetTencentSESSettings(c *gin.Context) {
 }
 
 func GetTencentSESDeliveryLogs(c *gin.Context) {
-	limit, _ := strconv.Atoi(c.Query("limit"))
-	logs, err := model.ListEmailDeliveryLogs(limit)
+	page, _ := strconv.Atoi(c.Query("page"))
+	logs, err := model.PageEmailDeliveryLogs(page, 20)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": logs})
+}
+
+func DeleteTencentSESDeliveryLog(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的记录 ID"})
+		return
+	}
+	if err := model.DeleteEmailDeliveryLog(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "邮件发送记录已删除"})
+}
+
+func DeleteAllTencentSESDeliveryLogs(c *gin.Context) {
+	if err := model.DeleteAllEmailDeliveryLogs(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "邮件发送记录已全部删除"})
 }
 
 func TestTencentSESConnection(c *gin.Context) {
