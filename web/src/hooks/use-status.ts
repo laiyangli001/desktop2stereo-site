@@ -68,8 +68,14 @@ export function useStatus() {
     },
     // Use localStorage data as initial data
     placeholderData: getInitialStatus(),
-    // Data becomes stale after 5 minutes
-    staleTime: 5 * 60 * 1000,
+    // Sidebar and other public display settings may be changed by an admin
+    // while a user keeps the application open. Keep the cache short enough
+    // that those changes are reflected without requiring a logout or a hard
+    // reload.
+    staleTime: 30 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
     // Cache expires after 30 minutes
     gcTime: 30 * 60 * 1000,
   })

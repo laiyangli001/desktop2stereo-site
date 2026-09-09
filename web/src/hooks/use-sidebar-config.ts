@@ -121,16 +121,20 @@ const URL_TO_CONFIG_MAP: Record<string, { section: string; module: string }> = {
 /**
  * Parse backend SidebarModulesAdmin configuration
  */
-function parseSidebarConfig(
-  value: string | null | undefined
-): SidebarModulesAdminConfig {
+export function parseSidebarConfig(value: unknown): SidebarModulesAdminConfig {
   // If empty string, null, or undefined, use default config
-  if (!value || value.trim() === '') {
+  if (!value || (typeof value === 'string' && value.trim() === '')) {
     return DEFAULT_SIDEBAR_MODULES
   }
 
   try {
-    const parsed = JSON.parse(value) as SidebarModulesAdminConfig
+    const parsed =
+      typeof value === 'string'
+        ? (JSON.parse(value) as SidebarModulesAdminConfig)
+        : (value as SidebarModulesAdminConfig)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return DEFAULT_SIDEBAR_MODULES
+    }
     return mergeWithDefaultSidebarModules(parsed)
   } catch {
     // eslint-disable-next-line no-console
@@ -144,14 +148,15 @@ function parseSidebarConfig(
  * invalid, or otherwise unusable — the caller treats null as "do not narrow",
  * so legacy users with an empty sidebar_modules field keep the full admin view.
  */
-function parseUserSidebarConfig(
-  value: string | null | undefined
-): SidebarModulesUserConfig {
-  if (!value || value.trim() === '') {
+function parseUserSidebarConfig(value: unknown): SidebarModulesUserConfig {
+  if (!value || (typeof value === 'string' && value.trim() === '')) {
     return null
   }
   try {
-    const parsed = JSON.parse(value) as SidebarModulesAdminConfig
+    const parsed =
+      typeof value === 'string'
+        ? (JSON.parse(value) as SidebarModulesAdminConfig)
+        : (value as SidebarModulesAdminConfig)
     if (!parsed || typeof parsed !== 'object') return null
     return parsed
   } catch {
@@ -165,7 +170,7 @@ function parseUserSidebarConfig(
  * is a second narrower layer: it can only further hide what admin allowed.
  * A null user config means "do not narrow" (legacy/empty users).
  */
-function isModuleEnabled(
+export function isSidebarModuleEnabledForConfig(
   url: string,
   adminConfig: SidebarModulesAdminConfig,
   userConfig: SidebarModulesUserConfig
@@ -215,7 +220,7 @@ function isNavItemVisible(
   if ('url' in item && item.url) {
     const configUrls = item.configUrls ?? [item.url]
     return configUrls.some((url) =>
-      isModuleEnabled(url as string, adminConfig, userConfig)
+      isSidebarModuleEnabledForConfig(url as string, adminConfig, userConfig)
     )
   }
 
@@ -223,7 +228,11 @@ function isNavItemVisible(
   if ('items' in item && item.items) {
     // If has sub-items, show this collapsible item if at least one sub-item is visible
     return item.items.some((subItem) =>
-      isModuleEnabled(subItem.url as string, adminConfig, userConfig)
+      isSidebarModuleEnabledForConfig(
+        subItem.url as string,
+        adminConfig,
+        userConfig
+      )
     )
   }
 
@@ -243,7 +252,11 @@ function filterNavItems(
       // If collapsible item, also filter its sub-items
       if ('items' in item && item.items) {
         const filteredSubItems = item.items.filter((subItem) =>
-          isModuleEnabled(subItem.url as string, adminConfig, userConfig)
+          isSidebarModuleEnabledForConfig(
+            subItem.url as string,
+            adminConfig,
+            userConfig
+          )
         )
 
         return {
@@ -272,6 +285,19 @@ function filterNavItems(
  *      stale historical value cannot lock them out of entries they have no
  *      UI to restore.
  */
+export function filterSidebarNavGroupsByConfig(
+  navGroups: NavGroup[],
+  adminConfig: SidebarModulesAdminConfig,
+  userConfig: SidebarModulesUserConfig = null
+): NavGroup[] {
+  return navGroups
+    .map((group) => ({
+      ...group,
+      items: filterNavItems(group.items, adminConfig, userConfig),
+    }))
+    .filter((group) => group.items.length > 0)
+}
+
 export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
   const { status } = useStatus()
   const { auth } = useAuthStore()
@@ -297,13 +323,7 @@ export function useSidebarConfig(navGroups: NavGroup[]): NavGroup[] {
   }, [auth?.user?.permissions?.sidebar_settings, auth?.user?.sidebar_modules])
 
   const filteredNavGroups = useMemo(
-    () =>
-      navGroups
-        .map((group) => ({
-          ...group,
-          items: filterNavItems(group.items, adminConfig, userConfig),
-        }))
-        .filter((group) => group.items.length > 0), // Only show navigation groups with visible items
+    () => filterSidebarNavGroupsByConfig(navGroups, adminConfig, userConfig),
     [navGroups, adminConfig, userConfig]
   )
 
@@ -327,5 +347,5 @@ export function useIsSidebarModuleVisible(url: string): boolean {
       ? null
       : parseUserSidebarConfig(auth?.user?.sidebar_modules)
 
-  return isModuleEnabled(url, adminConfig, userConfig)
+  return isSidebarModuleEnabledForConfig(url, adminConfig, userConfig)
 }

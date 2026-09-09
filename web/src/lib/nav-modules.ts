@@ -202,9 +202,11 @@ export function isSidebarModuleEnabled(
     >
     const sectionConfig = parsed[section]
     if (!sectionConfig) return true
-    if (sectionConfig.enabled === false) return false
-    if (sectionConfig[module] === false) return false
-    return true
+    // Match the authoritative sidebar rule used by the rendered navigation:
+    // a disabled section hides every child, and a module is enabled only when
+    // it is explicitly true. This route guard must not disagree with the UI.
+    if (sectionConfig.enabled !== true) return false
+    return sectionConfig[module] === true
   } catch {
     return true
   }
