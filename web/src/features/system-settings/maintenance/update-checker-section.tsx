@@ -66,8 +66,12 @@ export function UpdateCheckerSection({
   const { t } = useTranslation()
   const [checking, setChecking] = useState(false)
   const [applying, setApplying] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<ProjectUpdateStatus | null>(null)
-  const [latestCommit, setLatestCommit] = useState<ProjectUpdateCommit | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<ProjectUpdateStatus | null>(
+    null
+  )
+  const [latestCommit, setLatestCommit] = useState<ProjectUpdateCommit | null>(
+    null
+  )
   const [displayVersion, setDisplayVersion] = useState(currentVersion || '')
   const [activeSHA, setActiveSHA] = useState<string | null>(null)
 
@@ -76,8 +80,6 @@ export function UpdateCheckerSection({
   }, [currentVersion])
 
   useEffect(() => {
-    if (!applying) return
-
     let stopped = false
     let finished = false
     const poll = async () => {
@@ -90,19 +92,38 @@ export function UpdateCheckerSection({
         const status = response.data.data
         setUpdateStatus(status)
         const runtime = status.runtime
-        if (!runtime || runtime.state === 'running') return
-        if (activeSHA && runtime.sha && runtime.sha.toLowerCase() !== activeSHA.toLowerCase()) {
+        if (!runtime) return
+        if (runtime.state === 'running') {
+          // The component can be unmounted while the settings page switches
+          // sections. Rehydrate the local UI state from the server-owned
+          // runtime status so the update continues to be visible when the
+          // user returns to this page.
+          setApplying(true)
+          if (runtime.sha) setActiveSHA(runtime.sha)
+          return
+        }
+        if (
+          activeSHA &&
+          runtime.sha &&
+          runtime.sha.toLowerCase() !== activeSHA.toLowerCase()
+        ) {
           return
         }
         if (runtime.state === 'succeeded') {
           finished = true
-          setApplying(false)
           setDisplayVersion(status.current_sha || runtime.sha || status.version)
-          toast.success(t('Project update completed successfully'))
+          if (applying) {
+            setApplying(false)
+            toast.success(t('Project update completed successfully'))
+          }
         } else if (runtime.state === 'failed') {
           finished = true
-          setApplying(false)
-          toast.error(runtime.error || runtime.message || t('Project update failed'))
+          if (applying) {
+            setApplying(false)
+            toast.error(
+              runtime.error || runtime.message || t('Project update failed')
+            )
+          }
         }
       } catch {
         // The application may be restarting. Keep polling until the status file reports a result.
@@ -110,18 +131,24 @@ export function UpdateCheckerSection({
     }
 
     void poll()
-    const timer = window.setInterval(() => {
-      if (!finished) void poll()
-    }, 2000)
+    const timer = applying
+      ? window.setInterval(() => {
+          if (!finished) void poll()
+        }, 2000)
+      : undefined
     return () => {
       stopped = true
-      window.clearInterval(timer)
+      if (timer !== undefined) window.clearInterval(timer)
     }
   }, [activeSHA, applying, t])
 
   const uptime = startTime ? formatTimestamp(startTime) : t('Unknown')
   const version = displayVersion || updateStatus?.current_sha || t('Unknown')
-  const currentSHA = (updateStatus?.current_sha || updateStatus?.runtime?.sha || '').toLowerCase()
+  const currentSHA = (
+    updateStatus?.current_sha ||
+    updateStatus?.runtime?.sha ||
+    ''
+  ).toLowerCase()
   const isUpToDate = Boolean(
     latestCommit && currentSHA && latestCommit.sha.toLowerCase() === currentSHA
   )
@@ -133,14 +160,20 @@ export function UpdateCheckerSection({
     ['health', t('Health check')],
   ] as const
   const activePhase = updateStatus?.runtime?.phase
-  const activePhaseIndex = updatePhases.findIndex(([phase]) => phase === activePhase)
+  const activePhaseIndex = updatePhases.findIndex(
+    ([phase]) => phase === activePhase
+  )
 
   const handleCheckUpdates = async () => {
     setChecking(true)
     try {
       const [statusResponse, commitResponse] = await Promise.all([
-        api.get<{ success: boolean; data: ProjectUpdateStatus }>('/api/option/project-update/status'),
-        api.post<{ success: boolean; data: { commit: ProjectUpdateCommit } }>('/api/option/project-update/check'),
+        api.get<{ success: boolean; data: ProjectUpdateStatus }>(
+          '/api/option/project-update/status'
+        ),
+        api.post<{ success: boolean; data: { commit: ProjectUpdateCommit } }>(
+          '/api/option/project-update/check'
+        ),
       ])
       setUpdateStatus(statusResponse.data.data)
       setLatestCommit(commitResponse.data.data.commit)
@@ -169,7 +202,13 @@ export function UpdateCheckerSection({
       toast.info(t('The server is already up to date'))
       return
     }
-    if (!window.confirm(t('Start the project update now? The service will restart after backup and health checks.'))) {
+    if (
+      !window.confirm(
+        t(
+          'Start the project update now? The service will restart after backup and health checks.'
+        )
+      )
+    ) {
       return
     }
     setActiveSHA(latestCommit.sha)
@@ -186,93 +225,118 @@ export function UpdateCheckerSection({
       }
     } catch (error) {
       setApplying(false)
-      toast.error(error instanceof Error ? error.message : t('Failed to start project update'))
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : t('Failed to start project update')
+      )
     }
   }
 
   return (
     <SettingsSection title={t('System maintenance')}>
-        <div className='space-y-6'>
-          <div className='grid gap-4 md:grid-cols-2'>
-            <div className='rounded-lg border p-4'>
-              <div className='text-muted-foreground text-sm'>
-                {t('Current version')}
-              </div>
-              <div className='text-lg font-semibold'>{version}</div>
+      <div className='space-y-6'>
+        <div className='grid gap-4 md:grid-cols-2'>
+          <div className='rounded-lg border p-4'>
+            <div className='text-muted-foreground text-sm'>
+              {t('Current version')}
             </div>
-            <div className='rounded-lg border p-4'>
-              <div className='text-muted-foreground text-sm'>
-                {t('Uptime since')}
-              </div>
-              <div className='text-lg font-semibold'>{uptime}</div>
-            </div>
+            <div className='text-lg font-semibold'>{version}</div>
           </div>
-
-          <Button onClick={handleCheckUpdates} disabled={checking}>
-            {checking ? (
-              t('Checking updates...')
-            ) : (
-              <>
-                <RefreshCcwIcon className='me-2 h-4 w-4' />
-                {t('Check for updates')}
-              </>
-            )}
-          </Button>
-          <div className='rounded-lg border p-4 text-sm'>
-            <div className='font-semibold'>{t('Project update source')}</div>
-            <div className='text-muted-foreground mt-2'>
-              {updateStatus?.repository ?? 'laiyangli001/desktop2stereo-site'}:{updateStatus?.branch ?? 'main'}
+          <div className='rounded-lg border p-4'>
+            <div className='text-muted-foreground text-sm'>
+              {t('Uptime since')}
             </div>
-            <div className='text-muted-foreground mt-1'>
-              {updateStatus?.configured
-                ? t('Server-side update is ready. Database and shared files stay outside the release directory.')
-                : t('Server-side update is disabled or not initialized. Install the fixed update script and enable D2S_UPDATE_ENABLED first.')}
-            </div>
-            {latestCommit && (
-              <div className='mt-3 space-y-1'>
-                <div className='font-mono text-xs'>{latestCommit.sha}</div>
-                <div>{latestCommit.commit.message.split('\n')[0]}</div>
-                {isUpToDate ? (
-                  <div className='text-muted-foreground mt-3'>
-                    {t('The server is already running this commit. No update is needed.')}
-                  </div>
-                ) : (
-                  <Button type='button' className='mt-2' onClick={handleApplyUpdate} disabled={applying || checking}>
-                    <RocketIcon className='me-2 h-4 w-4' />
-                    {applying ? t('Updating...') : t('Update server to this commit')}
-                  </Button>
-                )}
-              </div>
-            )}
-            {applying && updateStatus?.runtime && (
-              <div className='mt-4 rounded-md bg-muted p-3'>
-                <div className='font-medium'>{updateStatus.runtime.message}</div>
-                <div className='text-muted-foreground mt-1 text-xs'>
-                  {updateStatus.runtime.phase} · {t('Status is refreshed every 2 seconds')}
-                </div>
-                <div className='mt-3 grid gap-2 sm:grid-cols-5'>
-                  {updatePhases.map(([phase, label], index) => (
-                    <div
-                      key={phase}
-                      className={
-                        index <= activePhaseIndex
-                          ? 'rounded border border-primary bg-primary/10 px-2 py-1 text-xs'
-                          : 'rounded border px-2 py-1 text-xs text-muted-foreground'
-                      }
-                    >
-                      {label}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {!applying && updateStatus?.runtime?.state === 'failed' && (
-              <div className='mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm'>
-                {updateStatus.runtime.error || updateStatus.runtime.message}
-              </div>
-            )}
+            <div className='text-lg font-semibold'>{uptime}</div>
           </div>
         </div>
+
+        <Button onClick={handleCheckUpdates} disabled={checking}>
+          {checking ? (
+            t('Checking updates...')
+          ) : (
+            <>
+              <RefreshCcwIcon className='me-2 h-4 w-4' />
+              {t('Check for updates')}
+            </>
+          )}
+        </Button>
+        {applying && !latestCommit && (
+          <Button type='button' disabled>
+            <RocketIcon className='me-2 h-4 w-4' />
+            {t('Updating...')}
+          </Button>
+        )}
+        <div className='rounded-lg border p-4 text-sm'>
+          <div className='font-semibold'>{t('Project update source')}</div>
+          <div className='text-muted-foreground mt-2'>
+            {updateStatus?.repository ?? 'laiyangli001/desktop2stereo-site'}:
+            {updateStatus?.branch ?? 'main'}
+          </div>
+          <div className='text-muted-foreground mt-1'>
+            {updateStatus?.configured
+              ? t(
+                  'Server-side update is ready. Database and shared files stay outside the release directory.'
+                )
+              : t(
+                  'Server-side update is disabled or not initialized. Install the fixed update script and enable D2S_UPDATE_ENABLED first.'
+                )}
+          </div>
+          {latestCommit && (
+            <div className='mt-3 space-y-1'>
+              <div className='font-mono text-xs'>{latestCommit.sha}</div>
+              <div>{latestCommit.commit.message.split('\n')[0]}</div>
+              {isUpToDate ? (
+                <div className='text-muted-foreground mt-3'>
+                  {t(
+                    'The server is already running this commit. No update is needed.'
+                  )}
+                </div>
+              ) : (
+                <Button
+                  type='button'
+                  className='mt-2'
+                  onClick={handleApplyUpdate}
+                  disabled={applying || checking}
+                >
+                  <RocketIcon className='me-2 h-4 w-4' />
+                  {applying
+                    ? t('Updating...')
+                    : t('Update server to this commit')}
+                </Button>
+              )}
+            </div>
+          )}
+          {applying && updateStatus?.runtime && (
+            <div className='bg-muted mt-4 rounded-md p-3'>
+              <div className='font-medium'>{updateStatus.runtime.message}</div>
+              <div className='text-muted-foreground mt-1 text-xs'>
+                {updateStatus.runtime.phase} ·{' '}
+                {t('Status is refreshed every 2 seconds')}
+              </div>
+              <div className='mt-3 grid gap-2 sm:grid-cols-5'>
+                {updatePhases.map(([phase, label], index) => (
+                  <div
+                    key={phase}
+                    className={
+                      index <= activePhaseIndex
+                        ? 'border-primary bg-primary/10 rounded border px-2 py-1 text-xs'
+                        : 'text-muted-foreground rounded border px-2 py-1 text-xs'
+                    }
+                  >
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!applying && updateStatus?.runtime?.state === 'failed' && (
+            <div className='border-destructive/40 bg-destructive/5 mt-4 rounded-md border p-3 text-sm'>
+              {updateStatus.runtime.error || updateStatus.runtime.message}
+            </div>
+          )}
+        </div>
+      </div>
     </SettingsSection>
   )
 }

@@ -61,6 +61,11 @@ describe('UpdateCheckerSection', () => {
       )
       .mockResolvedValueOnce(
         axiosResponse(
+          status({ state: 'idle', phase: 'completed', message: '' })
+        )
+      )
+      .mockResolvedValueOnce(
+        axiosResponse(
           status({ state: 'running', phase: 'backup', message: 'Backing up' })
         )
       )
@@ -106,6 +111,11 @@ describe('UpdateCheckerSection', () => {
       )
       .mockResolvedValueOnce(
         axiosResponse(
+          status({ state: 'idle', phase: 'completed', message: '' })
+        )
+      )
+      .mockResolvedValueOnce(
+        axiosResponse(
           status({ state: 'running', phase: 'build', message: 'Building' })
         )
       )
@@ -136,5 +146,26 @@ describe('UpdateCheckerSection', () => {
         name: 'Update server to this commit',
       })
     ).toBeEnabled()
+  })
+
+  it('restores an in-progress update when returning to the maintenance page', async () => {
+    apiMocks.get.mockResolvedValue(
+      axiosResponse(
+        status({
+          state: 'running',
+          phase: 'build',
+          message: 'Building',
+          sha: newSHA,
+        })
+      )
+    )
+
+    renderChecker()
+
+    expect(
+      await screen.findByRole('button', { name: 'Updating...' })
+    ).toBeDisabled()
+    expect(await screen.findByText('Building')).toBeInTheDocument()
+    expect(await screen.findByText('Build Docker image')).toBeInTheDocument()
   })
 })
