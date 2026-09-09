@@ -74,7 +74,21 @@ func TestD2STrialProvisioningIsIdempotent(t *testing.T) {
 	assert.Equal(t, first[0].ID, second[0].ID)
 	assert.Equal(t, D2SLicenseKindTrial, first[0].Kind)
 	assert.Equal(t, D2SLicenseModeUnbound, first[0].Mode)
-	assert.Equal(t, now+30*86400, first[0].ExpiresAt)
+	assert.Zero(t, first[0].ActivatedAt)
+	assert.Zero(t, first[0].ExpiresAt)
+
+	bound, err := BindD2SLicense(user.Id, first[0].ID, strings.Repeat("a", 64), 1, now+100)
+	require.NoError(t, err)
+	assert.Equal(t, now+100+30*86400, bound.ExpiresAt)
+
+	reloaded, err := ListD2SLicenses(user.Id, now+200)
+	require.NoError(t, err)
+	assert.Equal(t, now+100+30*86400, reloaded[0].ExpiresAt)
+
+	rebound, err := BindD2SLicense(user.Id, first[0].ID, strings.Repeat("a", 64), 1, now+300)
+	require.NoError(t, err)
+	assert.Equal(t, now+100, rebound.ActivatedAt)
+	assert.Equal(t, now+100+30*86400, rebound.ExpiresAt)
 }
 
 func TestD2SExpiredPendingOrderReleasesBalanceReservation(t *testing.T) {

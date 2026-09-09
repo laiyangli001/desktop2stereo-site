@@ -400,7 +400,7 @@ func EnsureD2SProfileAndTrial(userID int, now int64) (*D2SUserProfile, error) {
 		trial := D2SLicense{
 			ID: uuid.NewString(), LicenseCode: code, UserID: userID, Product: D2SProductDesktop2Stereo,
 			Kind: D2SLicenseKindTrial, Status: D2SLicenseStatusActive, Mode: D2SLicenseModeUnbound,
-			OfflinePeriodDays: 7, ActivatedAt: now, ExpiresAt: now + 30*86400, CreatedAt: now, UpdatedAt: now,
+			OfflinePeriodDays: 7, CreatedAt: now, UpdatedAt: now,
 		}
 		created := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
@@ -415,7 +415,7 @@ func EnsureD2SProfileAndTrial(userID int, now int64) (*D2SUserProfile, error) {
 			return nil
 		}
 		if err := tx.Create(&D2SLicenseEvent{
-			ID: uuid.NewString(), LicenseID: trial.ID, UserID: userID, EventType: "trial_started", CreatedAt: now,
+			ID: uuid.NewString(), LicenseID: trial.ID, UserID: userID, EventType: "trial_created", CreatedAt: now,
 		}).Error; err != nil {
 			return err
 		}
@@ -492,18 +492,35 @@ func BindD2SLicense(userID int, licenseID, deviceHash string, fingerprintVersion
 		if mode == D2SLicenseModeUnbound {
 			mode = D2SLicenseModeOnline
 		}
-		if err := tx.Model(&D2SLicense{}).Where("id = ?", license.ID).Updates(map[string]any{
+		activatedAt := license.ActivatedAt
+		if activatedAt == 0 {
+			activatedAt = now
+		}
+		updates := map[string]any{
 			"device_hash": deviceHash, "fingerprint_version": fingerprintVersion, "mode": mode,
-			"activated_at": now, "updated_at": now,
-		}).Error; err != nil {
+			"activated_at": activatedAt, "updated_at": now,
+		}
+		trialStarted := license.Kind == D2SLicenseKindTrial && license.ActivatedAt == 0 && license.ExpiresAt == 0
+		if trialStarted {
+			updates["expires_at"] = now + 30*86400
+		}
+		if err := tx.Model(&D2SLicense{}).Where("id = ?", license.ID).Updates(updates).Error; err != nil {
 			return err
+		}
+		if trialStarted {
+			if err := tx.Create(&D2SLicenseEvent{
+				ID: uuid.NewString(), LicenseID: license.ID, UserID: userID, EventType: "trial_started", DeviceHash: deviceHash, CreatedAt: now,
+			}).Error; err != nil {
+				return err
+			}
+			license.ExpiresAt = now + 30*86400
 		}
 		if err := tx.Create(&D2SLicenseEvent{
 			ID: uuid.NewString(), LicenseID: license.ID, UserID: userID, EventType: "device_bound", DeviceHash: deviceHash, CreatedAt: now,
 		}).Error; err != nil {
 			return err
 		}
-		license.DeviceHash, license.FingerprintVersion, license.Mode, license.ActivatedAt, license.UpdatedAt = deviceHash, fingerprintVersion, mode, now, now
+		license.DeviceHash, license.FingerprintVersion, license.Mode, license.ActivatedAt, license.UpdatedAt = deviceHash, fingerprintVersion, mode, activatedAt, now
 		result = *license
 		return nil
 	})
