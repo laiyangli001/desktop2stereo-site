@@ -144,11 +144,7 @@ export function UpdateCheckerSection({
 
   const uptime = startTime ? formatTimestamp(startTime) : t('Unknown')
   const version = displayVersion || updateStatus?.current_sha || t('Unknown')
-  const currentSHA = (
-    updateStatus?.current_sha ||
-    updateStatus?.runtime?.sha ||
-    ''
-  ).toLowerCase()
+  const currentSHA = (updateStatus?.current_sha || '').toLowerCase()
   const isUpToDate = Boolean(
     latestCommit && currentSHA && latestCommit.sha.toLowerCase() === currentSHA
   )

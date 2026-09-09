@@ -99,14 +99,16 @@ func GetProjectUpdateStatus(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"repository":  projectUpdateRepository,
-			"branch":      projectUpdateBranch,
-			"enabled":     config.Enabled,
-			"configured":  config.Enabled && ((scriptReady && backupReady) || requestReady),
-			"mode":        map[bool]string{true: "request-file", false: "script"}[config.RequestFile != ""],
-			"script":      config.Script,
-			"version":     common.Version,
-			"current_sha": runtimeStatus.SHA,
+			"repository": projectUpdateRepository,
+			"branch":     projectUpdateBranch,
+			"enabled":    config.Enabled,
+			"configured": config.Enabled && ((scriptReady && backupReady) || requestReady),
+			"mode":       map[bool]string{true: "request-file", false: "script"}[config.RequestFile != ""],
+			"script":     config.Script,
+			"version":    common.Version,
+			// runtimeStatus.SHA is the requested target and may be written before
+			// the new process is running. The process build version is authoritative.
+			"current_sha": common.Version,
 			"runtime":     runtimeStatus,
 		},
 	})
