@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { D2SWorkspace } from '..'
+import { D2SWalletSection } from '..'
 
 const apiMocks = vi.hoisted(() => ({
   changeD2SMode: vi.fn(),
@@ -36,12 +36,12 @@ function renderWorkspace() {
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <D2SWorkspace />
+      <D2SWalletSection />
     </QueryClientProvider>
   )
 }
 
-describe('D2SWorkspace purchase flow', () => {
+describe('D2S wallet purchase flow', () => {
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -314,8 +314,7 @@ describe('D2SWorkspace purchase flow', () => {
     expect(form).not.toBeNull()
     expect(form?.getAttribute('method')).toBe('POST')
     expect(
-      (form?.querySelector('input[name="order_id"]') as HTMLInputElement)
-        ?.value
+      (form?.querySelector('input[name="order_id"]') as HTMLInputElement)?.value
     ).toBe('order-1')
     expect(
       (form?.querySelector('input[name="signature"]') as HTMLInputElement)
@@ -355,9 +354,9 @@ describe('D2SWorkspace purchase flow', () => {
       ).toBeEnabled()
     })
     expect(
-      screen.getByRole('button', { name: 'Pay with Stripe' }).closest(
-        '[aria-busy="true"]'
-      )
+      screen
+        .getByRole('button', { name: 'Pay with Stripe' })
+        .closest('[aria-busy="true"]')
     ).toBeNull()
   })
 })

@@ -134,9 +134,7 @@ export function LicenseCard(props: {
               <Button
                 type='button'
                 size='sm'
-                aria-label={`${t('Online mode')} ${
-                  props.license.license_code
-                }`}
+                aria-label={`${t('Online mode')} ${props.license.license_code}`}
                 variant={
                   props.license.mode === 'online' ? 'default' : 'outline'
                 }
@@ -193,9 +191,7 @@ export function LicenseCard(props: {
                 type='button'
                 size='sm'
                 variant='destructive'
-                aria-label={`${t('Free revoke')} ${
-                  props.license.license_code
-                }`}
+                aria-label={`${t('Free revoke')} ${props.license.license_code}`}
                 disabled={props.actionPending}
                 onClick={props.onFreeRevoke}
               >
@@ -267,8 +263,11 @@ function OrderRow(props: { order: D2SOrder }) {
   )
 }
 
-export function D2SWorkspace() {
+export function D2SWorkspace(
+  props: { view?: 'authorization' | 'wallet' } = {}
+) {
   const { t } = useTranslation()
+  const view = props.view ?? 'authorization'
   const queryClient = useQueryClient()
   const [purchaseProduct, setPurchaseProduct] =
     useState<D2SPurchaseProduct>('license')
@@ -280,30 +279,37 @@ export function D2SWorkspace() {
   const orders = useQuery({
     queryKey: ['d2s', 'orders'],
     queryFn: getD2SOrders,
+    enabled: view === 'wallet',
   })
   const checkoutProviders = useQuery({
     queryKey: ['d2s', 'checkout-providers'],
     queryFn: getD2SCheckoutProviders,
+    enabled: view === 'wallet',
   })
   const balance = useQuery({
     queryKey: ['d2s', 'balance'],
     queryFn: getD2SBalance,
+    enabled: view === 'wallet',
   })
   const balanceTransactions = useQuery({
     queryKey: ['d2s', 'balance-transactions'],
     queryFn: getD2SBalanceTransactions,
+    enabled: view === 'wallet',
   })
   const invite = useQuery({
     queryKey: ['d2s', 'invite'],
     queryFn: getD2SInvite,
+    enabled: view === 'wallet',
   })
   const inviteRecords = useQuery({
     queryKey: ['d2s', 'invite-records'],
     queryFn: getD2SInviteRecords,
+    enabled: view === 'wallet',
   })
   const withdrawals = useQuery({
     queryKey: ['d2s', 'withdrawals'],
     queryFn: getD2SWithdrawals,
+    enabled: view === 'wallet',
   })
   const modeMutation = useMutation({
     mutationFn: (request: Parameters<typeof changeD2SMode>[0]) =>
@@ -368,17 +374,20 @@ export function D2SWorkspace() {
     queryKey: ['d2s', 'manual-unbind'],
     queryFn: getD2SManualUnbindRequests,
   })
-  const d2sQueries = [
-    licenses,
-    orders,
-    checkoutProviders,
-    balance,
-    balanceTransactions,
-    invite,
-    inviteRecords,
-    withdrawals,
-    manualUnbinds,
-  ]
+  const d2sQueries =
+    view === 'wallet'
+      ? [
+          licenses,
+          orders,
+          checkoutProviders,
+          balance,
+          balanceTransactions,
+          invite,
+          inviteRecords,
+          withdrawals,
+          manualUnbinds,
+        ]
+      : [licenses, manualUnbinds]
   const d2sDataLoading = d2sQueries.some((query) => query.isPending)
   const d2sDataFailed = d2sQueries.some((query) => query.isError)
 
@@ -481,21 +490,20 @@ export function D2SWorkspace() {
     onError: () => toast.error(t('Unable to start checkout')),
   })
 
-  return (
-    <SectionPageLayout>
-      <SectionPageLayout.Title>{t('Desktop2Stereo')}</SectionPageLayout.Title>
-      <SectionPageLayout.Content>
-        <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
-          {d2sDataLoading && (
-            <p role='status' className='text-muted-foreground text-sm'>
-              {t('Loading Desktop2Stereo data')}
-            </p>
-          )}
-          {d2sDataFailed && (
-            <p role='alert' className='text-destructive text-sm'>
-              {t('Unable to load Desktop2Stereo data')}
-            </p>
-          )}
+  const content = (
+    <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
+      {d2sDataLoading && (
+        <p role='status' className='text-muted-foreground text-sm'>
+          {t('Loading Desktop2Stereo data')}
+        </p>
+      )}
+      {d2sDataFailed && (
+        <p role='alert' className='text-destructive text-sm'>
+          {t('Unable to load Desktop2Stereo data')}
+        </p>
+      )}
+      {view === 'wallet' && (
+        <>
           <Card>
             <CardHeader>
               <CardTitle>{t('Balance')}</CardTitle>
@@ -771,124 +779,128 @@ export function D2SWorkspace() {
               </span>
             </CardContent>
           </Card>
+        </>
+      )}
 
-          <div className='grid gap-4 xl:grid-cols-2'>
-            <section className='space-y-3' aria-labelledby='d2s-licenses-title'>
-              <h2 id='d2s-licenses-title' className='text-lg font-semibold'>
-                {t('Licenses and devices')}
-              </h2>
-              {licenses.data?.data?.licenses?.map((license) => (
-                <LicenseCard
-                  key={license.id}
-                  license={license}
-                  actionPending={
-                    modeMutation.isPending ||
-                    permanentMutation.isPending ||
-                    revokeMutation.isPending ||
-                    manualUnbindMutation.isPending
+      <div className='grid gap-4 xl:grid-cols-2'>
+        {view === 'authorization' && (
+          <section className='space-y-3' aria-labelledby='d2s-licenses-title'>
+            <h2 id='d2s-licenses-title' className='text-lg font-semibold'>
+              {t('Licenses and devices')}
+            </h2>
+            {licenses.data?.data?.licenses?.map((license) => (
+              <LicenseCard
+                key={license.id}
+                license={license}
+                actionPending={
+                  modeMutation.isPending ||
+                  permanentMutation.isPending ||
+                  revokeMutation.isPending ||
+                  manualUnbindMutation.isPending
+                }
+                onChangeMode={(mode, offlineDays) => {
+                  if (!license.device_hash) return
+                  modeMutation.mutate({
+                    license_id: license.id,
+                    device_hash: license.device_hash,
+                    mode,
+                    offline_period_days: offlineDays,
+                  })
+                }}
+                onConfirmPermanent={() => {
+                  if (
+                    !license.device_hash ||
+                    !window.confirm(t('Confirm permanent binding'))
+                  ) {
+                    return
                   }
-                  onChangeMode={(mode, offlineDays) => {
-                    if (!license.device_hash) return
-                    modeMutation.mutate({
-                      license_id: license.id,
-                      device_hash: license.device_hash,
-                      mode,
-                      offline_period_days: offlineDays,
-                    })
-                  }}
-                  onConfirmPermanent={() => {
-                    if (
-                      !license.device_hash ||
-                      !window.confirm(t('Confirm permanent binding'))
-                    ) {
-                      return
-                    }
-                    permanentMutation.mutate({
-                      license_id: license.id,
-                      device_hash: license.device_hash,
-                    })
-                  }}
-                  onFreeRevoke={() => {
-                    if (
-                      !license.device_hash ||
-                      !window.confirm(t('Confirm free revoke'))
-                    ) {
-                      return
-                    }
-                    revokeMutation.mutate({
-                      license_id: license.id,
-                      device_hash: license.device_hash,
-                      fingerprint_version: license.fingerprint_version,
-                    })
-                  }}
-                  onManualUnbind={(reason) => {
-                    manualUnbindMutation.mutate({
-                      license_id: license.id,
-                      reason,
-                    })
-                  }}
-                  manualUnbindStatus={
-                    manualUnbinds.data?.data?.requests
-                      ?.filter((request) => request.license_id === license.id)
-                      .sort((a, b) => b.created_at - a.created_at)[0]?.status
+                  permanentMutation.mutate({
+                    license_id: license.id,
+                    device_hash: license.device_hash,
+                  })
+                }}
+                onFreeRevoke={() => {
+                  if (
+                    !license.device_hash ||
+                    !window.confirm(t('Confirm free revoke'))
+                  ) {
+                    return
                   }
-                />
-              ))}
-              {!licenses.isLoading &&
-                (licenses.data?.data?.licenses?.length ?? 0) === 0 && (
-                  <p className='text-muted-foreground'>{t('No licenses')}</p>
-                )}
-            </section>
-            <section className='space-y-3' aria-labelledby='d2s-invite-title'>
-              <h2 id='d2s-invite-title' className='text-lg font-semibold'>
-                {t('Invitations')}
-              </h2>
-              <Card>
-                <CardContent className='space-y-2 pt-4'>
-                  <div>
-                    {t('Invite code')}:{' '}
-                    <span className='font-mono'>
-                      {invite.data?.data?.invite_code ?? '—'}
-                    </span>
-                  </div>
-                  <div>
-                    {t('Rewarded accounts')}:{' '}
-                    {invite.data?.data?.rewarded_invitees ?? 0}
-                  </div>
-                  <div className='border-t pt-2'>
-                    <div className='font-medium'>{t('Reward history')}</div>
-                    {(inviteRecords.data?.data?.records?.length ?? 0) === 0 ? (
-                      <p className='text-muted-foreground text-sm'>
-                        {t('No invite rewards')}
-                      </p>
-                    ) : (
-                      <div className='space-y-1 text-sm'>
-                        {inviteRecords.data?.data?.records.map((record) => (
-                          <div
-                            key={record.id}
-                            className='flex flex-wrap justify-between gap-2'
-                          >
-                            <span>
-                              {t('Invitee')} #{record.invitee_user_id} ·{' '}
-                              <StatusBadge value={record.status} />
-                            </span>
-                            <span>
-                              +
-                              {formatMoney(
-                                record.amount_minor,
-                                record.currency
-                              )}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </section>
-          </div>
+                  revokeMutation.mutate({
+                    license_id: license.id,
+                    device_hash: license.device_hash,
+                    fingerprint_version: license.fingerprint_version,
+                  })
+                }}
+                onManualUnbind={(reason) => {
+                  manualUnbindMutation.mutate({
+                    license_id: license.id,
+                    reason,
+                  })
+                }}
+                manualUnbindStatus={
+                  manualUnbinds.data?.data?.requests
+                    ?.filter((request) => request.license_id === license.id)
+                    .sort((a, b) => b.created_at - a.created_at)[0]?.status
+                }
+              />
+            ))}
+            {!licenses.isLoading &&
+              (licenses.data?.data?.licenses?.length ?? 0) === 0 && (
+                <p className='text-muted-foreground'>{t('No licenses')}</p>
+              )}
+          </section>
+        )}
+        {view === 'wallet' && (
+          <section className='space-y-3' aria-labelledby='d2s-invite-title'>
+            <h2 id='d2s-invite-title' className='text-lg font-semibold'>
+              {t('Invitations')}
+            </h2>
+            <Card>
+              <CardContent className='space-y-2 pt-4'>
+                <div>
+                  {t('Invite code')}:{' '}
+                  <span className='font-mono'>
+                    {invite.data?.data?.invite_code ?? '—'}
+                  </span>
+                </div>
+                <div>
+                  {t('Rewarded accounts')}:{' '}
+                  {invite.data?.data?.rewarded_invitees ?? 0}
+                </div>
+                <div className='border-t pt-2'>
+                  <div className='font-medium'>{t('Reward history')}</div>
+                  {(inviteRecords.data?.data?.records?.length ?? 0) === 0 ? (
+                    <p className='text-muted-foreground text-sm'>
+                      {t('No invite rewards')}
+                    </p>
+                  ) : (
+                    <div className='space-y-1 text-sm'>
+                      {inviteRecords.data?.data?.records.map((record) => (
+                        <div
+                          key={record.id}
+                          className='flex flex-wrap justify-between gap-2'
+                        >
+                          <span>
+                            {t('Invitee')} #{record.invitee_user_id} ·{' '}
+                            <StatusBadge value={record.status} />
+                          </span>
+                          <span>
+                            +{formatMoney(record.amount_minor, record.currency)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+      </div>
 
+      {view === 'wallet' && (
+        <>
           <Card>
             <CardHeader>
               <CardTitle>{t('Orders')}</CardTitle>
@@ -949,8 +961,23 @@ export function D2SWorkspace() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      </SectionPageLayout.Content>
+        </>
+      )}
+    </div>
+  )
+
+  if (view === 'wallet') return content
+
+  return (
+    <SectionPageLayout>
+      <SectionPageLayout.Title>
+        {t('Authorization management')}
+      </SectionPageLayout.Title>
+      <SectionPageLayout.Content>{content}</SectionPageLayout.Content>
     </SectionPageLayout>
   )
+}
+
+export function D2SWalletSection() {
+  return <D2SWorkspace view='wallet' />
 }

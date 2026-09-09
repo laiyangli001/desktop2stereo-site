@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
-import { D2SWorkspace } from '..'
+import { D2SWorkspace, D2SWalletSection } from '..'
 
 const apiMocks = vi.hoisted(() => ({
   changeD2SMode: vi.fn(),
@@ -129,6 +129,7 @@ describe('D2SWorkspace data status', () => {
     })
     render(
       <QueryClientProvider client={queryClient}>
+        <D2SWalletSection />
         <D2SWorkspace />
       </QueryClientProvider>
     )
@@ -153,5 +154,32 @@ describe('D2SWorkspace data status', () => {
     })
     expect(confirmSpy).toHaveBeenCalledWith('Confirm permanent binding')
     confirmSpy.mockRestore()
+  })
+
+  it('keeps commerce controls and invitations out of authorization management', async () => {
+    apiMocks.getD2SLicenses.mockResolvedValue({
+      success: true,
+      data: { licenses: [] },
+    })
+    apiMocks.getD2SManualUnbindRequests.mockResolvedValue({
+      success: true,
+      data: { requests: [] },
+    })
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <D2SWorkspace />
+      </QueryClientProvider>
+    )
+
+    expect(
+      await screen.findByText('Authorization management')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Purchase a license')).not.toBeInTheDocument()
+    expect(screen.queryByText('Invitations')).not.toBeInTheDocument()
+    expect(screen.queryByText('Withdrawals')).not.toBeInTheDocument()
   })
 })
