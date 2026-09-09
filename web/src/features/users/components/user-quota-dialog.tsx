@@ -28,6 +28,7 @@ import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
 import { cn } from '@/lib/utils'
 
 import { adjustUserQuota } from '../api'
+import { quotaUnitsToUserAmount } from '../lib/quota-display'
 import type { QuotaAdjustMode } from '../types'
 
 interface UserQuotaDialogProps {
@@ -45,9 +46,9 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
   const [loading, setLoading] = useState(false)
 
   // Admin quota adjustments use the configured amount unit without exchange rates.
-  const { config } = getCurrencyDisplay()
   const currencyLabel = getCurrencyLabel()
   const amountValue = Number(amount) || 0
+  const { config } = getCurrencyDisplay()
   const amountPerQuotaUnit = config.quotaPerUnit > 0 ? config.quotaPerUnit : 1
   const quotaValue = Math.round(Math.abs(amountValue) * amountPerQuotaUnit)
   const formatAmount = (value: number) =>
@@ -57,7 +58,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
 
   const getPreviewText = () => {
     const current = props.currentQuota
-    const currentAmount = current / amountPerQuotaUnit
+    const currentAmount = quotaUnitsToUserAmount(current)
     const val = Math.abs(amountValue)
     switch (mode) {
       case 'add':

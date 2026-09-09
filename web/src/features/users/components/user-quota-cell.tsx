@@ -25,8 +25,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { formatQuota } from '@/lib/format'
 import { cn } from '@/lib/utils'
+
+import { formatUserQuotaAmount } from '../lib/quota-display'
 
 type UserQuotaCellProps = {
   used: number
@@ -43,8 +44,8 @@ export function UserQuotaCell(props: UserQuotaCellProps) {
   const { t } = useTranslation()
   const total = props.used + props.remaining
   const percentage = total > 0 ? (props.remaining / total) * 100 : 0
-  const formattedRemaining = formatQuota(props.remaining)
-  const formattedTotal = formatQuota(total)
+  const formattedRemaining = formatUserQuotaAmount(props.remaining)
+  const formattedTotal = formatUserQuotaAmount(total)
 
   if (total === 0) {
     return (
@@ -80,7 +81,7 @@ export function UserQuotaCell(props: UserQuotaCellProps) {
       <TooltipContent>
         <div className='space-y-1 text-xs'>
           <div>
-            {t('Used:')} {formatQuota(props.used)}
+            {t('Used:')} {formatUserQuotaAmount(props.used)}
           </div>
           <div>
             {t('Remaining:')} {formattedRemaining}
