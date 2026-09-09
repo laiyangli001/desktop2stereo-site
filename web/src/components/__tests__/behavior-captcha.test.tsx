@@ -37,6 +37,7 @@ describe('BehaviorCaptcha', () => {
     const onChange = vi.fn<(value?: BehaviorCaptchaValue) => void>()
     render(<BehaviorCaptcha onChange={onChange} />)
 
+    fireEvent.click(screen.getByRole('button', { name: '点击完成验证' }))
     const imageButton = await screen.findByRole('button', {
       name: '点击图片中的目标，已完成 0/2',
     })
@@ -73,6 +74,7 @@ describe('BehaviorCaptcha', () => {
       />
     )
 
+    fireEvent.click(screen.getByRole('button', { name: '验证码已完成' }))
     await screen.findByRole('button', {
       name: '点击图片中的目标，已完成 0/2',
     })
