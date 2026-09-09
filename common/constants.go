@@ -215,9 +215,11 @@ var (
 	GlobalWebRateLimitNum      int
 	GlobalWebRateLimitDuration int64
 
-	CriticalRateLimitEnable   bool
-	CriticalRateLimitNum            = 20
-	CriticalRateLimitDuration int64 = 20 * 60
+	CriticalRateLimitEnable bool
+	CriticalRateLimitNum    = 20
+	// Keep authentication and other sensitive actions protected, but avoid
+	// locking a user out for an unnecessarily long period after a typo.
+	CriticalRateLimitDuration int64 = 2 * 60
 
 	UploadRateLimitNum            = 10
 	UploadRateLimitDuration int64 = 60

@@ -64,6 +64,8 @@ func TestRedisIPRateLimiterThresholdTTLAndNamespace(t *testing.T) {
 	limitedResponse := performRateLimitRequest(router, "/limited", remoteAddr)
 	assert.Equal(t, http.StatusTooManyRequests, limitedResponse.Code)
 	assert.Equal(t, "37", limitedResponse.Header().Get("Retry-After"))
+	assert.Contains(t, limitedResponse.Body.String(), "请求过于频繁")
+	assert.Contains(t, limitedResponse.Body.String(), `"retry_after":37`)
 
 	key := redisIPRateLimitKey("TEST", "192.0.2.10")
 	count, err := redisServer.Get(key)

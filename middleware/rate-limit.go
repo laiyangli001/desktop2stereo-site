@@ -137,11 +137,17 @@ func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark s
 // The in-memory limiter cannot report the remaining window, so callers
 // without a TTL pass the full window duration as a conservative upper bound.
 func writeRateLimited(c *gin.Context, retryAfterSeconds int64) {
+	if retryAfterSeconds < 0 {
+		retryAfterSeconds = 0
+	}
 	if retryAfterSeconds > 0 {
 		c.Header("Retry-After", strconv.FormatInt(retryAfterSeconds, 10))
 	}
-	c.Status(http.StatusTooManyRequests)
-	c.Abort()
+	c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+		"success":     false,
+		"message":     fmt.Sprintf("请求过于频繁，请等待 %d 秒后再试", retryAfterSeconds),
+		"retry_after": retryAfterSeconds,
+	})
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
