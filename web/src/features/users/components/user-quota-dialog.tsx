@@ -25,10 +25,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
+import { quotaUnitsToUserAmount } from '@/lib/quota-display'
 import { cn } from '@/lib/utils'
 
 import { adjustUserQuota } from '../api'
-import { quotaUnitsToUserAmount } from '../lib/quota-display'
 import type { QuotaAdjustMode } from '../types'
 
 interface UserQuotaDialogProps {

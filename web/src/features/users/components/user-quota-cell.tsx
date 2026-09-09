@@ -25,9 +25,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import { formatUserQuotaAmount } from '@/lib/quota-display'
 import { cn } from '@/lib/utils'
-
-import { formatUserQuotaAmount } from '../lib/quota-display'
 
 type UserQuotaCellProps = {
   used: number

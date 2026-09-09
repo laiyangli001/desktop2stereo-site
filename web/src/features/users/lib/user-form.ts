@@ -23,11 +23,11 @@ import {
   type AdminPermissionMatrix,
   normalizeAdminPermissions,
 } from '@/lib/admin-permissions'
+import { quotaUnitsToUserAmount } from '@/lib/quota-display'
 import { ROLE } from '@/lib/roles'
 
 import { DEFAULT_GROUP } from '../constants'
 import { type UserFormData, type User } from '../types'
-import { quotaUnitsToUserAmount } from './quota-display'
 
 // ============================================================================
 // Form Schema
