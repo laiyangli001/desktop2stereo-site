@@ -5651,7 +5651,7 @@
     "Save email delivery settings": "保存邮件推送设置",
     "Recent email delivery logs": "最近邮件推送日志",
     "No email delivery logs yet.": "暂无邮件推送日志。",
-    "Total email delivery logs": "邮件发送记录总数",
+    "Page {{page}}": "第 {{page}} 页",
     "Delete all records": "删除全部记录",
     "Confirm delete all email delivery logs": "确定删除全部邮件发送记录吗？此操作不可恢复。",
     "Confirm delete email delivery log": "确定删除这条邮件发送记录吗？",

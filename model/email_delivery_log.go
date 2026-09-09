@@ -45,11 +45,10 @@ func ListEmailDeliveryLogs(limit int) ([]*EmailDeliveryLog, error) {
 }
 
 type EmailDeliveryLogPage struct {
-	Logs       []*EmailDeliveryLog `json:"logs"`
-	Total      int64               `json:"total"`
-	Page       int                 `json:"page"`
-	PageSize   int                 `json:"page_size"`
-	TotalPages int                 `json:"total_pages"`
+	Logs     []*EmailDeliveryLog `json:"logs"`
+	Page     int                 `json:"page"`
+	PageSize int                 `json:"page_size"`
+	HasMore  bool                `json:"has_more"`
 }
 
 func PageEmailDeliveryLogs(page, pageSize int) (EmailDeliveryLogPage, error) {
@@ -60,20 +59,14 @@ func PageEmailDeliveryLogs(page, pageSize int) (EmailDeliveryLogPage, error) {
 		pageSize = 20
 	}
 
-	var total int64
-	if err := DB.Model(&EmailDeliveryLog{}).Count(&total).Error; err != nil {
-		return EmailDeliveryLogPage{}, err
-	}
-	result := EmailDeliveryLogPage{Total: total, Page: page, PageSize: pageSize}
-	if total > 0 {
-		result.TotalPages = int((total + int64(pageSize) - 1) / int64(pageSize))
-	} else {
-		result.TotalPages = 1
-	}
-
 	var logs []*EmailDeliveryLog
-	err := DB.Order("created_at DESC").Limit(pageSize).
+	err := DB.Order("created_at DESC").Limit(pageSize + 1).
 		Offset((page - 1) * pageSize).Find(&logs).Error
+	result := EmailDeliveryLogPage{Page: page, PageSize: pageSize}
+	if len(logs) > pageSize {
+		result.HasMore = true
+		logs = logs[:pageSize]
+	}
 	result.Logs = logs
 	return result, err
 }

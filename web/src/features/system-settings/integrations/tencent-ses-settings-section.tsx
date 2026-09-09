@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -135,23 +135,21 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
         success: boolean
         data: {
           logs: EmailDeliveryLog[]
-          total: number
           page: number
           page_size: number
-          total_pages: number
+          has_more: boolean
         }
       }>(`/api/option/tencent-ses/logs?page=${logPage}`)
       return response.data.data
     },
   })
-  useEffect(() => {
-    const totalPages = logsQuery.data?.total_pages ?? 1
-    if (logPage > totalPages) setLogPage(totalPages)
-  }, [logPage, logsQuery.data?.total_pages])
   const deleteLog = useMutation({
     mutationFn: (id: number) =>
       api.delete(`/api/option/tencent-ses/logs/${id}`),
     onSuccess: async () => {
+      if ((logsQuery.data?.logs.length ?? 0) === 1 && logPage > 1) {
+        setLogPage((page) => page - 1)
+      }
       toast.success(t('Email delivery log deleted'))
       await queryClient.invalidateQueries({
         queryKey: ['tencent-ses-delivery-logs'],
@@ -518,7 +516,7 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
       <SettingsSection title={t('Recent email delivery logs')}>
         <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
           <span className='text-muted-foreground text-sm'>
-            {t('Total email delivery logs')}: {logsQuery.data?.total ?? 0}
+            {t('Page {{page}}', { page: logPage })}
           </span>
           <Button
             type='button'
@@ -526,7 +524,7 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
             disabled={
               deleteAllLogs.isPending ||
               deleteLog.isPending ||
-              (logsQuery.data?.total ?? 0) === 0
+              logsQuery.isLoading
             }
             onClick={() => {
               if (window.confirm(t('Confirm delete all email delivery logs'))) {
@@ -586,7 +584,7 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
             </p>
           )}
         </div>
-        {(logsQuery.data?.total_pages ?? 1) > 1 && (
+        {(logPage > 1 || logsQuery.data?.has_more) && (
           <div className='mt-4 flex flex-wrap items-center justify-between gap-2'>
             <Button
               type='button'
@@ -598,19 +596,13 @@ export function TencentSESSettingsSection({ defaultValues }: Props) {
               {t('Previous page')}
             </Button>
             <span className='text-muted-foreground text-sm'>
-              {t('Page {{page}} of {{total}}', {
-                page: logPage,
-                total: logsQuery.data?.total_pages ?? 1,
-              })}
+              {t('Page {{page}}', { page: logPage })}
             </span>
             <Button
               type='button'
               variant='outline'
               size='sm'
-              disabled={
-                logPage >= (logsQuery.data?.total_pages ?? 1) ||
-                logsQuery.isFetching
-              }
+              disabled={!logsQuery.data?.has_more || logsQuery.isFetching}
               onClick={() => setLogPage((page) => page + 1)}
             >
               {t('Next page')}

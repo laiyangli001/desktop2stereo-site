@@ -5651,7 +5651,7 @@
     "Save email delivery settings": "Save email delivery settings",
     "Recent email delivery logs": "Recent email delivery logs",
     "No email delivery logs yet.": "No email delivery logs yet.",
-    "Total email delivery logs": "Total email delivery logs",
+    "Page {{page}}": "Page {{page}}",
     "Delete all records": "Delete all records",
     "Confirm delete all email delivery logs": "Delete all email delivery records? This action cannot be undone.",
     "Confirm delete email delivery log": "Delete this email delivery record?",
