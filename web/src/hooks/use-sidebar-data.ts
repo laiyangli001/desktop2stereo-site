@@ -152,7 +152,7 @@ export function useSidebarData(): SidebarData {
             icon: CreditCard,
           },
           {
-            title: t('Desktop2Stereo Admin'),
+            title: t('Authorization management'),
             url: '/d2s-admin',
             icon: CreditCard,
             requiredRole: ROLE.ADMIN,

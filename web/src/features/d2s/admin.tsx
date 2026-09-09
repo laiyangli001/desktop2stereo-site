@@ -176,7 +176,7 @@ export function D2SAdminWorkspace() {
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
-        {t('Desktop2Stereo Admin')}
+        {t('Authorization management')}
       </SectionPageLayout.Title>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
