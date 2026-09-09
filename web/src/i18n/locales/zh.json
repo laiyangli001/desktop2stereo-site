@@ -5706,6 +5706,7 @@
     "Unable to update license mode": "无法更新授权模式",
     "Unbound": "未绑定",
     "Withdrawal request submitted": "提现申请已提交",
-    "Withdrawals": "提现管理"
+    "Withdrawals": "提现管理",
+    "Authorization management": "授权管理"
   }
 }

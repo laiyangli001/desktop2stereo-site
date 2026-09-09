@@ -5676,6 +5676,7 @@
     "Check for updates first": "Check for updates first",
     "Server update is not configured": "Server update is not configured",
     "Start the project update now? The service will restart after backup and health checks.": "Start the project update now? The service will restart after backup and health checks.",
-    "Failed to start project update": "Failed to start project update"
+    "Failed to start project update": "Failed to start project update",
+    "Authorization management": "Authorization management"
   }
 }

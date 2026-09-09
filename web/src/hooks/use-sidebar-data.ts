@@ -111,7 +111,7 @@ export function useSidebarData(): SidebarData {
             icon: Wallet,
           },
           {
-            title: t('Desktop2Stereo'),
+            title: t('Authorization management'),
             url: '/d2s',
             icon: CreditCard,
           },
