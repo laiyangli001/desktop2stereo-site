@@ -3816,6 +3816,7 @@
     "Quota": "Quota",
     "Quota ({{currency}})": "Quota ({{currency}})",
     "Quota adjusted successfully": "Quota adjusted successfully",
+    "Quota amount": "Quota amount",
     "Quota clamped": "Quota clamped",
     "Quota consumed before charging users": "Quota consumed before charging users",
     "Quota Distribution": "Quota Distribution",

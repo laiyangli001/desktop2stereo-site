@@ -24,8 +24,6 @@ import { Dialog } from '@/components/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { getCurrencyDisplay, getCurrencyLabel } from '@/lib/currency'
-import { formatQuota, parseQuotaFromDollars } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { adjustUserQuota } from '../api'
@@ -45,24 +43,22 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
   const [amount, setAmount] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const { meta: currencyMeta } = getCurrencyDisplay()
-  const currencyLabel = getCurrencyLabel()
-  const tokensOnly = currencyMeta.kind === 'tokens'
-
-  const amountValue = parseFloat(amount) || 0
-  const quotaValue = parseQuotaFromDollars(Math.abs(amountValue))
+  // Admin quota adjustments use the raw integer quota unit, not a currency value.
+  const amountValue = Number(amount) || 0
+  const quotaValue = Math.abs(Math.trunc(amountValue))
+  const formatRawQuota = (value: number) => Math.trunc(value).toLocaleString()
 
   const getPreviewText = () => {
     const current = props.currentQuota
     const val = quotaValue
     switch (mode) {
       case 'add':
-        return `${t('Current quota')}: ${formatQuota(current)}  +${formatQuota(val)} = ${formatQuota(current + val)}`
+        return `${t('Current quota')}: ${formatRawQuota(current)}  +${formatRawQuota(val)} = ${formatRawQuota(current + val)}`
       case 'subtract':
-        return `${t('Current quota')}: ${formatQuota(current)}  -${formatQuota(val)} = ${formatQuota(current - val)}`
+        return `${t('Current quota')}: ${formatRawQuota(current)}  -${formatRawQuota(val)} = ${formatRawQuota(current - val)}`
       case 'override': {
-        const overrideQuota = parseQuotaFromDollars(amountValue)
-        return `${t('Current quota')}: ${formatQuota(current)} → ${formatQuota(overrideQuota)}`
+        const overrideQuota = Math.max(0, Math.trunc(amountValue))
+        return `${t('Current quota')}: ${formatRawQuota(current)} → ${formatRawQuota(overrideQuota)}`
       }
       default:
         return ''
@@ -76,7 +72,7 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
     setLoading(true)
     try {
       const value =
-        mode === 'override' ? parseQuotaFromDollars(amountValue) : quotaValue
+        mode === 'override' ? Math.max(0, Math.trunc(amountValue)) : quotaValue
       const result = await adjustUserQuota({
         id: props.userId,
         action: 'add_quota',
@@ -104,10 +100,6 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
     setMode('add')
     props.onOpenChange(false)
   }
-
-  const placeholder = tokensOnly
-    ? t('Enter amount in tokens')
-    : t('Enter amount in {{currency}}', { currency: currencyLabel })
 
   return (
     <Dialog
@@ -160,14 +152,12 @@ export function UserQuotaDialog(props: UserQuotaDialogProps) {
         </div>
 
         <div className='space-y-2'>
-          <Label>
-            {t('Amount')} ({currencyLabel})
-          </Label>
+          <Label>{t('Quota amount')} (Token)</Label>
           <Input
             type='number'
-            step={tokensOnly ? 1 : 0.000001}
-            min={mode === 'override' ? undefined : 0}
-            placeholder={placeholder}
+            step={1}
+            min={0}
+            placeholder={t('Enter amount in tokens')}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             onKeyDown={(e) => {
