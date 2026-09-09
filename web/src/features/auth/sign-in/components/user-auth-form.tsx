@@ -26,8 +26,11 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import type { z } from 'zod'
 
+import {
+  BehaviorCaptcha,
+  type BehaviorCaptchaValue,
+} from '@/components/behavior-captcha'
 import { Dialog } from '@/components/dialog'
-import { BehaviorCaptcha, type BehaviorCaptchaValue } from '@/components/behavior-captcha'
 import { PasswordInput } from '@/components/password-input'
 import { Button } from '@/components/ui/button'
 import {
@@ -154,7 +157,7 @@ export function UserAuthForm({
     }
 
     if (!captcha) {
-      toast.error(t('Please complete the drag verification'))
+      toast.error(t('Please complete the click verification'))
       return
     }
 

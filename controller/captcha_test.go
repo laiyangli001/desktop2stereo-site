@@ -19,15 +19,15 @@ import (
 
 func TestBehaviorCaptchaGeneratesImages(t *testing.T) {
 	initBehaviorCaptcha()
-	captcha, err := behaviorCaptchaBuilder.MakeDragDrop().Generate()
+	captcha, err := behaviorCaptchaBuilder.Make().Generate()
 	require.NoError(t, err)
 	require.NotNil(t, captcha.GetData())
 	master, err := captcha.GetMasterImage().ToBase64()
 	require.NoError(t, err)
-	tile, err := captcha.GetTileImage().ToBase64()
+	thumb, err := captcha.GetThumbImage().ToBase64()
 	require.NoError(t, err)
 	require.NotEmpty(t, master)
-	require.NotEmpty(t, tile)
+	require.NotEmpty(t, thumb)
 }
 
 func TestBehaviorCaptchaIsOneTimeAndUsesRedisWhenAvailable(t *testing.T) {
@@ -40,8 +40,10 @@ func TestBehaviorCaptchaIsOneTimeAndUsesRedisWhenAvailable(t *testing.T) {
 
 	id := "captcha-test-once"
 	require.NoError(t, storeBehaviorCaptcha(id, behaviorCaptchaChallenge{
-		X: 100, Y: 40, Created: time.Now(),
+		Targets: []behaviorCaptchaTarget{{X: 100, Y: 40, Width: 30, Height: 30}},
+		Created: time.Now(),
 	}))
-	require.True(t, verifyBehaviorCaptcha(id, 100, 40))
-	require.False(t, verifyBehaviorCaptcha(id, 100, 40))
+	clicks := []CaptchaClick{{X: 110, Y: 50}}
+	require.True(t, verifyBehaviorCaptcha(id, clicks))
+	require.False(t, verifyBehaviorCaptcha(id, clicks))
 }

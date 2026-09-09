@@ -133,6 +133,7 @@ GORM 维护以下表：
 - 已在 SQLite、MySQL、PostgreSQL 验证并发试用、绑定、租约、订单、区域锁、余额和支付幂等。
 - CI 中保留真实 MySQL/PostgreSQL 服务测试。
 - 2026-09-09 已将本地与 GitHub Actions 的 Go、Vitest 缓存及临时目录固定到工作区路径；扫描确认 D2S 测试不再调用 `t.TempDir`、`os.MkdirTemp` 或 `os.CreateTemp`，Actions `34278684231` 已通过固定目录回归。
+- 2026-09-09 已将登录/注册验证码从拖动拼图切换为自托管点击验证码：后端使用 `go-captcha/v2/click` 生成主图和提示图，服务端保存目标区域并一次性校验坐标数组；登录、注册、前端组件测试和 `controller` 回归均已覆盖。
 
 ### S3：支付渠道
 

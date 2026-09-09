@@ -1,3 +1,4 @@
+import type { BehaviorCaptchaClick } from '@/components/behavior-captcha'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -27,8 +28,7 @@ export interface LoginPayload {
   password: string
   turnstile?: string
   captcha_id?: string
-  captcha_x?: number
-  captcha_y?: number
+  captcha_clicks?: BehaviorCaptchaClick[]
   passwordEncryptionEnabled?: boolean
 }
 
@@ -45,8 +45,7 @@ export interface RegisterPayload {
   aff_code?: string
   turnstile?: string
   captcha_id?: string
-  captcha_x?: number
-  captcha_y?: number
+  captcha_clicks?: BehaviorCaptchaClick[]
 }
 
 export interface PasswordResetPayload {

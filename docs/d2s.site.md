@@ -182,7 +182,7 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 即使使用 `-SkipHttp` 也会执行此校验。
 
 同时在 new-api 管理设置中启用邮箱验证、SMTP、支付合规确认和实际使用的支付渠道。
-登录/注册使用服务端自托管拖动拼图验证码；邮箱验证码、密码重置和其他仍接入 Turnstile
+登录/注册使用服务端自托管点击验证码；邮箱验证码、密码重置和其他仍接入 Turnstile
 的入口，只有在对应接口完成迁移并验证后才能关闭 Turnstile。生产 Secret 只能进入腾讯云
 Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、镜像、数据库、日志和客户端。
 
@@ -223,7 +223,7 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
    ```
 
 6. 完成 new-api 初始化，启用邮箱验证和支付渠道；按接口实际使用情况配置仍需要 Turnstile
-   的高风险入口，并验证登录/注册拖动验证码可用。
+   的高风险入口，并验证登录/注册点击验证码可用。
 7. 部署支付回调 Worker，配置渠道原生 Secret 和独立桥接 Secret；优先使用每渠道独立的
    `D2S_PAYMENT_BRIDGE_SECRET_{PROVIDER}`，仅在兼容旧部署时使用全局 Secret 回退。
 8. 执行健康检查：

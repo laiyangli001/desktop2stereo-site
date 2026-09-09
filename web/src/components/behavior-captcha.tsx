@@ -4,30 +4,32 @@ Copyright (C) 2023-2026 QuantumNous
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+the Free Software Foundation's terms.
 */
 
 import { RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type PointerEvent } from 'react'
+import { useCallback, useEffect, useState, type MouseEvent } from 'react'
 
-import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
+import { api } from '@/lib/api'
+
+export interface BehaviorCaptchaClick {
+  x: number
+  y: number
+}
 
 export interface BehaviorCaptchaValue {
   captcha_id: string
-  captcha_x: number
-  captcha_y: number
+  captcha_clicks: BehaviorCaptchaClick[]
 }
 
 interface CaptchaData {
   id: string
   master_image: string
-  tile_image: string
+  thumb_image: string
   width: number
   height: number
-  tile_width: number
-  tile_height: number
-  tile_start_y: number
+  required_clicks: number
 }
 
 interface BehaviorCaptchaProps {
@@ -37,19 +39,17 @@ interface BehaviorCaptchaProps {
 
 export function BehaviorCaptcha({ value, onChange }: BehaviorCaptchaProps) {
   const [data, setData] = useState<CaptchaData>()
-  const [tileX, setTileX] = useState(0)
+  const [clicks, setClicks] = useState<BehaviorCaptchaClick[]>([])
   const [loading, setLoading] = useState(false)
-  const [dragging, setDragging] = useState(false)
-  const dragRef = useRef({ pointerX: 0, tileX: 0 })
 
   const refresh = useCallback(async () => {
     setLoading(true)
+    setClicks([])
     onChange(undefined)
     try {
       const response = await api.get('/api/captcha')
       if (response.data?.success) {
         setData(response.data.data)
-        setTileX(0)
       }
     } finally {
       setLoading(false)
@@ -60,92 +60,99 @@ export function BehaviorCaptcha({ value, onChange }: BehaviorCaptchaProps) {
     void refresh()
   }, [refresh])
 
-  function handlePointerDown(event: PointerEvent<HTMLImageElement>) {
-    if (!data || loading) return
-    if (typeof event.currentTarget.setPointerCapture === 'function') {
-      event.currentTarget.setPointerCapture(event.pointerId)
+  function handleImageClick(event: MouseEvent<HTMLButtonElement>) {
+    if (!data || loading || clicks.length >= data.required_clicks) return
+
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const scaleX = data.width / bounds.width
+    const scaleY = data.height / bounds.height
+    const nextClick = {
+      x: Math.max(
+        0,
+        Math.min(data.width, Math.round((event.clientX - bounds.left) * scaleX))
+      ),
+      y: Math.max(
+        0,
+        Math.min(data.height, Math.round((event.clientY - bounds.top) * scaleY))
+      ),
     }
-    dragRef.current = { pointerX: event.clientX, tileX }
-    setDragging(true)
-  }
+    const nextClicks = [...clicks, nextClick]
+    setClicks(nextClicks)
 
-  function handlePointerMove(event: PointerEvent<HTMLImageElement>) {
-    if (!dragging || !data) return
-    const maxX = Math.max(0, data.width - data.tile_width)
-    const nextX = Math.min(
-      maxX,
-      Math.max(0, dragRef.current.tileX + event.clientX - dragRef.current.pointerX)
-    )
-    dragRef.current.tileX = nextX
-    setTileX(nextX)
-  }
-
-  function submitPosition() {
-    if (!data) return
-    onChange({ captcha_id: data.id, captcha_x: Math.round(dragRef.current.tileX), captcha_y: data.tile_start_y })
-  }
-
-  function handlePointerUp() {
-    if (!dragging || !data) return
-    setDragging(false)
-    submitPosition()
-  }
-
-  function handleKeyDown(event: React.KeyboardEvent<HTMLImageElement>) {
-    if (!data || loading) return
-    const maxX = Math.max(0, data.width - data.tile_width)
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End') {
-      event.preventDefault()
-      const step = event.key === 'ArrowLeft' ? -5 : event.key === 'ArrowRight' ? 5 : 0
-      const nextX = event.key === 'Home' ? 0 : event.key === 'End' ? maxX : Math.min(maxX, Math.max(0, tileX + step))
-      setTileX(nextX)
-      dragRef.current.tileX = nextX
-      return
-    }
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault()
-      submitPosition()
+    if (nextClicks.length === data.required_clicks) {
+      onChange({ captcha_id: data.id, captcha_clicks: nextClicks })
     }
   }
 
   return (
-    <div className='grid gap-2' aria-label='Drag verification'>
+    <div className='grid gap-2' aria-label='Click verification'>
       <div className='text-muted-foreground flex items-center justify-between text-sm'>
-        <span>拖动拼图完成验证</span>
-        <Button type='button' variant='ghost' size='icon' onClick={() => void refresh()} disabled={loading}>
-          <RefreshCw className={loading ? 'animate-spin' : ''} />
+        <span>请按下方提示点击图片中的目标</span>
+        <Button
+          type='button'
+          variant='ghost'
+          size='icon'
+          onClick={() => void refresh()}
+          disabled={loading}
+          aria-label='刷新验证码'
+        >
+          <RefreshCw
+            className={loading ? 'animate-spin' : ''}
+            aria-hidden='true'
+          />
           <span className='sr-only'>刷新验证码</span>
         </Button>
       </div>
       {data ? (
-        <div
-          className='relative select-none overflow-hidden rounded-md border bg-muted'
-          style={{ width: data.width, height: data.height, touchAction: 'none' }}
-        >
-          <img src={data.master_image} alt='验证码背景' className='absolute inset-0 h-full w-full' draggable={false} />
-          <img
-            src={data.tile_image}
-            alt='可拖动拼图'
-            role='slider'
-            tabIndex={0}
-            aria-label='调整拼图位置'
-            aria-valuemin={0}
-            aria-valuemax={Math.max(0, data.width - data.tile_width)}
-            aria-valuenow={Math.round(tileX)}
-            className='absolute cursor-grab active:cursor-grabbing'
-            style={{ left: tileX, top: data.tile_start_y, width: data.tile_width, height: data.tile_height }}
-            draggable={false}
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
-            onKeyDown={handleKeyDown}
-          />
-        </div>
+        <>
+          <div className='flex items-center gap-2 text-sm'>
+            <span className='text-muted-foreground'>请点击：</span>
+            <img
+              src={data.thumb_image}
+              alt='需要点击的目标'
+              className='h-10 w-auto rounded border'
+            />
+            <span className='text-muted-foreground'>
+              ({clicks.length}/{data.required_clicks})
+            </span>
+          </div>
+          <button
+            type='button'
+            className='bg-muted focus-visible:ring-ring relative block overflow-hidden rounded-md border p-0 text-left focus-visible:ring-2 focus-visible:outline-none disabled:cursor-default'
+            style={{ width: data.width, height: data.height, maxWidth: '100%' }}
+            onClick={handleImageClick}
+            disabled={loading || clicks.length >= data.required_clicks}
+            aria-label={`点击图片中的目标，已完成 ${clicks.length}/${data.required_clicks}`}
+          >
+            <img
+              src={data.master_image}
+              alt='点击验证码图片'
+              className='pointer-events-none h-full w-full object-fill select-none'
+              draggable={false}
+            />
+            {clicks.map((point, index) => (
+              <span
+                key={`${point.x}-${point.y}-${index}`}
+                className='pointer-events-none absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-blue-600/80 text-xs font-semibold text-white shadow'
+                style={{
+                  left: `${(point.x / data.width) * 100}%`,
+                  top: `${(point.y / data.height) * 100}%`,
+                }}
+                aria-hidden='true'
+              >
+                {index + 1}
+              </span>
+            ))}
+          </button>
+        </>
       ) : (
-        <div className='text-muted-foreground flex h-20 items-center justify-center text-sm'>验证码加载中…</div>
+        <div className='text-muted-foreground flex h-20 items-center justify-center text-sm'>
+          验证码加载中…
+        </div>
       )}
-      {value ? <span className='text-xs text-green-600'>已完成拖动，请提交表单</span> : null}
+      {value ? (
+        <span className='text-xs text-green-600'>已完成点击，请提交表单</span>
+      ) : null}
     </div>
   )
 }

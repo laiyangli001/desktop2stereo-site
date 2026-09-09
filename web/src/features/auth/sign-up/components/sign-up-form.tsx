@@ -24,8 +24,11 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import type { z } from 'zod'
 
+import {
+  BehaviorCaptcha,
+  type BehaviorCaptchaValue,
+} from '@/components/behavior-captcha'
 import { Dialog } from '@/components/dialog'
-import { BehaviorCaptcha, type BehaviorCaptchaValue } from '@/components/behavior-captcha'
 import { PasswordInput } from '@/components/password-input'
 import { Button } from '@/components/ui/button'
 import {
@@ -74,8 +77,7 @@ export function SignUpForm({
     secondsLeft,
     isActive,
     sendCode,
-  } = useEmailVerification({
-  })
+  } = useEmailVerification({})
 
   const form = useForm<z.infer<typeof registerFormSchema>>({
     resolver: zodResolver(registerFormSchema),
@@ -146,7 +148,7 @@ export function SignUpForm({
     }
 
     if (!captcha) {
-      toast.error(t('Please complete the drag verification'))
+      toast.error(t('Please complete the click verification'))
       return
     }
 
@@ -322,12 +324,7 @@ export function SignUpForm({
               <Button
                 variant='outline'
                 type='button'
-                disabled={
-                  isLoading ||
-                  isSendingCode ||
-                  isActive ||
-                  !emailValue
-                }
+                disabled={isLoading || isSendingCode || isActive || !emailValue}
                 onClick={handleSendVerificationCode}
               >
                 {verificationCodeAction}
@@ -350,9 +347,7 @@ export function SignUpForm({
           type='submit'
           className='mt-2 w-full justify-center gap-2'
           disabled={
-            isLoading ||
-            (requiresLegalConsent && !agreedToLegal) ||
-            !captcha
+            isLoading || (requiresLegalConsent && !agreedToLegal) || !captcha
           }
         >
           {isLoading ? <Loader2 className='h-4 w-4 animate-spin' /> : null}

@@ -70,8 +70,7 @@ export async function login(payload: LoginPayload): Promise<LoginResponse> {
         username: payload.username,
         ...passwordFields,
         captcha_id: payload.captcha_id,
-        captcha_x: payload.captcha_x,
-        captcha_y: payload.captcha_y,
+        captcha_clicks: payload.captcha_clicks,
       },
       { skipAuthRefresh: true }
     )

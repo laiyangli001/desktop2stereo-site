@@ -28,13 +28,12 @@ import (
 )
 
 type LoginRequest struct {
-	Username          string `json:"username"`
-	Password          string `json:"password"`
-	PasswordEncrypted string `json:"password_encrypted"`
-	EncryptionKeyID   string `json:"encryption_key_id"`
-	CaptchaID         string `json:"captcha_id"`
-	CaptchaX          int    `json:"captcha_x"`
-	CaptchaY          int    `json:"captcha_y"`
+	Username          string         `json:"username"`
+	Password          string         `json:"password"`
+	PasswordEncrypted string         `json:"password_encrypted"`
+	EncryptionKeyID   string         `json:"encryption_key_id"`
+	CaptchaID         string         `json:"captcha_id"`
+	CaptchaClicks     []CaptchaClick `json:"captcha_clicks"`
 }
 
 var (
@@ -70,7 +69,7 @@ func Login(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	if !VerifyBehaviorCaptcha(loginRequest.CaptchaID, loginRequest.CaptchaX, loginRequest.CaptchaY) {
+	if !VerifyBehaviorCaptcha(loginRequest.CaptchaID, loginRequest.CaptchaClicks) {
 		behaviorCaptchaError(c)
 		return
 	}
@@ -251,16 +250,15 @@ func Register(c *gin.Context) {
 	}
 	var request struct {
 		model.User
-		CaptchaID string `json:"captcha_id"`
-		CaptchaX  int    `json:"captcha_x"`
-		CaptchaY  int    `json:"captcha_y"`
+		CaptchaID     string         `json:"captcha_id"`
+		CaptchaClicks []CaptchaClick `json:"captcha_clicks"`
 	}
 	err := common.DecodeJson(c.Request.Body, &request)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	if !VerifyBehaviorCaptcha(request.CaptchaID, request.CaptchaX, request.CaptchaY) {
+	if !VerifyBehaviorCaptcha(request.CaptchaID, request.CaptchaClicks) {
 		behaviorCaptchaError(c)
 		return
 	}

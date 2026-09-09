@@ -24,30 +24,34 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/gin-gonic/gin"
+	"github.com/golang/freetype/truetype"
+	"github.com/wenlng/go-captcha-assets/resources/fonts/fzshengsksjw"
 	"github.com/wenlng/go-captcha-assets/resources/imagesv2"
-	"github.com/wenlng/go-captcha-assets/resources/tiles"
 	"github.com/wenlng/go-captcha/v2/base/option"
-	"github.com/wenlng/go-captcha/v2/slide"
+	"github.com/wenlng/go-captcha/v2/click"
 )
 
 const behaviorCaptchaTTL = 5 * time.Minute
 
 type behaviorCaptchaChallenge struct {
-	X       int       `json:"x"`
-	Y       int       `json:"y"`
-	DX      int       `json:"dx"`
-	DY      int       `json:"dy"`
-	Created time.Time `json:"created"`
+	Targets []behaviorCaptchaTarget `json:"targets"`
+	Created time.Time               `json:"created"`
+}
+
+type behaviorCaptchaTarget struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
 }
 
 var (
-	behaviorCaptchaBuilder slide.Builder
+	behaviorCaptchaBuilder click.Builder
 	behaviorCaptchaOnce    sync.Once
 	behaviorCaptchaLocal   sync.Map
 )
@@ -58,26 +62,19 @@ func initBehaviorCaptcha() {
 		if err != nil {
 			panic("load behavior captcha backgrounds: " + err.Error())
 		}
-		assetTiles, err := tiles.GetTiles()
+		font, err := fzshengsksjw.GetFont()
 		if err != nil {
-			panic("load behavior captcha tiles: " + err.Error())
+			panic("load behavior captcha font: " + err.Error())
 		}
-		graphs := make([]*slide.GraphImage, 0, len(assetTiles))
-		for _, tile := range assetTiles {
-			graphs = append(graphs, &slide.GraphImage{
-				OverlayImage: tile.OverlayImage,
-				ShadowImage:  tile.ShadowImage,
-				MaskImage:    tile.MaskImage,
-			})
-		}
-		behaviorCaptchaBuilder = slide.NewBuilder(
-			slide.WithImageSize(option.Size{Width: 320, Height: 160}),
-			slide.WithRangeGraphSize(option.RangeVal{Min: 40, Max: 50}),
-			slide.WithGenGraphNumber(1),
+		behaviorCaptchaBuilder = click.NewBuilder(
+			click.WithImageSize(option.Size{Width: 320, Height: 160}),
+			click.WithRangeLen(option.RangeVal{Min: 6, Max: 7}),
+			click.WithRangeVerifyLen(option.RangeVal{Min: 2, Max: 3}),
+			click.WithRangeSize(option.RangeVal{Min: 24, Max: 30}),
 		)
 		behaviorCaptchaBuilder.SetResources(
-			slide.WithBackgrounds(backgrounds),
-			slide.WithGraphImages(graphs),
+			click.WithFonts([]*truetype.Font{font}),
+			click.WithBackgrounds(backgrounds),
 		)
 	})
 }
@@ -125,14 +122,14 @@ func takeBehaviorCaptcha(id string) (behaviorCaptchaChallenge, bool) {
 
 func GenerateBehaviorCaptcha(c *gin.Context) {
 	initBehaviorCaptcha()
-	captcha, err := behaviorCaptchaBuilder.MakeDragDrop().Generate()
+	captcha, err := behaviorCaptchaBuilder.Make().Generate()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	block := captcha.GetData()
-	if block == nil {
-		common.ApiError(c, errors.New("behavior captcha generated without block data"))
+	dots := captcha.GetData()
+	if len(dots) == 0 {
+		common.ApiError(c, errors.New("behavior captcha generated without click targets"))
 		return
 	}
 	id, err := newBehaviorCaptchaID()
@@ -140,8 +137,21 @@ func GenerateBehaviorCaptcha(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	targets := make([]behaviorCaptchaTarget, 0, len(dots))
+	for _, dot := range dots {
+		if dot == nil {
+			continue
+		}
+		targets = append(targets, behaviorCaptchaTarget{
+			X: dot.X, Y: dot.Y, Width: dot.Width, Height: dot.Height,
+		})
+	}
+	if len(targets) == 0 {
+		common.ApiError(c, errors.New("behavior captcha generated without usable click targets"))
+		return
+	}
 	if err := storeBehaviorCaptcha(id, behaviorCaptchaChallenge{
-		X: block.X, Y: block.Y, DX: block.DX, DY: block.DY, Created: time.Now(),
+		Targets: targets, Created: time.Now(),
 	}); err != nil {
 		common.ApiError(c, err)
 		return
@@ -151,45 +161,61 @@ func GenerateBehaviorCaptcha(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	tile, err := captcha.GetTileImage().ToBase64()
+	thumb, err := captcha.GetThumbImage().ToBase64()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, gin.H{
-		"id": id, "master_image": master, "tile_image": tile,
-		"width": 320, "height": 160, "tile_width": block.Width, "tile_height": block.Height,
-		"tile_start_y": block.DY,
+		"id": id, "master_image": master, "thumb_image": thumb,
+		"width": 320, "height": 160, "required_clicks": len(targets),
 	})
 }
 
-func verifyBehaviorCaptcha(id string, x, y int) bool {
-	if id == "" || x < 0 || y < 0 {
+type CaptchaClick struct {
+	X int `json:"x"`
+	Y int `json:"y"`
+}
+
+func verifyBehaviorCaptcha(id string, clicks []CaptchaClick) bool {
+	if id == "" || len(clicks) == 0 {
 		return false
 	}
 	challenge, ok := takeBehaviorCaptcha(id)
 	if !ok {
 		return false
 	}
-	return slide.Validate(challenge.X, challenge.Y, x, y, 5)
+	if len(clicks) != len(challenge.Targets) {
+		return false
+	}
+	matched := make([]bool, len(challenge.Targets))
+	for _, point := range clicks {
+		if point.X < 0 || point.Y < 0 {
+			return false
+		}
+		found := false
+		for index, target := range challenge.Targets {
+			if !matched[index] && click.Validate(point.X, point.Y, target.X, target.Y, target.Width, target.Height, 5) {
+				matched[index] = true
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
-func VerifyBehaviorCaptcha(id string, x, y int) bool {
-	return verifyBehaviorCaptcha(id, x, y)
+func VerifyBehaviorCaptcha(id string, clicks []CaptchaClick) bool {
+	return verifyBehaviorCaptcha(id, clicks)
 }
 
 func behaviorCaptchaError(c *gin.Context) {
 	c.JSON(http.StatusBadRequest, gin.H{
 		"success": false,
-		"message": "请完成拖动验证码",
+		"message": "请完成点击验证码",
 		"code":    "BEHAVIOR_CAPTCHA_REQUIRED",
 	})
-}
-
-func parseCaptchaCoordinate(value string) int {
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return -1
-	}
-	return parsed
 }
