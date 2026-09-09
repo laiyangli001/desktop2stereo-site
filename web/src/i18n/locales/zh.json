@@ -3816,7 +3816,6 @@
     "Quota": "额度",
     "Quota ({{currency}})": "额度 ({{currency}})",
     "Quota adjusted successfully": "调整额度成功",
-    "Quota amount": "额度值",
     "Quota clamped": "额度已钳制",
     "Quota consumed before charging users": "向用户收费前消耗的配额",
     "Quota Distribution": "消耗分布",
