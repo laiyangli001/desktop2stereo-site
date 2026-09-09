@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -608,7 +609,7 @@ func reverseD2SInviteRewardTx(tx *gorm.DB, order *D2SOrder, now int64) error {
 }
 
 func CreateD2SWithdrawal(userID int, amountMinor int64, alipayAccount, realName string, now int64) (*D2SWithdrawalRequest, error) {
-	if amountMinor < 5000 || strings.TrimSpace(alipayAccount) == "" || strings.TrimSpace(realName) == "" {
+	if amountMinor < common.D2SMinWithdrawalMinor || strings.TrimSpace(alipayAccount) == "" || strings.TrimSpace(realName) == "" {
 		return nil, ErrD2SWithdrawalNotAllowed
 	}
 	profile, err := EnsureD2SProfileAndTrial(userID, now)

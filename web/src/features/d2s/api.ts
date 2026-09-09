@@ -169,7 +169,10 @@ export async function createD2SOrderCheckout(orderID: string) {
 }
 
 export async function getD2SBalance(): Promise<
-  D2SResponse<{ accounts: D2SBalanceAccount[] }>
+  D2SResponse<{
+    accounts: D2SBalanceAccount[]
+    min_withdrawal_minor?: number
+  }>
 > {
   const response = await api.get('/api/v1/balance/info')
   return response.data

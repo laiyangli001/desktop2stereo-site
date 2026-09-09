@@ -130,6 +130,7 @@ var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
 var QuotaRemindThreshold = 1000
 var PreConsumedQuota = 500
+var D2SMinWithdrawalMinor int64 = 5000
 
 var RetryTimes = 0
 

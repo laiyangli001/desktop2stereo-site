@@ -5730,6 +5730,11 @@
     "Unbound": "未绑定",
     "Withdrawal request submitted": "提现申请已提交",
     "Withdrawals": "提现管理",
-    "Authorization management": "授权管理"
+    "Authorization management": "授权管理",
+    "D2S balances": "D2S 余额",
+    "D2S order history": "D2S 订单历史",
+    "Minimum withdrawal amount": "提现最小额度",
+    "Minimum CNY amount in minor units required for a withdrawal.": "提现所需的最低人民币金额（以最小货币单位填写）。",
+    "Withdrawal amount is below the configured minimum": "提现金额低于系统设置的最小额度"
   }
 }

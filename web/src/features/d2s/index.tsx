@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -33,7 +33,7 @@ import {
   getD2SManualUnbindRequests,
 } from './api'
 import { WithdrawalRequestForm } from './components/withdrawal-request-form'
-import type { D2SLicense, D2SOrder } from './types'
+import type { D2SLicense, D2SOrder, D2SWalletSummary } from './types'
 
 function submitD2SCheckout(checkout: {
   checkout_url: string
@@ -264,7 +264,11 @@ function OrderRow(props: { order: D2SOrder }) {
 }
 
 export function D2SWorkspace(
-  props: { view?: 'authorization' | 'wallet' } = {}
+  props: {
+    view?: 'authorization' | 'wallet'
+    embeddedWallet?: boolean
+    onWalletSummaryChange?: (summary: D2SWalletSummary) => void
+  } = {}
 ) {
   const { t } = useTranslation()
   const view = props.view ?? 'authorization'
@@ -410,6 +414,28 @@ export function D2SWorkspace(
     purchaseProduct !== 'license' &&
     !purchasableLicenses.some((license) => license.id === purchaseLicenseID)
   const cnyBalance = accountRows.find((account) => account.currency === 'CNY')
+  const showStandaloneWalletLedgers = view === 'wallet' && !props.embeddedWallet
+
+  useEffect(() => {
+    if (view !== 'wallet' || !props.onWalletSummaryChange) return
+    props.onWalletSummaryChange({
+      accounts: accountRows,
+      transactions: transactionRows,
+      orders: orderRows,
+      invite: invite.data?.data,
+      inviteRecords: inviteRecords.data?.data?.records ?? [],
+      minWithdrawalMinor: balance.data?.data?.min_withdrawal_minor ?? 5000,
+    })
+  }, [
+    accountRows,
+    balance.data?.data?.min_withdrawal_minor,
+    invite.data?.data,
+    inviteRecords.data?.data?.records,
+    orderRows,
+    props.onWalletSummaryChange,
+    transactionRows,
+    view,
+  ])
   const enabledCheckoutProviders = checkoutProviders.data?.data?.providers ?? []
   const balancePurchaseMutation = useMutation({
     mutationFn: async () => {
@@ -504,71 +530,75 @@ export function D2SWorkspace(
       )}
       {view === 'wallet' && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('Balance')}</CardTitle>
-              <CardDescription>
-                {t('Balances are separated by currency.')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className='grid gap-3 sm:grid-cols-2'>
-              {accountRows.length === 0 && (
-                <p className='text-muted-foreground'>
-                  {t('No balance accounts')}
-                </p>
-              )}
-              {accountRows.map((account) => (
-                <div key={account.id} className='rounded-lg border p-3'>
-                  <div className='font-medium'>{account.currency}</div>
-                  <div>
-                    {formatMoney(account.available_minor, account.currency)}
+          {showStandaloneWalletLedgers && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('Balance')}</CardTitle>
+                <CardDescription>
+                  {t('Balances are separated by currency.')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className='grid gap-3 sm:grid-cols-2'>
+                {accountRows.length === 0 && (
+                  <p className='text-muted-foreground'>
+                    {t('No balance accounts')}
+                  </p>
+                )}
+                {accountRows.map((account) => (
+                  <div key={account.id} className='rounded-lg border p-3'>
+                    <div className='font-medium'>{account.currency}</div>
+                    <div>
+                      {formatMoney(account.available_minor, account.currency)}
+                    </div>
+                    <div className='text-muted-foreground text-xs'>
+                      {t('Reserved')}:{' '}
+                      {formatMoney(account.reserved_minor, account.currency)}
+                    </div>
                   </div>
-                  <div className='text-muted-foreground text-xs'>
-                    {t('Reserved')}:{' '}
-                    {formatMoney(account.reserved_minor, account.currency)}
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('Balance transactions')}</CardTitle>
-              <CardDescription>
-                {t('Recent currency ledger entries.')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {transactionRows.length === 0 ? (
-                <p className='text-muted-foreground'>
-                  {t('No balance transactions')}
-                </p>
-              ) : (
-                transactionRows.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className='flex flex-wrap justify-between gap-2 border-b py-3 text-sm last:border-0'
-                  >
-                    <span>
-                      {transaction.kind}
-                      {transaction.order_id && ` · ${transaction.order_id}`}
-                    </span>
-                    <span>
-                      {transaction.amount_minor > 0 ? '+' : ''}
-                      {formatMoney(
-                        transaction.amount_minor,
-                        transaction.currency
-                      )}{' '}
-                      <span className='text-muted-foreground text-xs'>
-                        {formatDate(transaction.created_at)}
+          {showStandaloneWalletLedgers && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('Balance transactions')}</CardTitle>
+                <CardDescription>
+                  {t('Recent currency ledger entries.')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {transactionRows.length === 0 ? (
+                  <p className='text-muted-foreground'>
+                    {t('No balance transactions')}
+                  </p>
+                ) : (
+                  transactionRows.map((transaction) => (
+                    <div
+                      key={transaction.id}
+                      className='flex flex-wrap justify-between gap-2 border-b py-3 text-sm last:border-0'
+                    >
+                      <span>
+                        {transaction.kind}
+                        {transaction.order_id && ` · ${transaction.order_id}`}
                       </span>
-                    </span>
-                  </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                      <span>
+                        {transaction.amount_minor > 0 ? '+' : ''}
+                        {formatMoney(
+                          transaction.amount_minor,
+                          transaction.currency
+                        )}{' '}
+                        <span className='text-muted-foreground text-xs'>
+                          {formatDate(transaction.created_at)}
+                        </span>
+                      </span>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -851,7 +881,7 @@ export function D2SWorkspace(
               )}
           </section>
         )}
-        {view === 'wallet' && (
+        {view === 'wallet' && !props.embeddedWallet && (
           <section className='space-y-3' aria-labelledby='d2s-invite-title'>
             <h2 id='d2s-invite-title' className='text-lg font-semibold'>
               {t('Invitations')}
@@ -901,21 +931,23 @@ export function D2SWorkspace(
 
       {view === 'wallet' && (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('Orders')}</CardTitle>
-              <CardDescription>{t('Recent D2S orders')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {orderRows.length === 0 ? (
-                <p className='text-muted-foreground'>{t('No orders')}</p>
-              ) : (
-                orderRows.map((order) => (
-                  <OrderRow key={order.id} order={order} />
-                ))
-              )}
-            </CardContent>
-          </Card>
+          {!props.embeddedWallet && (
+            <Card>
+              <CardHeader>
+                <CardTitle>{t('Orders')}</CardTitle>
+                <CardDescription>{t('Recent D2S orders')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {orderRows.length === 0 ? (
+                  <p className='text-muted-foreground'>{t('No orders')}</p>
+                ) : (
+                  orderRows.map((order) => (
+                    <OrderRow key={order.id} order={order} />
+                  ))
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader>
@@ -925,6 +957,9 @@ export function D2SWorkspace(
             <CardContent className='grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]'>
               <WithdrawalRequestForm
                 availableMinor={cnyBalance?.available_minor ?? 0}
+                minWithdrawalMinor={
+                  balance.data?.data?.min_withdrawal_minor ?? 5000
+                }
                 onSuccess={() => {
                   void queryClient.invalidateQueries({
                     queryKey: ['d2s', 'withdrawals'],
@@ -978,6 +1013,11 @@ export function D2SWorkspace(
   )
 }
 
-export function D2SWalletSection() {
-  return <D2SWorkspace view='wallet' />
+export function D2SWalletSection(
+  props: {
+    embeddedWallet?: boolean
+    onWalletSummaryChange?: (summary: D2SWalletSummary) => void
+  } = {}
+) {
+  return <D2SWorkspace view='wallet' {...props} />
 }

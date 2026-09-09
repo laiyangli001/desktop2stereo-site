@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
 import { D2SWalletSection } from '@/features/d2s'
+import type { D2SWalletSummary } from '@/features/d2s/types'
 import { useStatus } from '@/hooks/use-status'
 import { useSystemConfig } from '@/hooks/use-system-config'
 import { getSelf } from '@/lib/api'
@@ -80,6 +81,7 @@ export function Wallet(props: WalletProps) {
   const [selectedCreemProduct, setSelectedCreemProduct] =
     useState<CreemProduct | null>(null)
   const [showSubscriptionPanel, setShowSubscriptionPanel] = useState(true)
+  const [d2sSummary, setD2sSummary] = useState<D2SWalletSummary | null>(null)
 
   const { status } = useStatus()
   const { currency } = useSystemConfig()
@@ -289,7 +291,11 @@ export function Wallet(props: WalletProps) {
         <SectionPageLayout.Title>{t('Wallet')}</SectionPageLayout.Title>
         <SectionPageLayout.Content>
           <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
-            <WalletStatsCard user={user} loading={userLoading} />
+            <WalletStatsCard
+              user={user}
+              d2sSummary={d2sSummary}
+              loading={userLoading}
+            />
 
             <div
               className={
@@ -342,6 +348,7 @@ export function Wallet(props: WalletProps) {
 
             <AffiliateRewardsCard
               user={user}
+              d2sSummary={d2sSummary}
               affiliateLink={affiliateLink}
               onTransfer={() => setTransferDialogOpen(true)}
               complianceConfirmed={
@@ -350,7 +357,10 @@ export function Wallet(props: WalletProps) {
               loading={affiliateLoading}
             />
           </div>
-          <D2SWalletSection />
+          <D2SWalletSection
+            embeddedWallet
+            onWalletSummaryChange={setD2sSummary}
+          />
         </SectionPageLayout.Content>
       </SectionPageLayout>
 
@@ -378,6 +388,7 @@ export function Wallet(props: WalletProps) {
       <BillingHistoryDialog
         open={billingDialogOpen}
         onOpenChange={setBillingDialogOpen}
+        d2sOrders={d2sSummary?.orders}
       />
 
       <CreemConfirmDialog

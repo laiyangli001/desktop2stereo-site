@@ -44,6 +44,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { D2SOrder } from '@/features/d2s/types'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatCurrencyFromUSD } from '@/lib/currency'
 import { formatNumber } from '@/lib/format'
@@ -58,11 +59,13 @@ import {
 interface BillingHistoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  d2sOrders?: D2SOrder[]
 }
 
 export function BillingHistoryDialog({
   open,
   onOpenChange,
+  d2sOrders = [],
 }: BillingHistoryDialogProps) {
   const { t } = useTranslation()
   const {
@@ -166,7 +169,7 @@ export function BillingHistoryDialog({
                   </div>
                 ))}
               </div>
-            ) : records.length === 0 ? (
+            ) : records.length === 0 && d2sOrders.length === 0 ? (
               <div className='text-muted-foreground flex min-h-40 flex-col items-center justify-center py-10 text-center'>
                 <p className='text-sm font-medium'>
                   {t('No billing records found')}
@@ -177,7 +180,7 @@ export function BillingHistoryDialog({
                     : t('Your transaction history will appear here')}
                 </p>
               </div>
-            ) : (
+            ) : records.length > 0 ? (
               <div className='space-y-3'>
                 {records.map((record) => {
                   const statusConfig = getStatusConfig(record.status)
@@ -275,8 +278,44 @@ export function BillingHistoryDialog({
                   )
                 })}
               </div>
-            )}
+            ) : null}
           </div>
+
+          {d2sOrders.length > 0 ? (
+            <div className='space-y-3 border-t pt-3'>
+              <div>
+                <div className='font-medium'>{t('D2S order history')}</div>
+                <div className='text-muted-foreground text-xs'>
+                  {t('Recent D2S orders')}
+                </div>
+              </div>
+              {d2sOrders.map((order) => (
+                <div
+                  key={order.id}
+                  className='flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm'
+                >
+                  <div>
+                    <code className='font-mono text-xs'>{order.id}</code>
+                    <div className='text-muted-foreground text-xs'>
+                      {order.product} ·{' '}
+                      {new Date(order.created_at * 1000).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className='text-right'>
+                    <div className='font-semibold'>
+                      {order.currency} {(order.amount_minor / 100).toFixed(2)}
+                    </div>
+                    <StatusBadge
+                      label={order.status}
+                      variant='neutral'
+                      showDot={false}
+                      copyable={false}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
 
           {/* Pagination */}
           {!loading && records.length > 0 && (

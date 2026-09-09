@@ -5700,6 +5700,11 @@
     "Server update is not configured": "Server update is not configured",
     "Start the project update now? The service will restart after backup and health checks.": "Start the project update now? The service will restart after backup and health checks.",
     "Failed to start project update": "Failed to start project update",
-    "Authorization management": "Authorization management"
+    "Authorization management": "Authorization management",
+    "D2S balances": "D2S balances",
+    "D2S order history": "D2S order history",
+    "Minimum withdrawal amount": "Minimum withdrawal amount",
+    "Minimum CNY amount in minor units required for a withdrawal.": "Minimum CNY amount in minor units required for a withdrawal.",
+    "Withdrawal amount is below the configured minimum": "Withdrawal amount is below the configured minimum"
   }
 }

@@ -153,7 +153,9 @@ func D2SBalanceInfo(c *gin.Context) {
 		d2sError(c, err)
 		return
 	}
-	d2sSuccess(c, http.StatusOK, gin.H{"accounts": accounts})
+	d2sSuccess(c, http.StatusOK, gin.H{
+		"accounts": accounts, "min_withdrawal_minor": common.D2SMinWithdrawalMinor,
+	})
 }
 
 func D2SBalanceTransactions(c *gin.Context) {

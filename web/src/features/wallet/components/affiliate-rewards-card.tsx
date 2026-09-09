@@ -25,12 +25,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { IconBadge } from '@/components/ui/icon-badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { D2SWalletSummary } from '@/features/d2s/types'
 import { formatUserQuotaAmount } from '@/lib/quota-display'
 
 import type { UserWalletData } from '../types'
 
 interface AffiliateRewardsCardProps {
   user: UserWalletData | null
+  d2sSummary?: D2SWalletSummary | null
   affiliateLink: string
   onTransfer: () => void
   complianceConfirmed?: boolean
@@ -39,6 +41,7 @@ interface AffiliateRewardsCardProps {
 
 export function AffiliateRewardsCard({
   user,
+  d2sSummary,
   affiliateLink,
   onTransfer,
   complianceConfirmed = true,
@@ -126,6 +129,38 @@ export function AffiliateRewardsCard({
             </Button>
           )}
         </div>
+        {d2sSummary ? (
+          <div className='border-t pt-3 text-xs lg:col-span-3'>
+            <div className='flex flex-wrap gap-x-4 gap-y-1'>
+              <span>
+                {t('Invite code')}: {d2sSummary.invite?.invite_code ?? '—'}
+              </span>
+              <span>
+                {t('Rewarded accounts')}:{' '}
+                {d2sSummary.invite?.rewarded_invitees ?? 0}
+              </span>
+            </div>
+            {d2sSummary.inviteRecords.length > 0 ? (
+              <div className='text-muted-foreground mt-2 space-y-1'>
+                {d2sSummary.inviteRecords.slice(0, 3).map((record) => (
+                  <div key={record.id} className='flex justify-between gap-2'>
+                    <span>
+                      {t('Invitee')} #{record.invitee_user_id}
+                    </span>
+                    <span>
+                      +{(record.amount_minor / 100).toFixed(2)}{' '}
+                      {record.currency}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className='text-muted-foreground mt-2'>
+                {t('No invite rewards')}
+              </div>
+            )}
+          </div>
+        ) : null}
         {!complianceConfirmed ? (
           <p className='text-muted-foreground text-xs lg:col-span-3'>
             {t(
