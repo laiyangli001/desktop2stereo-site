@@ -5659,6 +5659,23 @@
     "Template mapping must be a JSON object of positive numeric IDs": "Template mapping must be a JSON object of positive numeric IDs",
     "Invalid template mapping": "Invalid template mapping",
     "Leave blank to keep existing credential": "Leave blank to keep existing credential",
-    "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.": "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported."
+    "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.": "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.",
+    "Project update completed successfully": "Project update completed successfully",
+    "Project update failed": "Project update failed",
+    "Backup database": "Backup database",
+    "Download project": "Download project",
+    "Build Docker image": "Build Docker image",
+    "Restart application": "Restart application",
+    "Health check": "Health check",
+    "Project update source": "Project update source",
+    "Server-side update is ready. Database and shared files stay outside the release directory.": "Server-side update is ready. Database and shared files stay outside the release directory.",
+    "Server-side update is disabled or not initialized. Install the fixed update script and enable D2S_UPDATE_ENABLED first.": "Server-side update is disabled or not initialized. Install the fixed update script and enable D2S_UPDATE_ENABLED first.",
+    "The server is already running this commit. No update is needed.": "The server is already running this commit. No update is needed.",
+    "Update server to this commit": "Update server to this commit",
+    "Status is refreshed every 2 seconds": "Status is refreshed every 2 seconds",
+    "Check for updates first": "Check for updates first",
+    "Server update is not configured": "Server update is not configured",
+    "Start the project update now? The service will restart after backup and health checks.": "Start the project update now? The service will restart after backup and health checks.",
+    "Failed to start project update": "Failed to start project update"
   }
 }

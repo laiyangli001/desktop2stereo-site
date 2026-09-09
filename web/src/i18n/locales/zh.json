@@ -5659,6 +5659,23 @@
     "Template mapping must be a JSON object of positive numeric IDs": "模板映射必须是由正数 ID 组成的 JSON 对象",
     "Invalid template mapping": "模板映射无效",
     "Leave blank to keep existing credential": "留空以保留现有凭证",
-    "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.": "请使用 zhCN、en 等语言映射配置多语言模板；旧版的业务场景到模板 ID JSON 格式仍然兼容。"
+    "Use a language mapping such as zhCN and en for localized templates. Legacy scene-to-ID JSON remains supported.": "请使用 zhCN、en 等语言映射配置多语言模板；旧版的业务场景到模板 ID JSON 格式仍然兼容。",
+    "Project update completed successfully": "项目更新成功完成",
+    "Project update failed": "项目更新失败",
+    "Backup database": "备份数据库",
+    "Download project": "下载项目代码",
+    "Build Docker image": "构建 Docker 镜像",
+    "Restart application": "重启应用程序",
+    "Health check": "健康检查",
+    "Project update source": "项目更新源",
+    "Server-side update is ready. Database and shared files stay outside the release directory.": "服务器端更新已就绪。数据库和共享文件位于发布目录之外，不会被覆盖。",
+    "Server-side update is disabled or not initialized. Install the fixed update script and enable D2S_UPDATE_ENABLED first.": "服务器端更新未启用或尚未初始化。请先安装固定更新脚本并启用 D2S_UPDATE_ENABLED。",
+    "The server is already running this commit. No update is needed.": "服务器已运行此提交版本，无需更新。",
+    "Update server to this commit": "将服务器更新到此提交",
+    "Status is refreshed every 2 seconds": "状态每 2 秒刷新一次",
+    "Check for updates first": "请先检查更新",
+    "Server update is not configured": "服务器更新未配置",
+    "Start the project update now? The service will restart after backup and health checks.": "现在开始项目更新吗？备份和健康检查完成后，服务将重启。",
+    "Failed to start project update": "启动项目更新失败"
   }
 }
