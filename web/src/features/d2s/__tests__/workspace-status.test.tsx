@@ -137,9 +137,6 @@ describe('D2SWorkspace data status', () => {
     expect(
       await screen.findByRole('button', { name: 'Pay with Payment FM' })
     ).toBeInTheDocument()
-    expect(screen.getByText(/reserve/)).toBeInTheDocument()
-    expect(screen.getByText(/USD -10\.00/)).toBeInTheDocument()
-    expect(screen.getByText(/Invitee #55/)).toBeInTheDocument()
 
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(

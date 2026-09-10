@@ -67,6 +67,8 @@ function formatDate(timestamp: number): string {
 
 type D2SPurchaseProduct = 'license' | 'paid_revoke' | 'offline_extension'
 
+const EMPTY_D2S_ORDERS: D2SOrder[] = []
+
 function StatusBadge(props: { value: string }) {
   const destructive = ['suspended', 'revoked', 'chargeback', 'failed'].includes(
     props.value
@@ -269,6 +271,7 @@ export function D2SWorkspace(
 ) {
   const { t } = useTranslation()
   const view = props.view ?? 'authorization'
+  const onWalletSummaryChange = props.onWalletSummaryChange
   const queryClient = useQueryClient()
   const [purchaseProduct, setPurchaseProduct] =
     useState<D2SPurchaseProduct>('license')
@@ -375,7 +378,7 @@ export function D2SWorkspace(
   const d2sDataFailed = d2sQueries.some((query) => query.isError)
 
   const accountRows = balance.data?.data?.accounts ?? []
-  const orderRows = orders.data?.data?.orders ?? []
+  const orderRows = orders.data?.data?.orders ?? EMPTY_D2S_ORDERS
   const withdrawalRows = withdrawals.data?.data?.withdrawals ?? []
   const purchasableLicenses = (licenses.data?.data?.licenses ?? []).filter(
     (license) => {
@@ -392,16 +395,14 @@ export function D2SWorkspace(
     purchaseProduct !== 'license' &&
     !purchasableLicenses.some((license) => license.id === purchaseLicenseID)
   const cnyBalance = accountRows.find((account) => account.currency === 'CNY')
-  const showStandaloneWalletLedgers = view === 'wallet' && !props.embeddedWallet
-
   useEffect(() => {
-    if (view !== 'wallet' || !props.onWalletSummaryChange) return
-    props.onWalletSummaryChange({
+    if (view !== 'wallet' || !onWalletSummaryChange) return
+    onWalletSummaryChange({
       orders: orderRows,
     })
   }, [
     orderRows,
-    props.onWalletSummaryChange,
+    onWalletSummaryChange,
     view,
   ])
   const enabledCheckoutProviders = checkoutProviders.data?.data?.providers ?? []
@@ -497,38 +498,7 @@ export function D2SWorkspace(
         </p>
       )}
       {view === 'wallet' && (
-        <>
-          {showStandaloneWalletLedgers && (
-            <Card>
-              <CardHeader>
-                <CardTitle>{t('Balance')}</CardTitle>
-                <CardDescription>
-                  {t('Balances are separated by currency.')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className='grid gap-3 sm:grid-cols-2'>
-                {accountRows.length === 0 && (
-                  <p className='text-muted-foreground'>
-                    {t('No balance accounts')}
-                  </p>
-                )}
-                {accountRows.map((account) => (
-                  <div key={account.id} className='rounded-lg border p-3'>
-                    <div className='font-medium'>{account.currency}</div>
-                    <div>
-                      {formatMoney(account.available_minor, account.currency)}
-                    </div>
-                    <div className='text-muted-foreground text-xs'>
-                      {t('Reserved')}:{' '}
-                      {formatMoney(account.reserved_minor, account.currency)}
-                    </div>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
+        <Card>
             <CardHeader>
               <CardTitle>{t('Purchase a license')}</CardTitle>
               <CardDescription>
@@ -736,8 +706,7 @@ export function D2SWorkspace(
                 {t('The server will quote the price and verify your currency.')}
               </span>
             </CardContent>
-          </Card>
-        </>
+        </Card>
       )}
 
       <div className='grid gap-4 xl:grid-cols-2'>

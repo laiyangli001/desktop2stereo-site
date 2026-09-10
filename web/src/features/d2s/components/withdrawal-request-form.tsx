@@ -2,7 +2,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import type { z } from 'zod'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -18,10 +17,8 @@ import { Input } from '@/components/ui/input'
 import { createD2SWithdrawal } from '../api'
 import {
   createD2SWithdrawalFormSchema,
-  d2sWithdrawalFormSchema,
+  type D2SWithdrawalFormValues,
 } from '../lib/withdrawal'
-
-type D2SWithdrawalFormValues = z.infer<typeof d2sWithdrawalFormSchema>
 
 type WithdrawalRequestFormProps = {
   availableMinor: number
