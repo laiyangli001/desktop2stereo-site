@@ -391,11 +391,14 @@ export function Desktop2StereoHome({
   return (
     <main className='d2s-home bg-background text-foreground'>
       <section className='relative isolate overflow-hidden border-b px-6 py-20 md:py-28'>
-        <img
-          src='/hero-stereo-lab.png'
-          alt='Desktop2Stereo stereo desktop workstation'
-          className='absolute inset-0 -z-20 h-full w-full object-cover object-center opacity-25 dark:opacity-35'
-        />
+        <picture className='absolute inset-0 -z-20 block h-full w-full'>
+          <source srcSet='/d2s_full.jpg' type='image/jpeg' />
+          <img
+            src='/d2s_full.png'
+            alt='Desktop2Stereo stereo desktop workstation'
+            className='h-full w-full object-cover object-center opacity-25 dark:opacity-35'
+          />
+        </picture>
         <div className='from-background via-background/95 to-background/60 absolute inset-0 -z-10 bg-gradient-to-r' />
         <div className='mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.05fr_.95fr]'>
           <div>
@@ -436,11 +439,14 @@ export function Desktop2StereoHome({
             </div>
           </div>
           <div className='bg-card/80 rounded-2xl border p-3 shadow-xl backdrop-blur-sm'>
-            <img
-              src='/hero-stereo-lab.png'
-              alt='Desktop2Stereo depth and stereo preview'
-              className='aspect-[4/3] w-full rounded-xl object-cover'
-            />
+            <picture>
+              <source srcSet='/d2s_full.jpg' type='image/jpeg' />
+              <img
+                src='/d2s_full.png'
+                alt='Desktop2Stereo depth and stereo preview'
+                className='aspect-[4/3] w-full rounded-xl object-cover'
+              />
+            </picture>
           </div>
         </div>
       </section>

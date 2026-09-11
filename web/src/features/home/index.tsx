@@ -27,6 +27,7 @@ import { isLikelyHtml } from '@/lib/content-format'
 import { useAuthStore } from '@/stores/auth-store'
 
 import { Desktop2StereoHome } from './desktop2stereo-home'
+import { HomeAnnouncementDialog } from './home-announcement-dialog'
 import { useHomePageContent } from './hooks'
 
 export function Home() {
@@ -123,6 +124,7 @@ export function Home() {
   return (
     <PublicLayout showMainContainer={false}>
       <Desktop2StereoHome isAuthenticated={isAuthenticated} />
+      <HomeAnnouncementDialog />
       <Footer />
     </PublicLayout>
   )

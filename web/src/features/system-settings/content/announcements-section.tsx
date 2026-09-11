@@ -28,6 +28,7 @@ import { StaticDataTable } from '@/components/data-table/static/static-data-tabl
 import { StaticRowActions } from '@/components/data-table/static/static-row-actions'
 import { DateTimePicker } from '@/components/datetime-picker'
 import { Dialog } from '@/components/dialog'
+import { RichTextEditor } from '@/components/rich-text-editor'
 import { StatusBadge } from '@/components/status-badge'
 import {
   AlertDialog,
@@ -59,7 +60,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import dayjs from '@/lib/dayjs'
 
 import { SettingsSwitchField } from '../components/settings-form-layout'
@@ -83,7 +83,7 @@ const announcementSchema = z.object({
   content: z
     .string()
     .min(1, 'Content is required')
-    .max(500, 'Content must be less than 500 characters'),
+    .max(10000, 'Content must be less than 10000 characters'),
   publishDate: z.string().min(1, 'Publish date is required'),
   type: z.enum(['default', 'ongoing', 'success', 'warning', 'error']),
   extra: z
@@ -476,16 +476,16 @@ export function AnnouncementsSection({
                 <FormItem>
                   <FormLabel>{t('Content')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder={t(
-                        'Enter announcement content (supports Markdown/HTML)'
-                      )}
-                      rows={4}
-                      {...field}
+                    <RichTextEditor
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder={t('Enter announcement content')}
                     />
                   </FormControl>
                   <FormDescription>
-                    {t('Maximum 500 characters. Supports Markdown and HTML.')}
+                    {t(
+                      'Use the toolbar to format text, insert links, or embed images by URL. Maximum 10000 characters.'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
