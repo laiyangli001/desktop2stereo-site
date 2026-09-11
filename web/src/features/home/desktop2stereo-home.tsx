@@ -60,7 +60,7 @@ const copy = {
     compatibility: 'Compatibility',
     compatibilityTitle: 'Supported hardware and operating systems',
     compatibilityCopy:
-      'Desktop2Steoro is designed for cross-vendor GPU acceleration and mainstream desktop operating systems.',
+      'Desktop2Stereo is designed for cross-vendor GPU acceleration and mainstream desktop operating systems.',
     hardware: 'Hardware',
     systems: 'Operating systems',
     hardwareItems: [
@@ -180,7 +180,7 @@ const copy = {
     platforms: 'Platforms',
     platformsTitle: 'Version and project links',
     platformsCopy:
-      'Current website version label: Desktop2Steoro v2.5. The official code and tutorial source is lc700x/desktop2stereo.',
+      'Current website version label: Desktop2Stereo v2.5. The official code and tutorial source is lc700x/desktop2stereo.',
     platformItems: [
       [
         'Official GitHub',
@@ -203,14 +203,14 @@ const copy = {
       'For usage questions, troubleshooting, and Chinese community discussion, scan the QR code to join the D2S official QQ group.',
     enlarge: 'Enlarge QR code',
     support: 'Support',
-    supportTitle: 'Support Desktop2Steoro',
+    supportTitle: 'Support Desktop2Stereo',
     supportCopy:
       'Turning 2D video into real-time 3D in VR is expensive to maintain. Sponsorship helps fund monthly model tokens, distribution storage, and continued image-quality work.',
     supportNote:
       'If sponsorship is not convenient, a free GitHub Star or sharing the project in a VR group helps just as much.',
     project: 'Project information',
     projectItems: [
-      'Current software version: Desktop2Steoro v2.5',
+      'Current software version: Desktop2Stereo v2.5',
       'Official source: lc700x/desktop2stereo on GitHub',
       'Manual resources: English / 中文',
     ],
@@ -218,7 +218,7 @@ const copy = {
   },
   zh: {
     eyebrow: '官方 Desktop2Stereo 网站',
-    hero: 'Desktop2Steoro v2.5 可以把普通桌面、视频、游戏和媒体内容转换成 3D 立体输出，面向大屏、VR 观看和 3D 显示实验。',
+    hero: 'Desktop2Stereo v2.5 可以把普通桌面、视频、游戏和媒体内容转换成 3D 立体输出，面向大屏、VR 观看和 3D 显示实验。',
     download: '下载 v2.5',
     guide: '查看使用教程',
     dashboard: '进入控制台',
@@ -241,7 +241,7 @@ const copy = {
     compatibility: '兼容性',
     compatibilityTitle: '支持硬件与支持系统',
     compatibilityCopy:
-      'Desktop2Steoro 面向多厂商 GPU 加速和主流桌面操作系统设计。',
+      'Desktop2Stereo 面向多厂商 GPU 加速和主流桌面操作系统设计。',
     hardware: '支持硬件',
     systems: '支持系统',
     hardwareItems: [
@@ -259,7 +259,7 @@ const copy = {
     features: '功能',
     featuresTitle: '硬件覆盖广，立体参数可调，3D 输出格式多。',
     featuresCopy:
-      'Desktop2Steoro 按分层实时 2D 转 3D 管线设计：捕获输入、估计深度、合成左右眼，再呈现到本地显示、OpenXR、推流、导出或 API 目标。',
+      'Desktop2Stereo 按分层实时 2D 转 3D 管线设计：捕获输入、估计深度、合成左右眼，再呈现到本地显示、OpenXR、推流、导出或 API 目标。',
     featureItems: [
       [
         '统一捕获输入',
@@ -347,7 +347,7 @@ const copy = {
     platforms: '项目链接',
     platformsTitle: '版本与项目链接',
     platformsCopy:
-      '当前网站标注的软件版本为 Desktop2Steoro v2.5，官方代码与教程来源是 lc700x/desktop2stereo。',
+      '当前网站标注的软件版本为 Desktop2Stereo v2.5，官方代码与教程来源是 lc700x/desktop2stereo。',
     platformItems: [
       [
         '官方 GitHub',
@@ -364,14 +364,14 @@ const copy = {
       '使用问题、故障排查和中文社区交流，可以扫码加入 D2S 官方 QQ 问题讨论群。',
     enlarge: '放大二维码',
     support: '赞助',
-    supportTitle: '赞助 Desktop2Steoro',
+    supportTitle: '赞助 Desktop2Stereo',
     supportCopy:
       '让 2D 视频在 VR 里变成实时 3D 巨幕需要持续投入。赞助将用于模型 Token、网盘存储和后续画质提升。',
     supportNote:
       '如果不方便赞助，点个免费的 GitHub Star 或在 VR 群里转发项目同样有帮助。',
     project: '项目信息',
     projectItems: [
-      '当前软件版本：Desktop2Steoro v2.5',
+      '当前软件版本：Desktop2Stereo v2.5',
       '官方源码：GitHub lc700x/desktop2stereo',
       '手册资源：English / 中文',
     ],
@@ -393,7 +393,7 @@ export function Desktop2StereoHome({
       <section className='relative isolate overflow-hidden border-b px-6 py-20 md:py-28'>
         <img
           src='/hero-stereo-lab.png'
-          alt='Desktop2Steoro stereo desktop workstation'
+          alt='Desktop2Stereo stereo desktop workstation'
           className='absolute inset-0 -z-20 h-full w-full object-cover object-center opacity-25 dark:opacity-35'
         />
         <div className='from-background via-background/95 to-background/60 absolute inset-0 -z-10 bg-gradient-to-r' />
@@ -403,7 +403,7 @@ export function Desktop2StereoHome({
               {text.eyebrow}
             </p>
             <h1 className='max-w-3xl text-4xl font-bold tracking-tight md:text-6xl'>
-              Desktop2Steoro <span className='text-primary'>v2.5</span>
+              Desktop2Stereo <span className='text-primary'>v2.5</span>
             </h1>
             <p className='text-muted-foreground mt-6 max-w-2xl text-lg leading-8'>
               {text.hero}
@@ -438,7 +438,7 @@ export function Desktop2StereoHome({
           <div className='bg-card/80 rounded-2xl border p-3 shadow-xl backdrop-blur-sm'>
             <img
               src='/hero-stereo-lab.png'
-              alt='Desktop2Steoro depth and stereo preview'
+              alt='Desktop2Stereo depth and stereo preview'
               className='aspect-[4/3] w-full rounded-xl object-cover'
             />
           </div>
@@ -619,7 +619,7 @@ export function Desktop2StereoHome({
           >
             <img
               src='/lc700x_videoguide.png'
-              alt='LC700X Desktop2Steoro Bilibili video guide'
+              alt='LC700X Desktop2Stereo Bilibili video guide'
               loading='lazy'
               className='aspect-video w-full rounded-lg object-cover transition-opacity group-hover:opacity-80'
             />
@@ -740,7 +740,7 @@ export function Desktop2StereoHome({
           >
             <img
               src='/weixin_dashang.png'
-              alt='WeChat reward QR code for Desktop2Steoro sponsorship'
+              alt='WeChat reward QR code for Desktop2Stereo sponsorship'
               loading='lazy'
               className='aspect-square w-full rounded-lg object-contain'
             />
