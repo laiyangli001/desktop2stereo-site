@@ -97,10 +97,10 @@ export function HomeAnnouncementDialog() {
           ? formatDateTimeObject(new Date(announcement.publishDate))
           : t('Latest platform updates and notices')
       }
-      contentClassName='max-w-[calc(100%-1.5rem)] gap-0 rounded-3xl border border-border/80 p-0 shadow-2xl sm:max-w-5xl [&_[data-slot=dialog-close]]:top-6 [&_[data-slot=dialog-close]]:right-6 [&_[data-slot=dialog-close]]:size-12 [&_[data-slot=dialog-close]]:rounded-2xl [&_[data-slot=dialog-close]]:border-2 [&_[data-slot=dialog-close]]:border-blue-200 [&_[data-slot=dialog-close]]:bg-background sm:[&_[data-slot=dialog-close]]:top-8 sm:[&_[data-slot=dialog-close]]:right-8'
-      headerClassName='border-b bg-background px-6 py-6 sm:px-10 sm:py-8'
+      contentClassName='w-[calc(100%-1.5rem)] max-w-[min(90vw,1800px)] gap-0 rounded-[2rem] border border-border/80 p-0 shadow-2xl [&_[data-slot=dialog-close]]:top-5 [&_[data-slot=dialog-close]]:right-5 [&_[data-slot=dialog-close]]:size-11 [&_[data-slot=dialog-close]]:rounded-2xl [&_[data-slot=dialog-close]]:border-2 [&_[data-slot=dialog-close]]:border-blue-200 [&_[data-slot=dialog-close]]:bg-background sm:[&_[data-slot=dialog-close]]:top-6 sm:[&_[data-slot=dialog-close]]:right-6'
+      headerClassName='border-b bg-background px-6 py-5 pr-20 sm:px-8 sm:py-6 sm:pr-24'
       titleClassName='text-2xl font-semibold tracking-tight sm:text-3xl'
-      descriptionClassName='mt-2 text-base sm:text-lg'
+      descriptionClassName='mt-1 text-base sm:text-lg'
       overlayClassName='bg-slate-950/55 supports-backdrop-filter:backdrop-blur-md'
       bodyClassName='p-0'
       footer={
@@ -126,22 +126,24 @@ export function HomeAnnouncementDialog() {
           </Button>
         </div>
       }
-      footerClassName='-mx-0 -mb-0 rounded-b-3xl px-6 py-5 sm:px-10 sm:py-6'
+      footerClassName='-mx-0 -mb-0 rounded-b-[2rem] px-6 py-4 sm:px-8 sm:py-4'
     >
-      <ScrollArea className='max-h-[min(62vh,560px)] px-6 py-6 sm:px-10 sm:py-8'>
-        <div className='prose prose-base dark:prose-invert max-w-none'>
-          <RichContent
-            content={announcement.content}
-            mode={contentIsHtml ? 'html' : 'markdown'}
-            htmlVariant='inline'
-          />
-          {announcement.extra ? (
-            <div className='text-muted-foreground mt-4 border-t pt-4 text-sm'>
-              <RichContent breaks content={announcement.extra} />
-            </div>
-          ) : null}
-        </div>
-      </ScrollArea>
+      <div className='mx-4 my-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/60 sm:mx-6 sm:my-5 dark:border-slate-700 dark:bg-slate-900/30'>
+        <ScrollArea className='max-h-[min(58vh,640px)] border-l-4 border-violet-500 px-5 py-5 sm:px-8 sm:py-6'>
+          <div className='prose prose-base dark:prose-invert max-w-none'>
+            <RichContent
+              content={announcement.content}
+              mode={contentIsHtml ? 'html' : 'markdown'}
+              htmlVariant='inline'
+            />
+            {announcement.extra ? (
+              <div className='text-muted-foreground mt-4 border-t pt-4 text-sm'>
+                <RichContent breaks content={announcement.extra} />
+              </div>
+            ) : null}
+          </div>
+        </ScrollArea>
+      </div>
     </Dialog>
   )
 }
