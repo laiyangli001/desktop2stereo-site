@@ -24,14 +24,18 @@ interface NotificationState {
   lastReadNotice: string
   // Array of read announcement keys (id or content hash)
   readAnnouncementKeys: string[]
+  // Array of announcement keys permanently dismissed on this device
+  dismissedAnnouncementKeys: string[]
   // Timestamp of last "Close Today" action
   closedUntilDate: string | null
 
   // Actions
   markNoticeRead: (noticeContent: string) => void
   markAnnouncementsRead: (keys: string[]) => void
+  dismissAnnouncements: (keys: string[]) => void
   setClosedUntilDate: (date: string | null) => void
   isAnnouncementRead: (key: string) => boolean
+  isAnnouncementDismissed: (key: string) => boolean
   isNoticeClosed: () => boolean
 }
 
@@ -44,6 +48,7 @@ export const useNotificationStore = create<NotificationState>()(
     (set, get) => ({
       lastReadNotice: '',
       readAnnouncementKeys: [],
+      dismissedAnnouncementKeys: [],
       closedUntilDate: null,
 
       markNoticeRead: (noticeContent: string) => {
@@ -60,12 +65,24 @@ export const useNotificationStore = create<NotificationState>()(
         }))
       },
 
+      dismissAnnouncements: (keys: string[]) => {
+        set((state) => ({
+          dismissedAnnouncementKeys: [
+            ...new Set([...state.dismissedAnnouncementKeys, ...keys]),
+          ],
+        }))
+      },
+
       setClosedUntilDate: (date: string | null) => {
         set({ closedUntilDate: date })
       },
 
       isAnnouncementRead: (key: string) => {
         return get().readAnnouncementKeys.includes(key)
+      },
+
+      isAnnouncementDismissed: (key: string) => {
+        return get().dismissedAnnouncementKeys.includes(key)
       },
 
       isNoticeClosed: () => {
@@ -81,6 +98,7 @@ export const useNotificationStore = create<NotificationState>()(
       partialize: (state) => ({
         lastReadNotice: state.lastReadNotice,
         readAnnouncementKeys: state.readAnnouncementKeys,
+        dismissedAnnouncementKeys: state.dismissedAnnouncementKeys,
         closedUntilDate: state.closedUntilDate,
       }),
     }
