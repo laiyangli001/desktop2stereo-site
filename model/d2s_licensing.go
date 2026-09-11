@@ -52,6 +52,7 @@ var (
 	ErrD2SDeviceCodeExpired         = errors.New("device code expired")
 	ErrD2SDeviceCodeConsumed        = errors.New("device code was already consumed")
 	ErrD2SManualUnbindPending       = errors.New("manual unbind request is already pending")
+	ErrD2SOfflinePeriodInvalid      = errors.New("offline authorization period is invalid")
 )
 
 const d2STransactionRetries = 5
@@ -455,6 +456,10 @@ func validateD2SDeviceHash(deviceHash string) bool {
 	return err == nil
 }
 
+func validateD2SOfflinePeriod(days int) bool {
+	return days == 7 || days == 14 || days == 30
+}
+
 func BindD2SLicense(userID int, licenseID, deviceHash string, fingerprintVersion int, now int64) (*D2SLicense, error) {
 	deviceHash = strings.ToLower(strings.TrimSpace(deviceHash))
 	if !validateD2SDeviceHash(deviceHash) || fingerprintVersion <= 0 {
@@ -570,9 +575,6 @@ func ChangeD2SLicenseMode(userID int, licenseID, deviceHash, nextMode, confirmat
 	if nextMode != D2SLicenseModeOnline && nextMode != D2SLicenseModeOffline && nextMode != D2SLicenseModePermanent {
 		return nil, ErrD2SLicenseUnavailable
 	}
-	if offlineDays != 7 && offlineDays != 14 && offlineDays != 30 {
-		offlineDays = 7
-	}
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
@@ -591,6 +593,20 @@ func ChangeD2SLicenseMode(userID int, licenseID, deviceHash, nextMode, confirmat
 		if license.DeviceHash == "" || license.DeviceHash != strings.ToLower(strings.TrimSpace(deviceHash)) {
 			return ErrD2SDeviceMismatch
 		}
+		periodDays := offlineDays
+		switch nextMode {
+		case D2SLicenseModeOffline:
+			if !validateD2SOfflinePeriod(periodDays) {
+				return ErrD2SOfflinePeriodInvalid
+			}
+		case D2SLicenseModeOnline:
+			periodDays = license.OfflinePeriodDays
+			if !validateD2SOfflinePeriod(periodDays) {
+				periodDays = 7
+			}
+		case D2SLicenseModePermanent:
+			periodDays = 0
+		}
 		permanentAt := license.PermanentBoundAt
 		if nextMode == D2SLicenseModePermanent {
 			if confirmation != "PERMANENT" {
@@ -598,7 +614,7 @@ func ChangeD2SLicenseMode(userID int, licenseID, deviceHash, nextMode, confirmat
 			}
 			permanentAt = now
 		}
-		updates := map[string]any{"mode": nextMode, "offline_period_days": offlineDays, "permanent_bound_at": permanentAt, "updated_at": now}
+		updates := map[string]any{"mode": nextMode, "offline_period_days": periodDays, "permanent_bound_at": permanentAt, "updated_at": now}
 		if err := tx.Model(&D2SLicense{}).Where("id = ?", license.ID).Updates(updates).Error; err != nil {
 			return err
 		}
@@ -613,7 +629,7 @@ func ChangeD2SLicenseMode(userID int, licenseID, deviceHash, nextMode, confirmat
 		}).Error; err != nil {
 			return err
 		}
-		license.Mode, license.OfflinePeriodDays, license.PermanentBoundAt, license.UpdatedAt = nextMode, offlineDays, permanentAt, now
+		license.Mode, license.OfflinePeriodDays, license.PermanentBoundAt, license.UpdatedAt = nextMode, periodDays, permanentAt, now
 		result = *license
 		return nil
 	})
@@ -669,11 +685,16 @@ func FreeRevokeD2SLicense(userID int, licenseID, deviceHash string, now int64) (
 	return nextAvailableAt, err
 }
 
+const (
+	D2SOnlineLeaseTTL          = 2 * time.Hour
+	D2SOnlineHeartbeatInterval = 15 * time.Minute
+)
+
 func StartOrRenewD2SOnlineLease(userID int, licenseID, deviceHash, rawLeaseToken string, now int64) (string, int64, error) {
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
-	expiresAt := now + 900
+	expiresAt := now + int64(D2SOnlineLeaseTTL/time.Second)
 	issuedToken := rawLeaseToken
 	err := d2STransaction(func(tx *gorm.DB) error {
 		license, err := GetD2SLicense(userID, licenseID, lockForUpdate(tx))

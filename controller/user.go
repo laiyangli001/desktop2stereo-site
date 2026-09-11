@@ -233,6 +233,7 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 			"access_token":      bundle.AccessToken,
 			"token_type":        bundle.TokenType,
 			"access_expires_at": bundle.AccessExpiresAt,
+			"server_time":       time.Now().Unix(),
 			"session":           bundle.Session,
 			"user":              buildSelfUserData(currentUser),
 		},

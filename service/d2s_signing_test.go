@@ -21,6 +21,12 @@ import (
 	"gorm.io/gorm"
 )
 
+func TestD2SDefaultLicenseKeyIDMatchesReleaseContract(t *testing.T) {
+	t.Setenv("D2S_LICENSE_KEY_ID", "")
+	assert.Equal(t, "d2s-es256-2026-09", d2sConfiguredKeyID())
+	assert.Equal(t, D2SDefaultLicenseKeyID, d2sConfiguredKeyID())
+}
+
 func TestD2SOfflineEntitlementIsValidES256JWS(t *testing.T) {
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	previousMainType, previousLogType := common.MainDatabaseType(), common.LogDatabaseType()

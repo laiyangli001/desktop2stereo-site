@@ -24,7 +24,8 @@
 
 2. 复制 `.env.example` 中的 Desktop2Stereo 配置到本地 `.env`，至少设置：
 
-   - `D2S_LICENSE_PRIVATE_KEY_B64`
+   - `D2S_LICENSE_KEY_ID`（生产默认使用 `d2s-es256-2026-09`）
+   - `D2S_LICENSE_PRIVATE_KEY_B64`（仅保存于服务器 Secret 或 `.env`，不要提交到 Git）
    - `D2S_PAYMENT_BRIDGE_SECRET`
    - `D2S_DEVICE_VERIFICATION_URI`
    - 两个离线延长包价格
@@ -36,10 +37,13 @@
    docker compose ps
    ```
 
+   签名密钥配置后用 `curl -fsS http://localhost:3000/api/v1/license/keys` 验证公钥接口；
+   返回 `signing_key_unavailable` 表示私钥尚未加载。
+
 4. 打开 `http://localhost:3000` 完成 new-api 初始化，并在系统设置中启用邮箱验证、
    Turnstile 和需要的支付渠道。
 
-服务器端实施计划见 `docs/13-cross-platform-licensing-server-implementation-plan.md`，
+服务器端实施计划见 `docs/01-cross-platform-licensing-server-implementation-plan.md`，
 API 契约见 `docs/desktop2stereo-api.md`，部署与密钥操作见 `docs/d2s.site.md`，复用/新增边界
 见 `docs/new-api-gap-analysis.md`。
 

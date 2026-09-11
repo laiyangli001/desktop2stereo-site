@@ -14,13 +14,19 @@ access token。
 - `POST /api/v1/auth/logout`
 - `POST /api/v1/auth/refresh`
 - `POST /api/v1/auth/password-reset/confirm`
+- `GET /api/user/login/encryption-key`：返回 `data.enabled`；启用时同时返回 `kid` 和 RSA SPKI `public_key`，
+  客户端使用 RSA-OAEP-SHA256 后将 `password_encrypted` 与 `encryption_key_id` 提交给登录接口。
+- `PUT /api/user/self`：已登录用户修改密码，请求使用 `original_password` 和 `password`；成功后返回
+  新的 Access Token，当前会话之外的旧会话按服务端认证版本策略失效。
 
 登录和注册请求必须携带 `captcha_id`、`captcha_clicks`，其中 `captcha_clicks` 是包含
 `x`、`y` 坐标的数组，数量必须等于 `required_clicks`；缺失、过期、重复消费、点击目标不匹配
 或坐标误差超过服务端容差时返回
 `BEHAVIOR_CAPTCHA_REQUIRED`，不会创建会话或账号。发送邮箱验证码和请求密码重置继续复用
 `/api/verification`、`/api/reset_password`，其现有 Turnstile 防护保持不变。
-这些账号接口保持 new-api 契约，不承诺 D2S `version/request_id/error` 外层结构。
+这些账号接口保持 new-api 契约，不承诺 D2S `version/request_id/error` 外层结构。桌面启动器
+没有浏览器 Cookie 时，刷新和登出接口也接受 JSON `refresh_token`；登录成功的 `server_time` 位于
+响应 `data` 中，刷新令牌仍优先通过 HttpOnly Cookie 返回。
 
 ## 设备码
 
@@ -53,8 +59,14 @@ access token。
 设备指纹必须是客户端按平台规则计算的 64 位小写 SHA-256 摘要，并携带正整数指纹版本。
 服务器不会接收 MachineGuid、machine-id、IOPlatformUUID 等原始标识。
 
-切换永久模式必须提交 `confirmation: "PERMANENT"`。离线签发前必须先绑定当前设备并把
-模式切换为 `offline` 或 `permanent`。在线心跳首次返回随机租约令牌，后续心跳必须回传。
+切换永久模式必须提交 `confirmation: "PERMANENT"`。切换为 `offline` 时必须提交严格的
+`offline_period_days`：仅允许 7、14 或 30；非法周期返回 `invalid_offline_period`，不会静默改为
+其他周期。切换为 `online` 时保留此前的离线周期，切换为 `permanent` 时周期固定为 0。离线签发前必须先绑定当前设备并把
+模式切换为 `offline` 或 `permanent`。在线运行租约 TTL 为 2 小时（1 小时为下限，推荐 2～4 小时），
+服务端当前默认心跳间隔为 15 分钟，部署调优时推荐保持在 15～30 分钟；客户端应对心跳加入
+±10% 随机抖动。该 TTL 用于断网后的在线运行宽限，不等同于 7/14/30 天离线授权
+有效期。在线心跳首次返回随机租约令牌，后续心跳必须回传，并返回
+`server_time` 供客户端在当前进程内锚定租约倒计时，避免本机墙上时钟调整造成误判。
 
 ## 订单、邀请和余额
 

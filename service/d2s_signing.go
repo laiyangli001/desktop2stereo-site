@@ -29,6 +29,8 @@ var (
 	ErrD2SSigningKeyNotFound = errors.New("Desktop2Stereo signing key was not found")
 )
 
+const D2SDefaultLicenseKeyID = "d2s-es256-2026-09"
+
 type D2SOfflineClaims struct {
 	Version           int      `json:"version"`
 	KeyID             string   `json:"key_id"`
@@ -58,7 +60,7 @@ type D2SPublicJWK struct {
 func d2sConfiguredKeyID() string {
 	keyID := strings.TrimSpace(os.Getenv("D2S_LICENSE_KEY_ID"))
 	if keyID == "" {
-		return "d2s-es256-v1"
+		return D2SDefaultLicenseKeyID
 	}
 	return keyID
 }

@@ -182,7 +182,12 @@ if (-not $SkipHttp) {
     if ($validKeys.Count -eq 0) {
         throw "License key endpoint did not publish a usable ES256 public key"
     }
-    Write-Host "OK public signing keys endpoint ($($validKeys.Count) usable key(s))"
+    $configuredKeyId = [Environment]::GetEnvironmentVariable("D2S_LICENSE_KEY_ID")
+    $matchingKeys = @($validKeys | Where-Object { $_.kid -eq $configuredKeyId })
+    if ($matchingKeys.Count -ne 1) {
+        throw "License key endpoint did not publish the configured D2S_LICENSE_KEY_ID"
+    }
+    Write-Host "OK public signing keys endpoint ($($validKeys.Count) usable key(s)); configured kid is published"
 }
 
 Write-Host "Production readiness checks passed. Record the drill evidence before enabling public checkout."

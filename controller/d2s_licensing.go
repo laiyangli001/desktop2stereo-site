@@ -39,6 +39,8 @@ func d2sError(c *gin.Context, err error) {
 		status, code = http.StatusForbidden, "license_unavailable"
 	case errors.Is(err, model.ErrD2SDeviceMismatch):
 		status, code = http.StatusConflict, "device_mismatch"
+	case errors.Is(err, model.ErrD2SOfflinePeriodInvalid):
+		status, code = http.StatusBadRequest, "invalid_offline_period"
 	case errors.Is(err, model.ErrD2SDeviceAlreadyBound):
 		status, code = http.StatusConflict, "device_already_bound"
 	case errors.Is(err, model.ErrD2SLicenseAlreadyBound):
@@ -299,12 +301,17 @@ func D2SLicenseOnlineHeartbeat(c *gin.Context) {
 		d2sInvalidInput(c, "license_id and device_hash are required")
 		return
 	}
-	token, expiresAt, err := model.StartOrRenewD2SOnlineLease(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.LeaseToken, time.Now().Unix())
+	now := time.Now().Unix()
+	token, expiresAt, err := model.StartOrRenewD2SOnlineLease(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.LeaseToken, now)
 	if err != nil {
 		d2sError(c, err)
 		return
 	}
-	d2sSuccess(c, http.StatusOK, gin.H{"lease_token": token, "expires_at": expiresAt, "heartbeat_interval": 300})
+	d2sSuccess(c, http.StatusOK, gin.H{
+		"lease_token": token, "expires_at": expiresAt,
+		"server_time":        now,
+		"heartbeat_interval": int(model.D2SOnlineHeartbeatInterval / time.Second),
+	})
 }
 
 func D2SLicenseOnlineLogout(c *gin.Context) {

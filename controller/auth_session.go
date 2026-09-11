@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
@@ -17,6 +19,15 @@ import (
 func RefreshAuth(c *gin.Context) {
 	setAuthNoStore(c)
 	rawRefreshToken, err := c.Cookie(service.RefreshCookieName)
+	if rawRefreshToken == "" {
+		var request struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if decodeErr := common.DecodeJson(c.Request.Body, &request); decodeErr == nil {
+			rawRefreshToken = strings.TrimSpace(request.RefreshToken)
+			err = nil
+		}
+	}
 	if err != nil || rawRefreshToken == "" {
 		service.ClearRefreshCookie(c)
 		writeAuthSessionError(c, service.ErrRefreshTokenInvalid)
@@ -38,6 +49,7 @@ func RefreshAuth(c *gin.Context) {
 			"access_token":      bundle.AccessToken,
 			"token_type":        bundle.TokenType,
 			"access_expires_at": bundle.AccessExpiresAt,
+			"server_time":       time.Now().Unix(),
 			"user":              buildSelfUserData(user),
 			"session":           bundle.Session,
 		},
@@ -48,6 +60,17 @@ func AuthLogout(c *gin.Context) {
 	setAuthNoStore(c)
 	expectedSID := strings.TrimSpace(c.GetHeader("X-Auth-Session"))
 	rawRefreshToken, cookieErr := c.Cookie(service.RefreshCookieName)
+	if cookieErr != nil || rawRefreshToken == "" {
+		var request struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if decodeErr := common.DecodeJson(c.Request.Body, &request); decodeErr == nil {
+			rawRefreshToken = strings.TrimSpace(request.RefreshToken)
+			if rawRefreshToken != "" {
+				cookieErr = nil
+			}
+		}
+	}
 	cookieSID, hasCookieSID := service.RefreshTokenSID(rawRefreshToken)
 	if expectedSID != "" && cookieErr == nil && hasCookieSID && cookieSID != expectedSID {
 		writeAuthSessionError(c, service.ErrLoginSessionMismatch)

@@ -165,9 +165,14 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 授权与商业配置：
 
 - `D2S_DEVICE_VERIFICATION_URI=https://100393.com/device`。
-- `D2S_LICENSE_KEY_ID`。
+- `D2S_LICENSE_KEY_ID`；未显式设置时默认为客户端当前内置公钥对应的
+  `d2s-es256-2026-09`，生产环境必须确保该 ID 与配置的 P-256 私钥匹配。
 - `D2S_LICENSE_PRIVATE_KEY_B64`，内容为 P-256 PKCS#8 DER 私钥的 Base64；运行时也兼容
   Base64 编码的 PEM，以便平滑迁移既有部署。
+- 生产 Docker/宝塔部署将私钥保存于部署目录 `.env`（当前服务器为
+  `/opt/desktop2stereo-site/.env`），文件权限必须为 `600`；也可以在宝塔 Docker 项目的环境变量
+  中设置同名变量。该私钥不应写入数据库、Git、客户端或后台网页表单，后台签名密钥接口只管理
+  公钥元数据和轮换状态。
 - `D2S_PAYMENT_BRIDGE_SECRET`；推荐按渠道配置 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`、
   `D2S_PAYMENT_BRIDGE_SECRET_CREEM`、`D2S_PAYMENT_BRIDGE_SECRET_EPAY`、
   `D2S_PAYMENT_BRIDGE_SECRET_PAYMENTFM`、`D2S_PAYMENT_BRIDGE_SECRET_ALIPAY`、
@@ -179,7 +184,8 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 价格为正整数、签名私钥配置为有效 Base64，并拒绝 `0.0.0.0/0`、`::/0`、`*` 或 `all` 这类
 全网信任代理配置；`TRUSTED_PROXIES=none` 只能单独使用；会话 Secret 和支付桥 Secret
 至少需要 32 个字符。`-BaseUrl` 必须是没有凭据、路径、查询串或片段的 HTTPS origin，
-即使使用 `-SkipHttp` 也会执行此校验。
+即使使用 `-SkipHttp` 也会执行此校验。启用 HTTP 检查时还会确认 `/api/v1/license/keys`
+发布的 ES256 公钥 `kid` 与 `D2S_LICENSE_KEY_ID` 完全一致，防止密钥 ID 配错后误判通过。
 
 同时在 new-api 管理设置中启用邮箱验证、SMTP、支付合规确认和实际使用的支付渠道。
 登录/注册使用服务端自托管点击验证码；邮箱验证码、密码重置和其他仍接入 Turnstile
@@ -248,6 +254,29 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
 - 发布前保存上一版本镜像、配置版本和数据库快照，并记录操作人及时间。
 
 ## 8. 授权签名密钥轮换
+
+首次配置可在服务器上执行以下命令生成 PKCS#8 DER 私钥的 Base64 值；私钥文件仅作为临时文件，
+完成后应删除：
+
+```bash
+umask 077
+openssl ecparam -name prime256v1 -genkey -noout -out /dev/shm/d2s-license-key.pem
+openssl pkcs8 -topk8 -nocrypt -in /dev/shm/d2s-license-key.pem -outform DER \
+  | base64 -w0
+rm -f /dev/shm/d2s-license-key.pem
+```
+
+将命令输出写入部署目录 `.env`：
+
+```env
+D2S_LICENSE_KEY_ID=d2s-es256-2026-09
+D2S_LICENSE_PRIVATE_KEY_B64=<上一步输出的单行Base64值>
+```
+
+保存后执行 `chmod 600 /opt/desktop2stereo-site/.env`，再运行
+`docker compose --env-file /opt/desktop2stereo-site/.env -f /opt/desktop2stereo-site/docker-compose.yml
+up -d --no-deps new-api`。通过 `GET /api/v1/license/keys` 验证返回 `200`、`alg=ES256` 和当前
+`kid`；接口返回 `signing_key_unavailable` 时表示私钥变量未加载或格式无效。
 
 1. 生成新的 P-256 PKCS#8 私钥和唯一 `key_id`。
 2. 先将新公钥加入客户端“当前键 + 上一键”清单并发布客户端。

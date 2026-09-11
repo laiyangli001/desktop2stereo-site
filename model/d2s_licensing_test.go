@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/glebarez/sqlite"
@@ -192,6 +193,8 @@ func TestD2SSQLiteConcurrentCriticalPaths(t *testing.T) {
 }
 
 func TestD2SBindingCooldownAndLeaseContracts(t *testing.T) {
+	assert.Equal(t, 2*time.Hour, D2SOnlineLeaseTTL)
+	assert.Equal(t, 15*time.Minute, D2SOnlineHeartbeatInterval)
 	useD2STestDB(t)
 	userA := createD2STestUser(t, "d2s-bind-a")
 	userB := createD2STestUser(t, "d2s-bind-b")
@@ -211,12 +214,12 @@ func TestD2SBindingCooldownAndLeaseContracts(t *testing.T) {
 	token, expiresAt, err := StartOrRenewD2SOnlineLease(userA.Id, bound.ID, device, "", now)
 	require.NoError(t, err)
 	assert.NotEmpty(t, token)
-	assert.Equal(t, now+900, expiresAt)
+	assert.Equal(t, now+int64(D2SOnlineLeaseTTL/time.Second), expiresAt)
 	_, _, err = StartOrRenewD2SOnlineLease(userA.Id, bound.ID, device, "", now+1)
 	assert.ErrorIs(t, err, ErrD2SLeaseConflict)
 	_, renewedAt, err := StartOrRenewD2SOnlineLease(userA.Id, bound.ID, device, token, now+300)
 	require.NoError(t, err)
-	assert.Equal(t, now+1200, renewedAt)
+	assert.Equal(t, now+300+int64(D2SOnlineLeaseTTL/time.Second), renewedAt)
 	require.NoError(t, ReleaseAllD2SOnlineLeases(userA.Id))
 	var activeLeases int64
 	require.NoError(t, DB.Model(&D2SOnlineLease{}).Where("user_id = ?", userA.Id).Count(&activeLeases).Error)
@@ -231,6 +234,31 @@ func TestD2SBindingCooldownAndLeaseContracts(t *testing.T) {
 	require.NoError(t, err)
 	_, err = FreeRevokeD2SLicense(userA.Id, bound.ID, device, now+4)
 	assert.ErrorIs(t, err, ErrD2SRevokeCooldown)
+}
+
+func TestD2SChangeModeRejectsInvalidOfflinePeriodAndPreservesSelection(t *testing.T) {
+	useD2STestDB(t)
+	user := createD2STestUser(t, "d2s-offline-period-validation")
+	const now = int64(2_000_110_000)
+	licenses, err := ListD2SLicenses(user.Id, now)
+	require.NoError(t, err)
+	device := strings.Repeat("b", 64)
+	license, err := BindD2SLicense(user.Id, licenses[0].ID, device, 2, now)
+	require.NoError(t, err)
+
+	_, err = ChangeD2SLicenseMode(user.Id, license.ID, device, D2SLicenseModeOffline, "", 15, now+1)
+	assert.ErrorIs(t, err, ErrD2SOfflinePeriodInvalid)
+	unchanged, err := GetD2SLicense(user.Id, license.ID, nil)
+	require.NoError(t, err)
+	assert.Equal(t, D2SLicenseModeOnline, unchanged.Mode)
+	assert.Equal(t, 7, unchanged.OfflinePeriodDays)
+
+	changed, err := ChangeD2SLicenseMode(user.Id, license.ID, device, D2SLicenseModeOffline, "", 14, now+2)
+	require.NoError(t, err)
+	assert.Equal(t, 14, changed.OfflinePeriodDays)
+	changed, err = ChangeD2SLicenseMode(user.Id, license.ID, device, D2SLicenseModeOnline, "", 0, now+3)
+	require.NoError(t, err)
+	assert.Equal(t, 14, changed.OfflinePeriodDays)
 }
 
 func TestD2SDeviceCodeIsSingleUse(t *testing.T) {

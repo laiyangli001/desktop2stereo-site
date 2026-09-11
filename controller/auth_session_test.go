@@ -3,6 +3,7 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -65,6 +66,97 @@ func TestAuthLogoutRejectsRefreshCookieSessionMismatch(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, model.UserSessionStatusActive, stored.Status)
 	}
+}
+
+func TestRefreshAuthAcceptsDesktopRefreshTokenBody(t *testing.T) {
+	previousDB := model.DB
+	previousRedis := common.RedisEnabled
+	previousSecret := common.SessionSecret
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}))
+	model.DB = db
+	common.RedisEnabled = false
+	common.SessionSecret = "desktop-refresh-body-test-secret"
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.RedisEnabled = previousRedis
+		common.SessionSecret = previousSecret
+	})
+
+	user := &model.User{
+		Username: "desktop-refresh-body-user", Password: "unused", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+	}
+	require.NoError(t, db.Create(user).Error)
+	bundle, err := service.CreateLoginSession(user.Id, "desktop2stereo", "127.0.0.1", "desktop-test")
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/refresh",
+		strings.NewReader(`{"refresh_token":"`+bundle.RefreshToken+`"}`),
+	)
+	c.Request.Header.Set("Content-Type", "application/json")
+	RefreshAuth(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Success bool `json:"success"`
+		Data    struct {
+			AccessToken string `json:"access_token"`
+			ServerTime  int64  `json:"server_time"`
+		} `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.True(t, response.Success)
+	assert.NotEmpty(t, response.Data.AccessToken)
+	assert.NotZero(t, response.Data.ServerTime)
+}
+
+func TestAuthLogoutAcceptsDesktopRefreshTokenBody(t *testing.T) {
+	previousDB := model.DB
+	previousRedis := common.RedisEnabled
+	previousSecret := common.SessionSecret
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.D2SOnlineLease{}))
+	model.DB = db
+	common.RedisEnabled = false
+	common.SessionSecret = "desktop-logout-body-test-secret"
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.RedisEnabled = previousRedis
+		common.SessionSecret = previousSecret
+	})
+
+	user := &model.User{
+		Username: "desktop-logout-body-user", Password: "unused", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+	}
+	require.NoError(t, db.Create(user).Error)
+	bundle, err := service.CreateLoginSession(user.Id, "desktop2stereo", "127.0.0.1", "desktop-test")
+	require.NoError(t, err)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/auth/logout",
+		strings.NewReader(`{"refresh_token":"`+bundle.RefreshToken+`"}`),
+	)
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Request.Header.Set("Authorization", "Bearer "+bundle.AccessToken)
+	AuthLogout(c)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	stored, err := model.GetUserSessionBySID(bundle.Session.SID)
+	require.NoError(t, err)
+	assert.Equal(t, model.UserSessionStatusRevoked, stored.Status)
 }
 
 func TestWriteAuthSessionErrorMapsSessionGrowthLimits(t *testing.T) {
