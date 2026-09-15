@@ -1,6 +1,7 @@
 package service
 
 import (
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -57,19 +58,24 @@ func TestD2SOfflineEntitlementIsValidES256JWS(t *testing.T) {
 	licenses, err := model.ListD2SLicenses(user.Id, now)
 	require.NoError(t, err)
 	device := strings.Repeat("c", 64)
+	deviceKey, err := ecdh.X25519().GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	devicePublicKey := base64.RawURLEncoding.EncodeToString(deviceKey.PublicKey().Bytes())
 	_, err = model.BindD2SLicense(user.Id, licenses[0].ID, device, 1, now)
 	require.NoError(t, err)
 	_, err = model.ChangeD2SLicenseMode(user.Id, licenses[0].ID, device, model.D2SLicenseModeOffline, "", 14, now)
 	require.NoError(t, err)
 
-	jws, claims, err := IssueD2SOfflineEntitlement(user.Id, licenses[0].ID, device, 14, now)
+	jws, claims, err := IssueD2SOfflineEntitlement(user.Id, licenses[0].ID, device, devicePublicKey, 14, now)
 	require.NoError(t, err)
 	assert.Equal(t, "test-key", claims.KeyID)
 	assert.Equal(t, now+14*86400, claims.ExpiresAt)
 	assert.Equal(t, D2SParallaxCoreID, claims.CoreID)
 	assert.Equal(t, D2SParallaxCoreVersion, claims.CoreVersion)
 	assert.Equal(t, strings.Repeat("a", 64), claims.ResourceSHA256)
-	assert.Equal(t, strings.Repeat("b", 64), claims.CoreKey)
+	assert.NotEmpty(t, claims.WrappedCoreKey)
+	assert.NotEmpty(t, claims.KeyWrapEphemeralPublicKey)
+	assert.NotEmpty(t, claims.KeyWrapNonce)
 	oldKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	oldJWK, err := common.Marshal(d2sPublicJWK(oldKey, "old-key"))

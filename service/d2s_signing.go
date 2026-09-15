@@ -1,6 +1,9 @@
 package service
 
 import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/ecdh"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -11,6 +14,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"strings"
@@ -19,6 +23,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/hkdf"
 	"gorm.io/gorm"
 )
 
@@ -32,42 +37,46 @@ var (
 const D2SDefaultLicenseKeyID = "d2s-es256-2026-09"
 
 type D2SOfflineClaims struct {
-	Version           int      `json:"version"`
-	KeyID             string   `json:"key_id"`
-	EntitlementID     string   `json:"entitlement_id"`
-	LicenseID         string   `json:"license_id"`
-	Product           string   `json:"product"`
-	DeviceHash        string   `json:"device_hash"`
-	Mode              string   `json:"mode"`
-	Features          []string `json:"features"`
-	IssuedAt          int64    `json:"issued_at"`
-	NotBefore         int64    `json:"not_before"`
-	ExpiresAt         int64    `json:"expires_at"`
-	Trial             bool     `json:"trial"`
-	OfflinePeriodDays int      `json:"offline_period_days"`
-	CoreID            string   `json:"core_id,omitempty"`
-	CoreVersion       int      `json:"core_version,omitempty"`
-	ResourceSHA256    string   `json:"resource_sha256,omitempty"`
-	CoreKey           string   `json:"core_key,omitempty"`
+	Version                   int      `json:"version"`
+	KeyID                     string   `json:"key_id"`
+	EntitlementID             string   `json:"entitlement_id"`
+	LicenseID                 string   `json:"license_id"`
+	Product                   string   `json:"product"`
+	DeviceHash                string   `json:"device_hash"`
+	Mode                      string   `json:"mode"`
+	Features                  []string `json:"features"`
+	IssuedAt                  int64    `json:"issued_at"`
+	NotBefore                 int64    `json:"not_before"`
+	ExpiresAt                 int64    `json:"expires_at"`
+	Trial                     bool     `json:"trial"`
+	OfflinePeriodDays         int      `json:"offline_period_days"`
+	CoreID                    string   `json:"core_id,omitempty"`
+	CoreVersion               int      `json:"core_version,omitempty"`
+	ResourceSHA256            string   `json:"resource_sha256,omitempty"`
+	WrappedCoreKey            string   `json:"wrapped_core_key,omitempty"`
+	KeyWrapEphemeralPublicKey string   `json:"key_wrap_ephemeral_public_key,omitempty"`
+	KeyWrapNonce              string   `json:"key_wrap_nonce,omitempty"`
 }
 
 const D2SParallaxCoreID = "parallax-core"
 const D2SParallaxCoreVersion = 1
 
 type D2SCoreGrantClaims struct {
-	Version        int    `json:"version"`
-	KeyID          string `json:"key_id"`
-	GrantID        string `json:"grant_id"`
-	LicenseID      string `json:"license_id"`
-	Product        string `json:"product"`
-	DeviceHash     string `json:"device_hash"`
-	CoreID         string `json:"core_id"`
-	CoreVersion    int    `json:"core_version"`
-	ResourceSHA256 string `json:"resource_sha256"`
-	CoreKey        string `json:"core_key"`
-	IssuedAt       int64  `json:"issued_at"`
-	NotBefore      int64  `json:"not_before"`
-	ExpiresAt      int64  `json:"expires_at"`
+	Version                   int    `json:"version"`
+	KeyID                     string `json:"key_id"`
+	GrantID                   string `json:"grant_id"`
+	LicenseID                 string `json:"license_id"`
+	Product                   string `json:"product"`
+	DeviceHash                string `json:"device_hash"`
+	CoreID                    string `json:"core_id"`
+	CoreVersion               int    `json:"core_version"`
+	ResourceSHA256            string `json:"resource_sha256"`
+	WrappedCoreKey            string `json:"wrapped_core_key"`
+	KeyWrapEphemeralPublicKey string `json:"key_wrap_ephemeral_public_key"`
+	KeyWrapNonce              string `json:"key_wrap_nonce"`
+	IssuedAt                  int64  `json:"issued_at"`
+	NotBefore                 int64  `json:"not_before"`
+	ExpiresAt                 int64  `json:"expires_at"`
 }
 
 type D2SPublicJWK struct {
@@ -191,7 +200,51 @@ func d2sParallaxCoreConfig() (string, string, error) {
 	return resourceHash, coreKey, nil
 }
 
-func IssueD2SCoreGrant(userID int, licenseID, deviceHash, coreID string, coreVersion int, now int64) (string, *D2SCoreGrantClaims, error) {
+func wrapD2SCoreKey(coreKeyHex, devicePublicKey, grantID, licenseID, deviceHash, coreID string, coreVersion int, resourceHash string) (string, string, string, error) {
+	coreKey, err := hex.DecodeString(coreKeyHex)
+	if err != nil || len(coreKey) != 32 {
+		return "", "", "", fmt.Errorf("Desktop2Stereo parallax core key is invalid")
+	}
+	publicBytes, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(devicePublicKey))
+	if err != nil || len(publicBytes) != 32 {
+		return "", "", "", fmt.Errorf("Desktop2Stereo device core key is invalid")
+	}
+	devicePublic, err := ecdh.X25519().NewPublicKey(publicBytes)
+	if err != nil {
+		return "", "", "", fmt.Errorf("Desktop2Stereo device core key is invalid")
+	}
+	ephemeral, err := ecdh.X25519().GenerateKey(rand.Reader)
+	if err != nil {
+		return "", "", "", err
+	}
+	shared, err := ephemeral.ECDH(devicePublic)
+	if err != nil {
+		return "", "", "", fmt.Errorf("Desktop2Stereo device core key exchange failed")
+	}
+	wrappingKey := make([]byte, 32)
+	reader := hkdf.New(sha256.New, shared, nil, []byte("d2s-parallax-core-v1-key-wrap"))
+	if _, err := io.ReadFull(reader, wrappingKey); err != nil {
+		return "", "", "", err
+	}
+	block, err := aes.NewCipher(wrappingKey)
+	if err != nil {
+		return "", "", "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", "", "", err
+	}
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", "", "", err
+	}
+	aad := []byte(strings.Join([]string{grantID, licenseID, deviceHash, coreID, fmt.Sprint(coreVersion), resourceHash}, "|"))
+	ciphertext := gcm.Seal(nil, nonce, coreKey, aad)
+	encode := base64.RawURLEncoding.EncodeToString
+	return encode(ephemeral.PublicKey().Bytes()), encode(nonce), encode(ciphertext), nil
+}
+
+func IssueD2SCoreGrant(userID int, licenseID, deviceHash, devicePublicKey, coreID string, coreVersion int, now int64) (string, *D2SCoreGrantClaims, error) {
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
@@ -226,10 +279,16 @@ func IssueD2SCoreGrant(userID int, licenseID, deviceHash, coreID string, coreVer
 		if license.ExpiresAt > 0 && license.ExpiresAt < expiresAt {
 			expiresAt = license.ExpiresAt
 		}
+		grantID := uuid.NewString()
+		ephemeral, nonce, wrapped, wrapErr := wrapD2SCoreKey(coreKey, devicePublicKey, grantID, license.ID, license.DeviceHash, coreID, coreVersion, resourceHash)
+		if wrapErr != nil {
+			return wrapErr
+		}
 		grant = &D2SCoreGrantClaims{
-			Version: 1, KeyID: keyID, GrantID: uuid.NewString(), LicenseID: license.ID,
+			Version: 1, KeyID: keyID, GrantID: grantID, LicenseID: license.ID,
 			Product: license.Product, DeviceHash: license.DeviceHash, CoreID: coreID,
-			CoreVersion: coreVersion, ResourceSHA256: resourceHash, CoreKey: coreKey,
+			CoreVersion: coreVersion, ResourceSHA256: resourceHash, WrappedCoreKey: wrapped,
+			KeyWrapEphemeralPublicKey: ephemeral, KeyWrapNonce: nonce,
 			IssuedAt: now, NotBefore: now - 60, ExpiresAt: expiresAt,
 		}
 		return nil
@@ -309,7 +368,7 @@ func RetireD2SSigningKey(keyID string, now int64) error {
 	return nil
 }
 
-func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash string, requestedDays int, now int64) (string, *D2SOfflineClaims, error) {
+func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash, devicePublicKey string, requestedDays int, now int64) (string, *D2SOfflineClaims, error) {
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
@@ -361,13 +420,19 @@ func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash string, reques
 		if license.OfflineValidUntil > expiresAt {
 			expiresAt = license.OfflineValidUntil
 		}
+		entitlementID := uuid.NewString()
+		ephemeral, nonce, wrapped, wrapErr := wrapD2SCoreKey(coreKey, devicePublicKey, entitlementID, license.ID, license.DeviceHash, D2SParallaxCoreID, D2SParallaxCoreVersion, resourceHash)
+		if wrapErr != nil {
+			return wrapErr
+		}
 		claims = &D2SOfflineClaims{
-			Version: 1, KeyID: keyID, EntitlementID: uuid.NewString(), LicenseID: license.ID,
+			Version: 1, KeyID: keyID, EntitlementID: entitlementID, LicenseID: license.ID,
 			Product: model.D2SProductDesktop2Stereo, DeviceHash: license.DeviceHash, Mode: license.Mode,
 			Features: []string{"runtime"}, IssuedAt: now, NotBefore: now - 60, ExpiresAt: expiresAt,
 			Trial: license.Kind == model.D2SLicenseKindTrial, OfflinePeriodDays: days,
 			CoreID: D2SParallaxCoreID, CoreVersion: D2SParallaxCoreVersion,
-			ResourceSHA256: resourceHash, CoreKey: coreKey,
+			ResourceSHA256: resourceHash, WrappedCoreKey: wrapped,
+			KeyWrapEphemeralPublicKey: ephemeral, KeyWrapNonce: nonce,
 		}
 		jws, err = signD2SClaims(key, keyID, *claims)
 		if err != nil {

@@ -258,16 +258,17 @@ func D2SLicenseChangeMode(c *gin.Context) {
 type d2sOfflineIssueRequest struct {
 	LicenseID         string `json:"license_id"`
 	DeviceHash        string `json:"device_hash"`
+	DevicePublicKey   string `json:"device_public_key"`
 	OfflinePeriodDays int    `json:"offline_period_days"`
 }
 
 func D2SLicenseRenew(c *gin.Context) {
 	var request d2sOfflineIssueRequest
-	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.LicenseID == "" || request.DeviceHash == "" {
-		d2sInvalidInput(c, "license_id and device_hash are required")
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.LicenseID == "" || request.DeviceHash == "" || request.DevicePublicKey == "" {
+		d2sInvalidInput(c, "license_id, device_hash and device_public_key are required")
 		return
 	}
-	jws, claims, err := service.IssueD2SOfflineEntitlement(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.OfflinePeriodDays, time.Now().Unix())
+	jws, claims, err := service.IssueD2SOfflineEntitlement(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.DevicePublicKey, request.OfflinePeriodDays, time.Now().Unix())
 	if err != nil {
 		d2sError(c, err)
 		return
@@ -328,20 +329,21 @@ func D2SLicenseOnlineLogout(c *gin.Context) {
 }
 
 type d2sCoreGrantRequest struct {
-	LicenseID   string `json:"license_id"`
-	DeviceHash  string `json:"device_hash"`
-	CoreID      string `json:"core_id"`
-	CoreVersion int    `json:"core_version"`
+	LicenseID       string `json:"license_id"`
+	DeviceHash      string `json:"device_hash"`
+	DevicePublicKey string `json:"device_public_key"`
+	CoreID          string `json:"core_id"`
+	CoreVersion     int    `json:"core_version"`
 }
 
 func D2SLicenseCoreGrant(c *gin.Context) {
 	var request d2sCoreGrantRequest
-	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.LicenseID == "" || request.DeviceHash == "" || request.CoreID == "" || request.CoreVersion <= 0 {
-		d2sInvalidInput(c, "license_id, device_hash, core_id and core_version are required")
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.LicenseID == "" || request.DeviceHash == "" || request.DevicePublicKey == "" || request.CoreID == "" || request.CoreVersion <= 0 {
+		d2sInvalidInput(c, "license_id, device_hash, device_public_key, core_id and core_version are required")
 		return
 	}
 	now := time.Now().Unix()
-	jws, claims, err := service.IssueD2SCoreGrant(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.CoreID, request.CoreVersion, now)
+	jws, claims, err := service.IssueD2SCoreGrant(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.DevicePublicKey, request.CoreID, request.CoreVersion, now)
 	if err != nil {
 		d2sError(c, err)
 		return
