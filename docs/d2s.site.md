@@ -174,6 +174,8 @@ systemctl enable --now desktop2stereo-reconciliation.timer
   中设置同名变量。该私钥不应写入数据库、Git、客户端或后台网页表单，后台签名密钥接口只管理
   公钥元数据和轮换状态。
 - `D2S_PARALLAX_CORE_SHA256`：私有核心仓库中加密视差资源的 SHA-256，必须与发布资源完全一致。
+  当前受保护视差核心资源版本的值为
+  `ce18716f3dbd9728aab595812a2746367be667e76a0024bb117b03a2d1d2016a`；核心资源更新后必须同步轮换该环境变量。
 - `D2S_PARALLAX_CORE_KEY_HEX`：加密视差资源对应的 AES-256 密钥，只能通过生产部署 Secret 注入，
   不得写入公开仓库、客户端或后台网页表单。
 - `D2S_PAYMENT_BRIDGE_SECRET`；推荐按渠道配置 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`、
