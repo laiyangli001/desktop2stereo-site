@@ -327,6 +327,28 @@ func D2SLicenseOnlineLogout(c *gin.Context) {
 	d2sSuccess(c, http.StatusOK, gin.H{"released": true})
 }
 
+type d2sCoreGrantRequest struct {
+	LicenseID   string `json:"license_id"`
+	DeviceHash  string `json:"device_hash"`
+	CoreID      string `json:"core_id"`
+	CoreVersion int    `json:"core_version"`
+}
+
+func D2SLicenseCoreGrant(c *gin.Context) {
+	var request d2sCoreGrantRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.LicenseID == "" || request.DeviceHash == "" || request.CoreID == "" || request.CoreVersion <= 0 {
+		d2sInvalidInput(c, "license_id, device_hash, core_id and core_version are required")
+		return
+	}
+	now := time.Now().Unix()
+	jws, claims, err := service.IssueD2SCoreGrant(c.GetInt("id"), request.LicenseID, request.DeviceHash, request.CoreID, request.CoreVersion, now)
+	if err != nil {
+		d2sError(c, err)
+		return
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{"grant": jws, "claims": claims})
+}
+
 func D2SLicensePermanentConfirm(c *gin.Context) {
 	var request d2sChangeModeRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || request.LicenseID == "" || request.DeviceHash == "" {

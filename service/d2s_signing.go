@@ -45,6 +45,29 @@ type D2SOfflineClaims struct {
 	ExpiresAt         int64    `json:"expires_at"`
 	Trial             bool     `json:"trial"`
 	OfflinePeriodDays int      `json:"offline_period_days"`
+	CoreID            string   `json:"core_id,omitempty"`
+	CoreVersion       int      `json:"core_version,omitempty"`
+	ResourceSHA256    string   `json:"resource_sha256,omitempty"`
+	CoreKey           string   `json:"core_key,omitempty"`
+}
+
+const D2SParallaxCoreID = "parallax-core"
+const D2SParallaxCoreVersion = 1
+
+type D2SCoreGrantClaims struct {
+	Version        int    `json:"version"`
+	KeyID          string `json:"key_id"`
+	GrantID        string `json:"grant_id"`
+	LicenseID      string `json:"license_id"`
+	Product        string `json:"product"`
+	DeviceHash     string `json:"device_hash"`
+	CoreID         string `json:"core_id"`
+	CoreVersion    int    `json:"core_version"`
+	ResourceSHA256 string `json:"resource_sha256"`
+	CoreKey        string `json:"core_key"`
+	IssuedAt       int64  `json:"issued_at"`
+	NotBefore      int64  `json:"not_before"`
+	ExpiresAt      int64  `json:"expires_at"`
 }
 
 type D2SPublicJWK struct {
@@ -128,6 +151,10 @@ func d2sPublicJWK(key *ecdsa.PrivateKey, keyID string) D2SPublicJWK {
 }
 
 func signD2SClaims(key *ecdsa.PrivateKey, keyID string, claims D2SOfflineClaims) (string, error) {
+	return signD2SPayload(key, keyID, claims)
+}
+
+func signD2SPayload(key *ecdsa.PrivateKey, keyID string, claims any) (string, error) {
 	header, err := common.Marshal(map[string]string{"alg": "ES256", "kid": keyID, "typ": "JWT"})
 	if err != nil {
 		return "", err
@@ -146,6 +173,75 @@ func signD2SClaims(key *ecdsa.PrivateKey, keyID string, claims D2SOfflineClaims)
 	}
 	signature := append(r.FillBytes(make([]byte, 32)), s.FillBytes(make([]byte, 32))...)
 	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature), nil
+}
+
+func d2sParallaxCoreConfig() (string, string, error) {
+	resourceHash := strings.ToLower(strings.TrimSpace(os.Getenv("D2S_PARALLAX_CORE_SHA256")))
+	if len(resourceHash) != 64 {
+		return "", "", fmt.Errorf("Desktop2Stereo parallax resource hash is not configured")
+	}
+	if _, err := hex.DecodeString(resourceHash); err != nil {
+		return "", "", fmt.Errorf("Desktop2Stereo parallax resource hash is invalid")
+	}
+	coreKey := strings.ToLower(strings.TrimSpace(os.Getenv("D2S_PARALLAX_CORE_KEY_HEX")))
+	decoded, err := hex.DecodeString(coreKey)
+	if err != nil || len(decoded) != 32 {
+		return "", "", fmt.Errorf("Desktop2Stereo parallax core key is invalid")
+	}
+	return resourceHash, coreKey, nil
+}
+
+func IssueD2SCoreGrant(userID int, licenseID, deviceHash, coreID string, coreVersion int, now int64) (string, *D2SCoreGrantClaims, error) {
+	if now <= 0 {
+		now = time.Now().Unix()
+	}
+	if coreID != D2SParallaxCoreID || coreVersion != D2SParallaxCoreVersion {
+		return "", nil, model.ErrD2SLicenseUnavailable
+	}
+	resourceHash, coreKey, err := d2sParallaxCoreConfig()
+	if err != nil {
+		return "", nil, err
+	}
+	key, keyID, err := d2sSigningKey()
+	if err != nil {
+		return "", nil, err
+	}
+	var grant *D2SCoreGrantClaims
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		var license model.D2SLicense
+		if err := model.LockForUpdate(tx).Where("id = ? AND user_id = ?", licenseID, userID).First(&license).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return model.ErrD2SLicenseNotFound
+			}
+			return err
+		}
+		if license.Product != model.D2SProductDesktop2Stereo || license.Status != model.D2SLicenseStatusActive ||
+			license.DeviceHash != strings.ToLower(strings.TrimSpace(deviceHash)) || (license.ExpiresAt > 0 && license.ExpiresAt <= now) {
+			return model.ErrD2SLicenseUnavailable
+		}
+		expiresAt := now + int64(30*time.Minute/time.Second)
+		if license.Mode == model.D2SLicenseModeOnline {
+			expiresAt = now + int64(model.D2SOnlineLeaseTTL/time.Second)
+		}
+		if license.ExpiresAt > 0 && license.ExpiresAt < expiresAt {
+			expiresAt = license.ExpiresAt
+		}
+		grant = &D2SCoreGrantClaims{
+			Version: 1, KeyID: keyID, GrantID: uuid.NewString(), LicenseID: license.ID,
+			Product: license.Product, DeviceHash: license.DeviceHash, CoreID: coreID,
+			CoreVersion: coreVersion, ResourceSHA256: resourceHash, CoreKey: coreKey,
+			IssuedAt: now, NotBefore: now - 60, ExpiresAt: expiresAt,
+		}
+		return nil
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	jws, err := signD2SPayload(key, keyID, *grant)
+	if err != nil {
+		return "", nil, err
+	}
+	return jws, grant, nil
 }
 
 func D2SPublicSigningKeys() ([]D2SPublicJWK, error) {
@@ -217,6 +313,10 @@ func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash string, reques
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
+	resourceHash, coreKey, err := d2sParallaxCoreConfig()
+	if err != nil {
+		return "", nil, err
+	}
 	key, keyID, err := d2sSigningKey()
 	if err != nil {
 		return "", nil, err
@@ -266,6 +366,8 @@ func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash string, reques
 			Product: model.D2SProductDesktop2Stereo, DeviceHash: license.DeviceHash, Mode: license.Mode,
 			Features: []string{"runtime"}, IssuedAt: now, NotBefore: now - 60, ExpiresAt: expiresAt,
 			Trial: license.Kind == model.D2SLicenseKindTrial, OfflinePeriodDays: days,
+			CoreID: D2SParallaxCoreID, CoreVersion: D2SParallaxCoreVersion,
+			ResourceSHA256: resourceHash, CoreKey: coreKey,
 		}
 		jws, err = signD2SClaims(key, keyID, *claims)
 		if err != nil {

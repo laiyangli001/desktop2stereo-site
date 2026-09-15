@@ -43,6 +43,7 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 			license.POST("/offline/extend", middleware.CriticalRateLimit(), controller.D2SLicenseOfflineExtend)
 			license.POST("/online/heartbeat", controller.D2SLicenseOnlineHeartbeat)
 			license.POST("/online/logout", controller.D2SLicenseOnlineLogout)
+			license.POST("/core/grant", middleware.CriticalRateLimit(), controller.D2SLicenseCoreGrant)
 			license.POST("/permanent/confirm", middleware.CriticalRateLimit(), controller.D2SLicensePermanentConfirm)
 			license.POST("/manual-unbind", middleware.CriticalRateLimit(), controller.D2SManualUnbindCreate)
 			license.GET("/manual-unbind", controller.D2SManualUnbindList)
