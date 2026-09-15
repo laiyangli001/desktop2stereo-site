@@ -173,6 +173,9 @@ systemctl enable --now desktop2stereo-reconciliation.timer
   `/opt/desktop2stereo-site/.env`），文件权限必须为 `600`；也可以在宝塔 Docker 项目的环境变量
   中设置同名变量。该私钥不应写入数据库、Git、客户端或后台网页表单，后台签名密钥接口只管理
   公钥元数据和轮换状态。
+- `D2S_PARALLAX_CORE_SHA256`：私有核心仓库中加密视差资源的 SHA-256，必须与发布资源完全一致。
+- `D2S_PARALLAX_CORE_KEY_HEX`：加密视差资源对应的 AES-256 密钥，只能通过生产部署 Secret 注入，
+  不得写入公开仓库、客户端或后台网页表单。
 - `D2S_PAYMENT_BRIDGE_SECRET`；推荐按渠道配置 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`、
   `D2S_PAYMENT_BRIDGE_SECRET_CREEM`、`D2S_PAYMENT_BRIDGE_SECRET_EPAY`、
   `D2S_PAYMENT_BRIDGE_SECRET_PAYMENTFM`、`D2S_PAYMENT_BRIDGE_SECRET_ALIPAY`、
