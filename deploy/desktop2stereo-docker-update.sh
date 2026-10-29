@@ -10,6 +10,7 @@ UPDATE_SCRIPT_PATH="${D2S_DOCKER_UPDATE_SCRIPT:-/usr/local/sbin/desktop2stereo-d
 BUILD_GOPROXY="${D2S_BUILD_GOPROXY:-https://goproxy.cn,direct}"
 BUILD_GOSUMDB="${D2S_BUILD_GOSUMDB:-off}"
 BUILD_TIMEOUT_SECONDS="${D2S_BUILD_TIMEOUT_SECONDS:-900}"
+DOWNLOAD_TIMEOUT_SECONDS="${D2S_DOWNLOAD_TIMEOUT_SECONDS:-1800}"
 SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
 SOURCE_FILE="${D2S_UPDATE_SOURCE_FILE:-$APP_ROOT/update-requests/source}"
@@ -77,6 +78,10 @@ if [[ ! "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
   echo "D2S_BUILD_TIMEOUT_SECONDS must be a positive integer" >&2
   exit 4
 fi
+if [[ ! "$DOWNLOAD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+  echo "D2S_DOWNLOAD_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 4
+fi
 
 mkdir -p "$RELEASE_ROOT" "$APP_ROOT/update-requests"
 exec > >(tee -a "$APP_ROOT/logs/update-$SHA.log") 2>&1
@@ -109,7 +114,7 @@ rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
 mkdir -p "$EXTRACT_ROOT"
 CURRENT_PHASE="download"
 write_status "running" "$CURRENT_PHASE" "正在下载项目代码"
-curl --fail --location --retry 3 --connect-timeout 10 --max-time 300 \
+curl --fail --location --retry 3 --connect-timeout 10 --max-time "$DOWNLOAD_TIMEOUT_SECONDS" \
   -o "$ARCHIVE" "https://codeload.github.com/$REPOSITORY/tar.gz/$SHA"
 CURRENT_PHASE="extract"
 write_status "running" "$CURRENT_PHASE" "正在解压项目代码"

@@ -113,6 +113,8 @@ D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
    不要把代理或校验配置写入仓库 Secret。
    Docker 构建默认有 900 秒固定超时，可通过服务环境变量 `D2S_BUILD_TIMEOUT_SECONDS` 调整；
    超时会进入失败状态并保留旧容器，不会继续等待或切换未完成镜像。
+   GitHub 归档下载默认单次最多等待 1800 秒，可通过固定服务环境变量
+   `D2S_DOWNLOAD_TIMEOUT_SECONDS` 调整；下载较慢时不会因原先的 300 秒上限反复从头重试。
    只有健康检查通过后，发布目录才会写入 `.update-complete` 标记；中途失败或被终止留下的
    不完整目录会在同一 SHA 重试时清理并重新构建，不会被误判为“已部署”。
 8. 原子切换 `current` 软链接。
