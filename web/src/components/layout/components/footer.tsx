@@ -149,6 +149,15 @@ function ProjectAttribution(props: { currentYear: number; inline?: boolean }) {
   )
 }
 
+function IcpRecords() {
+  return (
+    <div className='text-muted-foreground/60 mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-xs'>
+      <span>鲁ICP备2026064880号-1</span>
+      <span>鲁ICP备2026064880号-2</span>
+    </div>
+  )
+}
+
 export function Footer(props: FooterProps) {
   const { t } = useTranslation()
   const {
@@ -241,6 +250,7 @@ export function Footer(props: FooterProps) {
               <ProjectAttribution currentYear={currentYear} inline />
             </div>
           </div>
+          <IcpRecords />
         </div>
       </footer>
     )
@@ -302,6 +312,7 @@ export function Footer(props: FooterProps) {
           </div>
           <ProjectAttribution currentYear={currentYear} />
         </div>
+        <IcpRecords />
       </div>
     </footer>
   )
