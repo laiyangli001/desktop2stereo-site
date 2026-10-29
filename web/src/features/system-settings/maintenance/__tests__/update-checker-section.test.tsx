@@ -17,7 +17,7 @@ function axiosResponse<T>(data: T) {
   return { data: { success: true, data } }
 }
 
-function status(runtime: Record<string, string>, currentSHA = oldSHA) {
+function status(runtime: Record<string, string | number>, currentSHA = oldSHA) {
   return {
     repository: 'laiyangli001/desktop2stereo-site',
     branch: 'main',
@@ -167,5 +167,30 @@ describe('UpdateCheckerSection', () => {
     ).toBeDisabled()
     expect(await screen.findByText('Building')).toBeInTheDocument()
     expect(await screen.findByText('Build Docker image')).toBeInTheDocument()
+  })
+
+  it('shows downloaded size, total size, and current speed while downloading', async () => {
+    apiMocks.get.mockResolvedValue(
+      axiosResponse(
+        status({
+          state: 'running',
+          phase: 'download',
+          message: 'Downloading',
+          sha: newSHA,
+          download_bytes: 1048576,
+          download_total_bytes: 2097152,
+          download_speed_bps: 262144,
+        })
+      )
+    )
+
+    renderChecker()
+
+    expect(
+      await screen.findByText(/Downloaded: 1 MB \/ 2 MB/)
+    ).toBeInTheDocument()
+    expect(screen.getByText('Download speed: 256 KB/s')).toBeInTheDocument()
+    expect(screen.getByText('50%')).toBeInTheDocument()
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
   })
 })

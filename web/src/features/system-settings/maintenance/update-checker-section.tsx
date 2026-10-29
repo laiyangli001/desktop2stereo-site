@@ -24,6 +24,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
 import { api } from '@/lib/api'
 import { formatTimestamp } from '@/lib/format'
 
@@ -45,7 +46,21 @@ type ProjectUpdateStatus = {
     error?: string
     sha?: string
     updated_at?: string
+    download_bytes?: number
+    download_total_bytes?: number
+    download_speed_bps?: number
   }
+}
+
+function formatDownloadBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const index = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
+    units.length - 1
+  )
+  const value = bytes / 1024 ** index
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: index === 0 ? 0 : 1 }).format(value)} ${units[index]}`
 }
 
 type ProjectUpdateCommit = {
@@ -167,6 +182,13 @@ export function UpdateCheckerSection({
   const activePhaseIndex = updatePhases.findIndex(
     ([phase]) => phase === activePhase
   )
+  const download = updateStatus?.runtime
+  const downloadedBytes = Math.max(0, download?.download_bytes ?? 0)
+  const totalBytes = download?.download_total_bytes ?? 0
+  const downloadPercent =
+    totalBytes > 0
+      ? Math.min(100, Math.round((downloadedBytes / totalBytes) * 100))
+      : null
 
   const handleCheckUpdates = async () => {
     setChecking(true)
@@ -392,6 +414,33 @@ export function UpdateCheckerSection({
                 {updateStatus.runtime.phase} ·{' '}
                 {t('Status is refreshed every 2 seconds')}
               </div>
+              {updateStatus.runtime.phase === 'download' &&
+                updateStatus.runtime.download_bytes !== undefined && (
+                  <div className='mt-3 space-y-2 text-xs' aria-live='polite'>
+                    <div className='text-muted-foreground flex flex-wrap gap-x-4 gap-y-1'>
+                      <span>
+                        {t('Downloaded')}:{' '}
+                        {formatDownloadBytes(downloadedBytes)} /{' '}
+                        {totalBytes > 0
+                          ? formatDownloadBytes(totalBytes)
+                          : t('Total size unknown')}
+                      </span>
+                      <span>
+                        {t('Download speed')}:{' '}
+                        {formatDownloadBytes(
+                          updateStatus.runtime.download_speed_bps ?? 0
+                        )}
+                        /s
+                      </span>
+                      {downloadPercent !== null && (
+                        <span>{downloadPercent}%</span>
+                      )}
+                    </div>
+                    {downloadPercent !== null && (
+                      <Progress value={downloadPercent} />
+                    )}
+                  </div>
+                )}
               <div className='mt-3 grid gap-2 sm:grid-cols-5'>
                 {updatePhases.map(([phase, label], index) => (
                   <div

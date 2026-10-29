@@ -44,12 +44,15 @@ type projectUpdateConfig struct {
 }
 
 type projectUpdateRuntimeStatus struct {
-	State     string `json:"state"`
-	Phase     string `json:"phase"`
-	Message   string `json:"message"`
-	Error     string `json:"error,omitempty"`
-	SHA       string `json:"sha,omitempty"`
-	UpdatedAt string `json:"updated_at,omitempty"`
+	State              string `json:"state"`
+	Phase              string `json:"phase"`
+	Message            string `json:"message"`
+	Error              string `json:"error,omitempty"`
+	SHA                string `json:"sha,omitempty"`
+	UpdatedAt          string `json:"updated_at,omitempty"`
+	DownloadBytes      *int64 `json:"download_bytes,omitempty"`
+	DownloadTotalBytes *int64 `json:"download_total_bytes,omitempty"`
+	DownloadSpeedBPS   *int64 `json:"download_speed_bps,omitempty"`
 }
 
 type projectUpdateCommit struct {

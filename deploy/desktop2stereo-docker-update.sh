@@ -15,6 +15,9 @@ SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
 SOURCE_FILE="${D2S_UPDATE_SOURCE_FILE:-$APP_ROOT/update-requests/source}"
 CURRENT_PHASE="starting"
+DOWNLOAD_BYTES=""
+DOWNLOAD_TOTAL_BYTES=""
+DOWNLOAD_SPEED_BPS=""
 
 if [[ -z "${2:-}" && -f "$SOURCE_FILE" ]]; then
   mapfile -t SOURCE_FIELDS < "$SOURCE_FILE"
@@ -29,6 +32,8 @@ write_status() {
   mkdir -p "$(dirname "$STATUS_FILE")"
   STATUS_STATE="$state" STATUS_PHASE="$phase" STATUS_MESSAGE="$message" \
     STATUS_ERROR="$error_message" STATUS_SHA="$SHA" STATUS_UPDATED_AT="$(date -Is)" \
+    STATUS_DOWNLOAD_BYTES="$DOWNLOAD_BYTES" STATUS_DOWNLOAD_TOTAL_BYTES="$DOWNLOAD_TOTAL_BYTES" \
+    STATUS_DOWNLOAD_SPEED_BPS="$DOWNLOAD_SPEED_BPS" \
     python3 - "$temporary" <<'PY'
 import json
 import os
@@ -43,6 +48,15 @@ payload = {
 }
 if os.environ["STATUS_ERROR"]:
     payload["error"] = os.environ["STATUS_ERROR"]
+if os.environ["STATUS_PHASE"] == "download":
+    for field, variable in (
+        ("download_bytes", "STATUS_DOWNLOAD_BYTES"),
+        ("download_total_bytes", "STATUS_DOWNLOAD_TOTAL_BYTES"),
+        ("download_speed_bps", "STATUS_DOWNLOAD_SPEED_BPS"),
+    ):
+        value = os.environ[variable]
+        if value.isdigit():
+            payload[field] = int(value)
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(payload, handle, ensure_ascii=False)
     handle.write("\n")
@@ -71,7 +85,7 @@ if [[ ! -x "$BACKUP_SCRIPT" ]]; then
   echo "database backup script is missing: $BACKUP_SCRIPT" >&2
   exit 3
 fi
-for command_name in cmp curl docker tar timeout; do
+for command_name in awk cmp curl docker stat tar timeout; do
   command -v "$command_name" >/dev/null || { echo "required command is missing: $command_name" >&2; exit 4; }
 done
 if [[ ! "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -110,12 +124,43 @@ write_status "running" "$CURRENT_PHASE" "正在备份数据库"
 "$BACKUP_SCRIPT" "$APP_ROOT/backups" "$SHA"
 ARCHIVE="$RELEASE_ROOT/.desktop2stereo-$SHA.tar.gz"
 EXTRACT_ROOT="$RELEASE_ROOT/.desktop2stereo-$SHA"
+DOWNLOAD_HEADERS="$RELEASE_ROOT/.desktop2stereo-$SHA.headers"
 rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
+rm -f -- "$DOWNLOAD_HEADERS"
 mkdir -p "$EXTRACT_ROOT"
 CURRENT_PHASE="download"
+DOWNLOAD_BYTES=0
+DOWNLOAD_SPEED_BPS=0
 write_status "running" "$CURRENT_PHASE" "正在下载项目代码"
 curl --fail --location --retry 3 --connect-timeout 10 --max-time "$DOWNLOAD_TIMEOUT_SECONDS" \
-  -o "$ARCHIVE" "https://codeload.github.com/$REPOSITORY/tar.gz/$SHA"
+  --silent --show-error --dump-header "$DOWNLOAD_HEADERS" \
+  -o "$ARCHIVE" "https://codeload.github.com/$REPOSITORY/tar.gz/$SHA" &
+download_pid=$!
+last_bytes=0
+last_time=$(date +%s)
+while kill -0 "$download_pid" 2>/dev/null; do
+  sleep 2
+  DOWNLOAD_BYTES=$(stat -c %s "$ARCHIVE" 2>/dev/null || printf '0')
+  DOWNLOAD_TOTAL_BYTES=$(awk '/^HTTP\// { total="" } tolower($1) == "content-length:" { total=$2 } END { gsub("\r", "", total); if (total ~ /^[0-9]+$/) print total }' "$DOWNLOAD_HEADERS" 2>/dev/null || true)
+  now=$(date +%s)
+  if (( now > last_time && DOWNLOAD_BYTES >= last_bytes )); then
+    DOWNLOAD_SPEED_BPS=$(( (DOWNLOAD_BYTES - last_bytes) / (now - last_time) ))
+  else
+    DOWNLOAD_SPEED_BPS=0
+  fi
+  write_status "running" "$CURRENT_PHASE" "正在下载项目代码"
+  last_bytes=$DOWNLOAD_BYTES
+  last_time=$now
+done
+download_exit=0
+wait "$download_pid" || download_exit=$?
+DOWNLOAD_BYTES=$(stat -c %s "$ARCHIVE" 2>/dev/null || printf '0')
+write_status "running" "$CURRENT_PHASE" "正在下载项目代码"
+if (( download_exit != 0 )); then
+  write_status "failed" "$CURRENT_PHASE" "更新失败" "下载项目代码失败，curl 退出代码 ${download_exit}"
+  exit "$download_exit"
+fi
+rm -f -- "$DOWNLOAD_HEADERS"
 CURRENT_PHASE="extract"
 write_status "running" "$CURRENT_PHASE" "正在解压项目代码"
 tar -xzf "$ARCHIVE" -C "$EXTRACT_ROOT"
