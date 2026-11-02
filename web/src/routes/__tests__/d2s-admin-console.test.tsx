@@ -717,4 +717,56 @@ describe('D2SAdminConsole login', () => {
     await user.type(retentionInput, '2147483648')
     expect(executeButton).toBeDisabled()
   })
+
+  it('makes audit result tables keyboard-scrollable and gives controls visible states', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path = String(input)
+      if (path.endsWith('/api/v1/admin/auth/session')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              admin: {
+                id: 1,
+                email: 'admin@example.com',
+                role: 'super_admin',
+              },
+            },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: { items: [{ id: 1, order_id: 'order-1' }], total: 1 },
+        }),
+      } as Response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    render(<D2SAdminConsole />)
+
+    await screen.findByRole('heading', { name: '用户行为日志' })
+    const logRegion = screen.getByRole('region', {
+      name: '可横向滚动的用户行为日志',
+    })
+    expect(logRegion).toHaveAttribute('tabindex', '0')
+    expect(logRegion).toHaveClass('focus-visible:ring-2')
+
+    const queryButton = screen.getByRole('button', { name: '查询' })
+    expect(queryButton).toHaveClass('hover:bg-muted/70')
+    expect(queryButton).toHaveClass('focus-visible:ring-2')
+
+    await user.click(screen.getByRole('button', { name: '购买记录' }))
+    await user.click(screen.getByRole('button', { name: '刷新' }))
+    const recordRegion = await screen.findByRole('region', {
+      name: '可横向滚动的记录结果',
+    })
+    expect(recordRegion).toHaveAttribute('tabindex', '0')
+  })
 })

@@ -434,7 +434,7 @@ export function D2SAdminConsole() {
               />
             </label>
             <button
-              className='bg-primary text-primary-foreground rounded px-4 py-2 disabled:opacity-50'
+              className='bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring rounded px-4 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-50'
               disabled={busy}
               type='submit'
             >
@@ -484,7 +484,7 @@ export function D2SAdminConsole() {
             </p>
           </div>
           <button
-            className='rounded border px-3 py-2'
+            className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
             disabled={busy}
             onClick={logout}
             type='button'
@@ -507,8 +507,8 @@ export function D2SAdminConsole() {
                 aria-pressed={section === key}
                 className={
                   section === key
-                    ? 'bg-primary text-primary-foreground rounded px-3 py-2'
-                    : 'rounded border px-3 py-2'
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 focus-visible:ring-ring rounded px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+                    : 'hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                 }
                 key={key}
                 onClick={() => {
@@ -584,7 +584,7 @@ export function D2SAdminConsole() {
             </div>
             <div className='flex flex-wrap gap-2'>
               <button
-                className='rounded border px-3 py-2'
+                className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                 disabled={busy}
                 onClick={() =>
                   section === 'logs' ? loadLogs() : loadRegistrations()
@@ -594,7 +594,7 @@ export function D2SAdminConsole() {
                 查询
               </button>
               <button
-                className='rounded border px-3 py-2'
+                className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                 disabled={busy}
                 onClick={section === 'logs' ? exportLogs : exportRegistrations}
                 type='button'
@@ -604,7 +604,12 @@ export function D2SAdminConsole() {
             </div>
             {section === 'logs' ? (
               <>
-                <div className='overflow-auto'>
+                <div
+                  className='focus-visible:ring-ring overflow-auto rounded focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+                  role='region'
+                  aria-label='可横向滚动的用户行为日志'
+                  tabIndex={0}
+                >
                   <table
                     aria-label='用户行为日志结果'
                     className='min-w-full border-collapse text-left text-xs'
@@ -654,7 +659,7 @@ export function D2SAdminConsole() {
                     onPageChange={goToPage}
                   />
                   <button
-                    className='rounded border px-3 py-1'
+                    className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-1 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                     disabled={!rows.length || busy}
                     onClick={() =>
                       run(async () => {
@@ -692,7 +697,7 @@ export function D2SAdminConsole() {
           <section className='space-y-4 rounded border p-4'>
             <h2 className='text-lg font-medium'>购买记录</h2>
             <button
-              className='rounded border px-3 py-2'
+              className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
               disabled={busy}
               onClick={() => loadPurchases()}
               type='button'
@@ -775,7 +780,7 @@ export function D2SAdminConsole() {
               </label>
             </div>
             <button
-              className='bg-destructive text-destructive-foreground rounded px-3 py-2'
+              className='bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-ring rounded px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
               disabled={busy || !userID}
               onClick={setEmergency}
               type='button'
@@ -848,7 +853,7 @@ export function D2SAdminConsole() {
             </div>
             <div className='flex flex-wrap gap-2'>
               <button
-                className='rounded border px-3 py-2'
+                className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                 disabled={busy}
                 onClick={previewBatch}
                 type='button'
@@ -862,7 +867,7 @@ export function D2SAdminConsole() {
                     个账户；请核对筛选条件后确认。
                   </p>
                   <button
-                    className='bg-destructive text-destructive-foreground rounded px-3 py-2'
+                    className='bg-destructive text-destructive-foreground hover:bg-destructive/90 focus-visible:ring-ring rounded px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                     disabled={busy}
                     onClick={applyBatch}
                     type='button'
@@ -890,7 +895,7 @@ export function D2SAdminConsole() {
                 value={userID}
               />
               <button
-                className='rounded border px-3 py-2'
+                className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                 disabled={busy}
                 onClick={loadIdentity}
                 type='button'
@@ -959,7 +964,7 @@ export function D2SAdminConsole() {
               </label>
             </div>
             <button
-              className='rounded border px-3 py-2'
+              className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
               disabled={busy || !userID}
               onClick={saveIdentity}
               type='button'
@@ -992,7 +997,7 @@ export function D2SAdminConsole() {
                 />
               </label>
               <button
-                className='rounded border px-3 py-2'
+                className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                 disabled={
                   busy ||
                   !Number.isSafeInteger(Number(retentionDays)) ||
@@ -1022,7 +1027,7 @@ function PaginationControls(props: {
   return (
     <nav aria-label='记录分页' className='flex items-center gap-3 text-sm'>
       <button
-        className='rounded border px-3 py-1'
+        className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-1 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
         disabled={props.page <= 1 || props.busy}
         onClick={() => props.onPageChange(props.page - 1)}
         type='button'
@@ -1033,7 +1038,7 @@ function PaginationControls(props: {
         第 {props.page} 页 · 共 {props.total} 条
       </span>
       <button
-        className='rounded border px-3 py-1'
+        className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-1 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
         disabled={props.page >= pageCount || props.busy}
         onClick={() => props.onPageChange(props.page + 1)}
         type='button'
@@ -1058,7 +1063,12 @@ function RecordTable({ rows }: { rows: RecordRow[] }) {
     )
   }
   return (
-    <div className='overflow-auto'>
+    <div
+      className='focus-visible:ring-ring overflow-auto rounded focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
+      role='region'
+      aria-label='可横向滚动的记录结果'
+      tabIndex={0}
+    >
       <table
         aria-label='记录结果'
         className='min-w-full border-collapse text-left text-xs'
