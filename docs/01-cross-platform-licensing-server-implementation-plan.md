@@ -294,6 +294,7 @@ GORM 维护以下表：
 状态：`in_progress`。
 
 - 2026-11-03 以隐私政策内部草稿中的真实方括号占位内容检查 readiness 门禁，发现它只识别部分固定词组，可能放过 `[填写...]`、`[待确定]`、`[负责人核实...]` 等草稿标记。已扩展检查和 mock 回归覆盖这些形式，直接加载仓库的内部草稿并确认拒绝；规则按具体待填标记匹配，`[待付款]`状态文字和正常 Markdown 法规链接可通过。`scripts/d2s-production-readiness-selftest.ps1`、PowerShell AST 检查通过。此门禁仅拦截明显占位符，不判断政策事实准确性或法律充分性，生产政策仍需负责人核实并审核。
+- 2026-11-03 重新运行 `scripts/d2s-production-readiness-selftest.ps1`，有效模拟环境通过，空政策、仓库内部草稿、错误客服主机/路径/端口/查询/凭据/片段、缺失客服接口、错误运行 SHA 和无效 P-256 公钥等拒绝用例全部通过。随后对生产执行无凭据只读 GET：`/api/status` 为 200、运行 SHA `d11d0cc1da5070bc65b57ff72181ed2865043833`；`/api/privacy-policy` 为 200 但内容为空，`privacy_policy_enabled=false`。mock 自测不证明生产就绪；生产政策门禁仍失败。
 
 - 2026-11-02 无凭据只读 GET 复核：`/api/status` 返回 200，运行版本为 `26f524d11424a2866a8608a4883a63dd1f7fe16d`；新增投诉配置 API `/api/v1/support/config` 返回 404；`/support` 返回 200 HTML，但属于 SPA 回退响应，不能证明工单页面/API 已部署。由此确认本地投诉与企业微信入口代码尚未上线。本次未执行生产写操作。
 
