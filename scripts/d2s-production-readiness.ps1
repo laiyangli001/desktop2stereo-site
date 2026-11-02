@@ -3,10 +3,20 @@ param(
     [string]$BaseUrl = "https://d2s.site",
     [switch]$RequireSecrets,
     [switch]$SkipHttp,
-    [string[]]$RequiredPaymentProviders = @()
+    [string[]]$RequiredPaymentProviders = @(),
+    [string]$ExpectedVersion = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+    if ($ExpectedVersion -notmatch "\A[0-9a-fA-F]{40}\z") {
+        throw "-ExpectedVersion must be a 40-character Git commit SHA"
+    }
+    if ($SkipHttp) {
+        throw "-ExpectedVersion cannot be used with -SkipHttp"
+    }
+}
 
 function Assert-NonEmptyEnvironmentVariable([string]$Name) {
     $value = [Environment]::GetEnvironmentVariable($Name)
@@ -231,6 +241,19 @@ if (-not $SkipHttp) {
         throw "Health endpoint returned HTTP $($health.StatusCode)"
     }
     Write-Host "OK health endpoint: $($health.StatusCode)"
+
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+        try {
+            $healthPayload = $health.Content | ConvertFrom-Json
+        } catch {
+            throw "Health endpoint returned invalid JSON while checking the expected version"
+        }
+        $actualVersion = [string]$healthPayload.data.version
+        if ($actualVersion -cne $ExpectedVersion) {
+            throw "Running version does not match the expected release SHA (expected $ExpectedVersion, received $actualVersion)"
+        }
+        Write-Host "OK running version matches the expected release SHA"
+    }
 
     $keys = Invoke-RestMethod -Uri "$normalizedBaseUrl/api/v1/license/keys" -Method Get
     if (-not $keys.success -or $null -eq $keys.data.keys) {

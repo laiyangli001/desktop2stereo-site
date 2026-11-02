@@ -12,11 +12,15 @@
 - 准备一份 PostgreSQL 快照、上一版本镜像和本次 Git SHA。
 - 至少准备一个 CN 渠道和一个 INTL 渠道的沙箱账号；PayPal/Paddle 不得出现在测试矩阵。
 
-先在应用节点执行：
+先在应用节点输入本次发布的完整 40 位 Git SHA 并执行：
 
 ```powershell
-.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
+$releaseSha = Read-Host "请输入待验收的 40 位 Git 提交 SHA"
+.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -ExpectedVersion $releaseSha -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
 ```
+
+`-ExpectedVersion` 会将 `/api/status` 返回的运行版本与本次发布 SHA 做区分大小写的精确比较；
+版本不匹配、响应 JSON 无效或同时指定 `-SkipHttp` 时检查失败。部署后必须传入目标 SHA，避免旧实例健康但新版本尚未生效时被判定为通过。
 
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty
