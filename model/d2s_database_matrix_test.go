@@ -156,6 +156,75 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 			assert.Equal(t, 1, supportAudit.OperatorID)
 			assert.Equal(t, "192.0.2.10", supportAudit.SourceIP)
 
+			auditTime := time.Now().UTC().Unix()
+			var profile D2SUserProfile
+			require.NoError(t, db.Where("user_id = ?", user.Id).First(&profile).Error)
+			region := D2SRegionCN
+			if profile.Region == region {
+				region = D2SRegionINTL
+			}
+			regionAudit := &D2SAdminOperationAudit{
+				OperatorID: 1, OperatorEmail: "matrix-admin@example.com", OperationType: "SET_USER_REGION",
+				TargetResource: strconv.Itoa(user.Id), SourceIP: "192.0.2.10",
+				Result: "SUCCESS", DetailsJSON: `{"region":"` + region + `"}`,
+			}
+			updatedProfile, err := SetD2SUserRegionWithAudit(1, user.Id, region, auditTime, regionAudit)
+			require.NoError(t, err)
+			assert.Equal(t, region, updatedProfile.Region)
+			var regionAuditRecord D2SAdminOperationAudit
+			require.NoError(t, db.Where("operation_type = ? AND target_resource = ?", "SET_USER_REGION", strconv.Itoa(user.Id)).First(&regionAuditRecord).Error)
+			assert.Equal(t, "SUCCESS", regionAuditRecord.Result)
+			assert.Equal(t, 1, regionAuditRecord.OperatorID)
+			assert.Equal(t, "192.0.2.10", regionAuditRecord.SourceIP)
+
+			withdrawalID := "matrix-withdrawal-review-" + suffix
+			withdrawalAccount := D2SBalanceAccount{
+				ID: "matrix-withdrawal-account-" + suffix, UserID: user.Id, Currency: "CNY",
+				ReservedMinor: 5000, UpdatedAt: auditTime,
+			}
+			require.NoError(t, db.Create(&withdrawalAccount).Error)
+			require.NoError(t, db.Create(&D2SWithdrawalRequest{
+				ID: withdrawalID, UserID: user.Id, Currency: "CNY", AmountMinor: 5000,
+				AlipayAccount: "matrix@example.com", RealName: "Matrix Test", Status: "pending",
+				CreatedAt: auditTime, UpdatedAt: auditTime,
+			}).Error)
+			withdrawalAudit := &D2SAdminOperationAudit{
+				OperatorID: 1, OperatorEmail: "matrix-admin@example.com", OperationType: "REVIEW_WITHDRAWAL",
+				TargetResource: "d2s_withdrawal_requests:" + withdrawalID, SourceIP: "192.0.2.10",
+				Result: "SUCCESS", DetailsJSON: `{"status":"rejected"}`,
+			}
+			updatedWithdrawal, err := ReviewD2SWithdrawalWithAudit(1, withdrawalID, "rejected", "matrix review", auditTime, withdrawalAudit)
+			require.NoError(t, err)
+			assert.Equal(t, "rejected", updatedWithdrawal.Status)
+			var updatedWithdrawalAccount D2SBalanceAccount
+			require.NoError(t, db.First(&updatedWithdrawalAccount, "id = ?", withdrawalAccount.ID).Error)
+			assert.EqualValues(t, 0, updatedWithdrawalAccount.ReservedMinor)
+			assert.EqualValues(t, 5000, updatedWithdrawalAccount.AvailableMinor)
+			var withdrawalAuditRecord D2SAdminOperationAudit
+			require.NoError(t, db.Where("operation_type = ? AND target_resource = ?", "REVIEW_WITHDRAWAL", withdrawalAudit.TargetResource).First(&withdrawalAuditRecord).Error)
+			assert.Equal(t, "SUCCESS", withdrawalAuditRecord.Result)
+			assert.Equal(t, 1, withdrawalAuditRecord.OperatorID)
+			assert.Equal(t, "192.0.2.10", withdrawalAuditRecord.SourceIP)
+
+			unbindID := "matrix-unbind-review-" + suffix
+			require.NoError(t, db.Create(&D2SManualUnbindRequest{
+				ID: unbindID, LicenseID: licenses[0].ID, UserID: user.Id, Reason: "matrix review",
+				Status: "pending", CreatedAt: auditTime, UpdatedAt: auditTime,
+			}).Error)
+			unbindAudit := &D2SAdminOperationAudit{
+				OperatorID: 1, OperatorEmail: "matrix-admin@example.com", OperationType: "REVIEW_MANUAL_UNBIND",
+				TargetResource: "d2s_manual_unbind_requests:" + unbindID, SourceIP: "192.0.2.10",
+				Result: "SUCCESS", DetailsJSON: `{"status":"rejected"}`,
+			}
+			updatedUnbind, err := ReviewD2SManualUnbindWithAudit(1, unbindID, "rejected", "matrix review", auditTime, unbindAudit)
+			require.NoError(t, err)
+			assert.Equal(t, "rejected", updatedUnbind.Status)
+			var unbindAuditRecord D2SAdminOperationAudit
+			require.NoError(t, db.Where("operation_type = ? AND target_resource = ?", "REVIEW_MANUAL_UNBIND", unbindAudit.TargetResource).First(&unbindAuditRecord).Error)
+			assert.Equal(t, "SUCCESS", unbindAuditRecord.Result)
+			assert.Equal(t, 1, unbindAuditRecord.OperatorID)
+			assert.Equal(t, "192.0.2.10", unbindAuditRecord.SourceIP)
+
 			reconcileNow := time.Now().UTC().Unix()
 			order := D2SOrder{
 				ID: "matrix-reconciliation-" + suffix, UserID: user.Id, Product: D2SOrderProductLicense,

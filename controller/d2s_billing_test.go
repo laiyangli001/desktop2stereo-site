@@ -88,6 +88,48 @@ func TestD2SOrderCreateRejectsChangedServerQuoteBeforeCreatingOrder(t *testing.T
 	assert.EqualValues(t, 1, purchaseAuditCount)
 }
 
+func TestD2SOrderCreateReplaysHistoricalQuoteSnapshot(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	previousDB := model.DB
+	db, err := gorm.Open(sqlite.Open("file:d2s_order_historical_quote_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		sqlDB, dbErr := db.DB()
+		if dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}, &model.D2SUserSecurityControl{}))
+	historicalOrder := model.D2SOrder{
+		ID: "historical-quote-order", UserID: 1402, Product: model.D2SOrderProductLicense,
+		ProductID: model.D2SOrderProductLicense, Provider: "stripe", PaymentMethod: "stripe",
+		Region: model.D2SRegionINTL, Currency: "USD", AmountMinor: 2500, GatewayMinor: 2500,
+		Status: model.D2SOrderPending, ResultStatus: model.D2SActionResultSuccess,
+		IdempotencyKey: "historical-price-retry", PurchaseTime: 1_800_000_000,
+		CreatedAt: 1_800_000_000, ExpiresAt: 1_800_001_800,
+	}
+	require.NoError(t, db.Create(&historicalOrder).Error)
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Set("id", historicalOrder.UserID)
+	context.Request = httptest.NewRequest(http.MethodPost, "/api/v1/orders/create", strings.NewReader(
+		`{"product":"license","provider":"stripe","balance_minor":0,"idempotency_key":"historical-price-retry","expected_amount_minor":2500,"expected_currency":"USD","expected_region":"INTL"}`,
+	))
+
+	D2SOrderCreate(context)
+
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	var response struct {
+		Data model.D2SOrder `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, historicalOrder.ID, response.Data.ID)
+	assert.Equal(t, int64(2500), response.Data.AmountMinor)
+}
+
 func TestD2SSpecializedOrderEndpointsRejectWrongProduct(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	previousDB := model.DB

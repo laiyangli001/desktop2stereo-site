@@ -38,10 +38,31 @@ try {
             throw "Failed to build test binary for $packagePath (exit code $LASTEXITCODE)."
         }
 
+        if (-not (Test-Path -LiteralPath $binaryPath)) {
+            throw "Test binary is missing immediately after build for '$packagePath'. Path: '$binaryPath'. Check the security product quarantine record; do not disable protection or add an exclusion to continue."
+        }
+        try {
+            $binaryHash = (Get-FileHash -LiteralPath $binaryPath -Algorithm SHA256).Hash
+        } catch {
+            throw "Could not hash test binary for '$packagePath'. Path: '$binaryPath'. Error: $($_.Exception.Message)"
+        }
+        Write-Host "Test binary SHA-256 before launch: $binaryHash"
         Write-Host "Running $binaryPath"
-        & $binaryPath '-test.count=1'
-        if ($LASTEXITCODE -ne 0) {
-            throw "Tests failed for $packagePath (exit code $LASTEXITCODE)."
+        $testExitCode = -1
+        try {
+            & $binaryPath '-test.count=1'
+            $testExitCode = $LASTEXITCODE
+        } catch {
+            if (-not (Test-Path -LiteralPath $binaryPath)) {
+                throw "Test binary disappeared while launching '$packagePath'. Path: '$binaryPath'; SHA-256 before launch: $binaryHash. Check the security product quarantine record; do not disable protection or add an exclusion to continue."
+            }
+            throw
+        }
+        if (-not (Test-Path -LiteralPath $binaryPath)) {
+            throw "Test binary disappeared after running '$packagePath'. Path: '$binaryPath'; SHA-256 before launch: $binaryHash. Check the security product quarantine record; do not disable protection or add an exclusion to continue."
+        }
+        if ($testExitCode -ne 0) {
+            throw "Tests failed for $packagePath (exit code $testExitCode)."
         }
     }
 }

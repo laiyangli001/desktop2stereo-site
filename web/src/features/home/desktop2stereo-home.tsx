@@ -417,12 +417,10 @@ export function Desktop2StereoHome({
   }
   const trackedExternal = (target: D2SDownloadTarget, href: string) => ({
     ...external(href),
-    onClick: isAuthenticated
-      ? (event: MouseEvent<HTMLAnchorElement>) => {
-          event.preventDefault()
-          void openTrackedDownload(target, href)
-        }
-      : undefined,
+    onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault()
+      void openTrackedDownload(target, href)
+    },
   })
   return (
     <main className='d2s-home bg-background text-foreground'>

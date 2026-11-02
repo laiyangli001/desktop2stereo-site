@@ -552,7 +552,7 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 		if accountHash != "" {
 			decoded, err := hex.DecodeString(accountHash)
 			switch provider {
-			case "stripe", "creem", "waffo_pancake":
+			case "stripe", "creem", "waffo", "waffo_pancake":
 			default:
 				return nil, ErrD2SOrderInvalid
 			}
@@ -724,8 +724,15 @@ func CreateD2SWithdrawal(userID int, amountMinor int64, alipayAccount, realName 
 }
 
 func ReviewD2SWithdrawal(adminID int, requestID, status, note string, now int64) (*D2SWithdrawalRequest, error) {
+	return ReviewD2SWithdrawalWithAudit(adminID, requestID, status, note, now, nil)
+}
+
+func ReviewD2SWithdrawalWithAudit(adminID int, requestID, status, note string, now int64, audit *D2SAdminOperationAudit) (*D2SWithdrawalRequest, error) {
 	if status != "paid" && status != "rejected" {
 		return nil, ErrD2SWithdrawalNotAllowed
+	}
+	if audit != nil && (adminID <= 0 || audit.OperatorID != adminID) {
+		return nil, ErrD2SAdminInvalid
 	}
 	var row D2SWithdrawalRequest
 	err := d2STransaction(func(tx *gorm.DB) error {
@@ -758,14 +765,28 @@ func ReviewD2SWithdrawal(adminID int, requestID, status, note string, now int64)
 			return err
 		}
 		row.Status, row.ReviewedBy, row.ReviewNote, row.UpdatedAt, row.PaidAt = status, adminID, note, now, paidAt
-		return tx.Create(&D2SBalanceTransaction{ID: uuid.NewString(), AccountID: account.ID, UserID: row.UserID, Currency: row.Currency, Kind: kind, AmountMinor: amount, ReferenceID: row.ID, CreatedAt: now}).Error
+		if err := tx.Create(&D2SBalanceTransaction{ID: uuid.NewString(), AccountID: account.ID, UserID: row.UserID, Currency: row.Currency, Kind: kind, AmountMinor: amount, ReferenceID: row.ID, CreatedAt: now}).Error; err != nil {
+			return err
+		}
+		if audit != nil {
+			audit.OperationTime = now
+			return createD2SAdminOperationAudit(tx, audit)
+		}
+		return nil
 	})
 	return &row, err
 }
 
 func ReviewD2SManualUnbind(adminID int, requestID, status, note string, now int64) (*D2SManualUnbindRequest, error) {
+	return ReviewD2SManualUnbindWithAudit(adminID, requestID, status, note, now, nil)
+}
+
+func ReviewD2SManualUnbindWithAudit(adminID int, requestID, status, note string, now int64, audit *D2SAdminOperationAudit) (*D2SManualUnbindRequest, error) {
 	if status != "approved" && status != "rejected" {
 		return nil, ErrD2SOrderInvalid
+	}
+	if audit != nil && (adminID <= 0 || audit.OperatorID != adminID) {
+		return nil, ErrD2SAdminInvalid
 	}
 	var request D2SManualUnbindRequest
 	err := d2STransaction(func(tx *gorm.DB) error {
@@ -808,15 +829,26 @@ func ReviewD2SManualUnbind(adminID int, requestID, status, note string, now int6
 			return err
 		}
 		request.Status, request.ReviewedBy, request.ReviewNote, request.UpdatedAt = status, adminID, note, now
+		if audit != nil {
+			audit.OperationTime = now
+			return createD2SAdminOperationAudit(tx, audit)
+		}
 		return nil
 	})
 	return &request, err
 }
 
 func SetD2SUserRegion(adminID, userID int, region string, now int64) (*D2SUserProfile, error) {
+	return SetD2SUserRegionWithAudit(adminID, userID, region, now, nil)
+}
+
+func SetD2SUserRegionWithAudit(adminID, userID int, region string, now int64, audit *D2SAdminOperationAudit) (*D2SUserProfile, error) {
 	region = strings.ToUpper(strings.TrimSpace(region))
 	if region != D2SRegionCN && region != D2SRegionINTL {
 		return nil, ErrD2SRegionMismatch
+	}
+	if audit != nil && (adminID <= 0 || audit.OperatorID != adminID) {
+		return nil, ErrD2SAdminInvalid
 	}
 	var profile D2SUserProfile
 	err := d2STransaction(func(tx *gorm.DB) error {
@@ -843,8 +875,14 @@ func SetD2SUserRegion(adminID, userID int, region string, now int64) (*D2SUserPr
 			return ErrD2SRegionMismatch
 		}
 		profile.Region, profile.RegionLockedAt, profile.UpdatedAt = region, now, now
-		return tx.Model(&D2SUserProfile{}).Where("user_id = ?", userID).Updates(map[string]any{"region": region, "region_locked_at": now, "updated_at": now}).Error
+		if err := tx.Model(&D2SUserProfile{}).Where("user_id = ?", userID).Updates(map[string]any{"region": region, "region_locked_at": now, "updated_at": now}).Error; err != nil {
+			return err
+		}
+		if audit != nil {
+			audit.OperationTime = now
+			return createD2SAdminOperationAudit(tx, audit)
+		}
+		return nil
 	})
-	_ = adminID
 	return &profile, err
 }

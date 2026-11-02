@@ -331,11 +331,18 @@ func D2SPaymentWebhook(c *gin.Context) {
 func D2SAdminWithdrawals(c *gin.Context) {
 	var rows []model.D2SWithdrawalRequest
 	query := model.DB.Order("created_at DESC").Limit(500)
-	if status := strings.TrimSpace(c.Query("status")); status != "" {
+	status := strings.TrimSpace(c.Query("status"))
+	if status != "" {
 		query = query.Where("status = ?", status)
 	}
 	if err := query.Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_WITHDRAWALS", "d2s_withdrawal_requests", "query_failed", http.StatusInternalServerError, "WITHDRAWAL_QUERY_FAILED")
+		return
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_WITHDRAWALS", "d2s_withdrawal_requests", "SUCCESS", map[string]any{
+		"status": status, "limit": 500, "count": len(rows),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"withdrawals": rows})
@@ -347,7 +354,7 @@ func D2SAdminOrders(c *gin.Context) {
 		switch status {
 		case model.D2SOrderPending, model.D2SOrderPaid, model.D2SOrderCanceled, model.D2SOrderChargeback:
 		default:
-			d2sInvalidInput(c, "status must be pending, paid, canceled, or chargeback")
+			respondD2SAdminAuditedFailure(c, "VIEW_ADMIN_ORDERS", "d2s_orders", "invalid_status", http.StatusBadRequest, "INVALID_STATUS")
 			return
 		}
 	}
@@ -356,7 +363,7 @@ func D2SAdminOrders(c *gin.Context) {
 	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
 		value, err := strconv.Atoi(userID)
 		if err != nil || value <= 0 {
-			d2sInvalidInput(c, "user_id must be a positive integer")
+			respondD2SAdminAuditedFailure(c, "VIEW_ADMIN_ORDERS", "d2s_orders", "invalid_user_id", http.StatusBadRequest, "INVALID_USER_ID")
 			return
 		}
 		parsedUserID = &value
@@ -371,7 +378,13 @@ func D2SAdminOrders(c *gin.Context) {
 		query = query.Where("user_id = ?", *parsedUserID)
 	}
 	if err := query.Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_ADMIN_ORDERS", "d2s_orders", "query_failed", http.StatusInternalServerError, "ORDER_QUERY_FAILED")
+		return
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_ADMIN_ORDERS", "d2s_orders", "SUCCESS", map[string]any{
+		"status": status, "user_id": parsedUserID, "limit": 500, "count": len(rows),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"orders": rows})
@@ -390,7 +403,15 @@ func D2SAdminPaymentEvents(c *gin.Context) {
 		query = query.Where("event_type = ?", strings.ToLower(eventType))
 	}
 	if err := query.Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_PAYMENT_EVENTS", "d2s_payment_events", "query_failed", http.StatusInternalServerError, "PAYMENT_EVENT_QUERY_FAILED")
+		return
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_PAYMENT_EVENTS", "d2s_payment_events", "SUCCESS", map[string]any{
+		"provider":   strings.ToLower(strings.TrimSpace(c.Query("provider"))),
+		"order_id":   strings.TrimSpace(c.Query("order_id")),
+		"event_type": strings.ToLower(strings.TrimSpace(c.Query("event_type"))), "limit": 500, "count": len(rows),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"events": rows})
@@ -401,7 +422,7 @@ func D2SAdminBalances(c *gin.Context) {
 	if userID := strings.TrimSpace(c.Query("user_id")); userID != "" {
 		value, err := strconv.Atoi(userID)
 		if err != nil || value <= 0 {
-			d2sInvalidInput(c, "user_id must be a positive integer")
+			respondD2SAdminAuditedFailure(c, "VIEW_BALANCES", "d2s_balance_accounts", "invalid_user_id", http.StatusBadRequest, "INVALID_USER_ID")
 			return
 		}
 		parsedUserID = &value
@@ -418,7 +439,13 @@ func D2SAdminBalances(c *gin.Context) {
 		query = query.Where("user_id = ?", *parsedUserID)
 	}
 	if err := query.Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_BALANCES", "d2s_balance_accounts", "query_failed", http.StatusInternalServerError, "BALANCE_QUERY_FAILED")
+		return
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_BALANCES", "d2s_balance_accounts", "SUCCESS", map[string]any{
+		"user_id": parsedUserID, "negative_only": c.Query("negative") != "false", "limit": 500, "count": len(rows),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"accounts": rows})
@@ -427,7 +454,7 @@ func D2SAdminBalances(c *gin.Context) {
 func D2SAdminSigningKeys(c *gin.Context) {
 	var rows []model.D2SSigningKey
 	if err := model.DB.Select("key_id, algorithm, public_jwk, status, created_at, retired_at").Order("created_at DESC").Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_SIGNING_KEYS", "d2s_signing_keys", "query_failed", http.StatusInternalServerError, "SIGNING_KEY_QUERY_FAILED")
 		return
 	}
 	type signingKeyResponse struct {
@@ -447,6 +474,10 @@ func D2SAdminSigningKeys(c *gin.Context) {
 			IsCurrent: service.IsD2SCurrentSigningKey(row.KeyID),
 		})
 	}
+	if err := writeD2SAdminAudit(c, "VIEW_SIGNING_KEYS", "d2s_signing_keys", "SUCCESS", map[string]any{"count": len(keys)}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+		return
+	}
 	d2sSuccess(c, http.StatusOK, gin.H{"keys": keys})
 }
 
@@ -455,14 +486,24 @@ func D2SAdminSigningKeyReview(c *gin.Context) {
 		Status string `json:"status"`
 	}
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || strings.TrimSpace(request.Status) != "retired" {
-		d2sInvalidInput(c, "status must be retired")
+		respondD2SAdminAuditedFailure(c, "RETIRE_SIGNING_KEY", c.Param("id"), "invalid_request", http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	if err := service.RetireD2SSigningKey(c.Param("id"), time.Now().Unix()); err != nil {
+	keyID := strings.TrimSpace(c.Param("id"))
+	audit, err := d2SAdminAuditEntry(c, "RETIRE_SIGNING_KEY", keyID, "SUCCESS", map[string]any{"status": "retired"})
+	if err != nil {
+		respondD2SAdminAuditedFailure(c, "RETIRE_SIGNING_KEY", keyID, "audit_serialize_failed", http.StatusInternalServerError, "AUDIT_WRITE_FAILED")
+		return
+	}
+	if err := service.RetireD2SSigningKeyWithAudit(keyID, time.Now().UTC().Unix(), audit); err != nil {
+		if auditErr := writeD2SAdminAudit(c, "RETIRE_SIGNING_KEY", keyID, "FAILURE", map[string]any{"reason": "retire_failed"}); auditErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+			return
+		}
 		d2sError(c, err)
 		return
 	}
-	D2SAdminSigningKeys(c)
+	d2sSuccess(c, http.StatusOK, gin.H{"key_id": keyID, "status": "retired"})
 }
 
 func auditD2SReconciliation(c *gin.Context, startAt, endAt int64, result string, details map[string]any) bool {
@@ -525,11 +566,25 @@ type d2sAdminReviewRequest struct {
 func D2SAdminWithdrawalReview(c *gin.Context) {
 	var request d2sAdminReviewRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
-		d2sInvalidInput(c, "status is required")
+		respondD2SAdminAuditedFailure(c, "REVIEW_WITHDRAWAL", "d2s_withdrawal_requests:"+c.Param("id"), "invalid_request", http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	row, err := model.ReviewD2SWithdrawal(c.GetInt("id"), c.Param("id"), request.Status, request.Note, time.Now().Unix())
+	request.Status = strings.ToLower(strings.TrimSpace(request.Status))
+	audit, err := d2SAdminAuditEntry(c, "REVIEW_WITHDRAWAL", "d2s_withdrawal_requests:"+c.Param("id"), "SUCCESS", map[string]any{
+		"status": request.Status, "note_provided": strings.TrimSpace(request.Note) != "",
+	})
 	if err != nil {
+		respondD2SAdminAuditedFailure(c, "REVIEW_WITHDRAWAL", "d2s_withdrawal_requests:"+c.Param("id"), "audit_serialize_failed", http.StatusInternalServerError, "AUDIT_WRITE_FAILED")
+		return
+	}
+	row, err := model.ReviewD2SWithdrawalWithAudit(c.GetInt("d2s_admin_id"), c.Param("id"), request.Status, request.Note, time.Now().UTC().Unix(), audit)
+	if err != nil {
+		if auditErr := writeD2SAdminAudit(c, "REVIEW_WITHDRAWAL", "d2s_withdrawal_requests:"+c.Param("id"), "FAILURE", map[string]any{
+			"status": request.Status, "reason": "review_failed",
+		}); auditErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+			return
+		}
 		d2sError(c, err)
 		return
 	}
@@ -538,12 +593,19 @@ func D2SAdminWithdrawalReview(c *gin.Context) {
 
 func D2SAdminUnbindRequests(c *gin.Context) {
 	var rows []model.D2SManualUnbindRequest
+	status := strings.TrimSpace(c.Query("status"))
 	query := model.DB.Order("created_at DESC").Limit(500)
-	if status := strings.TrimSpace(c.Query("status")); status != "" {
+	if status != "" {
 		query = query.Where("status = ?", status)
 	}
 	if err := query.Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_UNBIND_REQUESTS", "d2s_manual_unbind_requests", "query_failed", http.StatusInternalServerError, "UNBIND_QUERY_FAILED")
+		return
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_UNBIND_REQUESTS", "d2s_manual_unbind_requests", "SUCCESS", map[string]any{
+		"status": status, "limit": 500, "count": len(rows),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"requests": rows})
@@ -552,11 +614,25 @@ func D2SAdminUnbindRequests(c *gin.Context) {
 func D2SAdminUnbindReview(c *gin.Context) {
 	var request d2sAdminReviewRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
-		d2sInvalidInput(c, "status is required")
+		respondD2SAdminAuditedFailure(c, "REVIEW_MANUAL_UNBIND", "d2s_manual_unbind_requests:"+c.Param("id"), "invalid_request", http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	row, err := model.ReviewD2SManualUnbind(c.GetInt("id"), c.Param("id"), request.Status, request.Note, time.Now().Unix())
+	request.Status = strings.ToLower(strings.TrimSpace(request.Status))
+	audit, err := d2SAdminAuditEntry(c, "REVIEW_MANUAL_UNBIND", "d2s_manual_unbind_requests:"+c.Param("id"), "SUCCESS", map[string]any{
+		"status": request.Status, "note_provided": strings.TrimSpace(request.Note) != "",
+	})
 	if err != nil {
+		respondD2SAdminAuditedFailure(c, "REVIEW_MANUAL_UNBIND", "d2s_manual_unbind_requests:"+c.Param("id"), "audit_serialize_failed", http.StatusInternalServerError, "AUDIT_WRITE_FAILED")
+		return
+	}
+	row, err := model.ReviewD2SManualUnbindWithAudit(c.GetInt("d2s_admin_id"), c.Param("id"), request.Status, request.Note, time.Now().UTC().Unix(), audit)
+	if err != nil {
+		if auditErr := writeD2SAdminAudit(c, "REVIEW_MANUAL_UNBIND", "d2s_manual_unbind_requests:"+c.Param("id"), "FAILURE", map[string]any{
+			"status": request.Status, "reason": "review_failed",
+		}); auditErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+			return
+		}
 		d2sError(c, err)
 		return
 	}
@@ -570,16 +646,28 @@ type d2sAdminRegionRequest struct {
 func D2SAdminSetRegion(c *gin.Context) {
 	userID, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		d2sInvalidInput(c, "invalid user id")
+		respondD2SAdminAuditedFailure(c, "SET_USER_REGION", c.Param("id"), "invalid_user_id", http.StatusBadRequest, "INVALID_USER_ID")
 		return
 	}
 	var request d2sAdminRegionRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
-		d2sInvalidInput(c, "region is required")
+		respondD2SAdminAuditedFailure(c, "SET_USER_REGION", strconv.Itoa(userID), "invalid_request", http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	profile, err := model.SetD2SUserRegion(c.GetInt("id"), userID, request.Region, time.Now().Unix())
+	request.Region = strings.ToUpper(strings.TrimSpace(request.Region))
+	audit, err := d2SAdminAuditEntry(c, "SET_USER_REGION", strconv.Itoa(userID), "SUCCESS", map[string]any{"region": request.Region})
 	if err != nil {
+		respondD2SAdminAuditedFailure(c, "SET_USER_REGION", strconv.Itoa(userID), "audit_serialize_failed", http.StatusInternalServerError, "AUDIT_WRITE_FAILED")
+		return
+	}
+	profile, err := model.SetD2SUserRegionWithAudit(c.GetInt("d2s_admin_id"), userID, request.Region, time.Now().UTC().Unix(), audit)
+	if err != nil {
+		if auditErr := writeD2SAdminAudit(c, "SET_USER_REGION", strconv.Itoa(userID), "FAILURE", map[string]any{
+			"region": request.Region, "reason": "update_failed",
+		}); auditErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+			return
+		}
 		d2sError(c, err)
 		return
 	}

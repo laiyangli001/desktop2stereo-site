@@ -65,3 +65,26 @@ func TestD2SDownloadActionLogOmitsProxyPort(t *testing.T) {
 	require.Nil(t, entry.SourcePort)
 	require.Equal(t, "203.0.113.20", entry.SourceIP)
 }
+
+func TestD2SAnonymousDownloadClickRecordsNetworkWithoutAccount(t *testing.T) {
+	db := setupD2SDownloadActionLogTestDB(t)
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Params = gin.Params{{Key: "target", Value: "release"}}
+	context.Request = httptest.NewRequest(http.MethodPost, "/api/v1/downloads/release/track", nil)
+	context.Request.RemoteAddr = "203.0.113.40:43124"
+	context.Request.Header.Set("User-Agent", "anonymous-download-test")
+
+	D2STrackDownload(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), `"logged":true`)
+	var entry model.D2SUserActionLog
+	require.NoError(t, db.Where("action_type = ?", model.D2SActionDownload).First(&entry).Error)
+	require.Nil(t, entry.UserID)
+	require.Empty(t, entry.Email)
+	require.Equal(t, "203.0.113.40", entry.SourceIP)
+	require.Equal(t, "anonymous-download-test", entry.UserAgent)
+	require.Equal(t, model.D2SActionResultSuccess, entry.ResultStatus)
+}

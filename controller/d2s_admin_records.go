@@ -86,23 +86,27 @@ func D2SAdminPurchaseRecords(c *gin.Context) {
 	if end > 0 {
 		query = query.Where("purchase_time <= ?", end)
 	}
+	var parsedUserID *int
 	if raw := strings.TrimSpace(c.Query("user_id")); raw != "" {
 		userID, parseErr := strconv.Atoi(raw)
 		if parseErr != nil || userID <= 0 {
 			respondD2SAdminAuditedFailure(c, "VIEW_PURCHASE", "d2s_orders", "invalid_user_id", http.StatusBadRequest, "INVALID_USER_ID")
 			return
 		}
+		parsedUserID = &userID
 		query = query.Where("user_id = ?", userID)
 	}
-	if email := model.NormalizeEmail(c.Query("email")); email != "" {
-		query = query.Where("email_snapshot = ?", email)
+	emailFilter := model.NormalizeEmail(c.Query("email"))
+	if emailFilter != "" {
+		query = query.Where("email_snapshot = ?", emailFilter)
 	}
-	if status := strings.ToUpper(strings.TrimSpace(c.Query("result_status"))); status != "" {
-		if status != "SUCCESS" && status != "FAILURE" && status != "BLOCKED" {
+	statusFilter := strings.ToUpper(strings.TrimSpace(c.Query("result_status")))
+	if statusFilter != "" {
+		if statusFilter != "SUCCESS" && statusFilter != "FAILURE" && statusFilter != "BLOCKED" {
 			respondD2SAdminAuditedFailure(c, "VIEW_PURCHASE", "d2s_orders", "invalid_result_status", http.StatusBadRequest, "INVALID_RESULT_STATUS")
 			return
 		}
-		query = query.Where("result_status = ?", status)
+		query = query.Where("result_status = ?", statusFilter)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -115,7 +119,7 @@ func D2SAdminPurchaseRecords(c *gin.Context) {
 		return
 	}
 	if err := writeD2SAdminAudit(c, "VIEW_PURCHASE", "d2s_orders", "SUCCESS", map[string]any{
-		"start_time": start, "end_time": end, "email": c.Query("email"), "result_status": c.Query("result_status"),
+		"start_time": start, "end_time": end, "user_id": parsedUserID, "email": emailFilter, "result_status": statusFilter,
 		"page": page, "page_size": pageSize, "total": total,
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})

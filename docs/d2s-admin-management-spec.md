@@ -1,6 +1,6 @@
 # Desktop2Stereo 后台账户审计与治理规格
 
-版本：1.5
+版本：1.6
 
 状态：接口与实现规格；独立管理员后端和 `/d2s-admin-console` 管理页面已落地，前端 `tsgo -b` 与 Rsbuild 生产构建已通过；MySQL 8.4.9/PostgreSQL 15.14 隔离库权限脚本执行通过，应用账号 INSERT/SELECT 成功，UPDATE/DELETE/TRUNCATE 被拒绝；PostgreSQL 单列 UPDATE 注入后由权限脚本撤销，清理权限范围也经断言。2026-11-02 又在隔离 MySQL 8.4.13/PostgreSQL 17.11 上通过最新工作树完整 `go test -p 1 ./... -count=1`、重复 `AutoMigrate`、工单数据库矩阵及关键并发矩阵。另以最近已发布版本 `26f524d11424a2866a8608a4883a63dd1f7fe16d` 构建两种数据库的代表性旧 schema，并完成旧版迁移、审计独立迁移和当前 `model.InitDB()` 的重复升级；用户、授权和订单数据保留，订单购买时间回填、审计/工单新表、订单快照列和关键唯一索引均通过检查。该夹具不是生产数据备份。对账专用机器令牌和每次对账审计已在本地实现并通过 Go 测试，尚未部署生产；生产部署仓库与本地基线不同且工作区有既有改动，因此定时器保持禁用。生产权限和端到端验收仍待完成，具体状态以 `docs/01-cross-platform-licensing-server-implementation-plan.md` 为准。
 
@@ -8,7 +8,9 @@
 
 2026-11-03 增加 CSV 导出双人审批与离线管理员开通命令。全量 Go 测试、审批/导出专项回归、`go vet`、`go build`、前端 Vitest 76 文件/476 项、`tsgo -b` 和 Rsbuild 构建通过。审批前端拒绝同邮箱管理员执行自批操作，服务端仍按管理员 ID 校验；精确筛选范围、30 分钟期限、一次性消费和审批 ID 审计关联已覆盖。本轮没有配置 MySQL/PostgreSQL DSN，也未执行生产数据库或生产账号验收。
 
-本规格面向程序介绍、在线购买、下载、账户登录和授权管理；网站不提供用户公开内容发布、评论、即时通讯或群组功能，账户以邮箱识别并面向全球用户。负责人报告运营主体所在地为山东烟台、只销售自有 Desktop2Stereo 软件、不接受第三方或用户上架；“软件开发”是公司工商经营范围，ICP 备案服务类别目前不清楚；网站不托管安装包，只跳转至 GitHub、夸克网盘或百度网盘等外部下载地址。上述为负责人提供的信息，主体登记、备案材料和线上配置尚未独立核验。邮箱验证码仅证明邮箱控制权，不证明真实身份。当前无证件核验页面或 API 路由，不收集证件信息，也不宣称已实名。除《网络安全法》第二十六条及《互联网用户账号信息管理规定》第九条对特定服务功能的实名要求外，现行《反电信网络诈骗法》第二十一条第（四）项还列明“信息、软件发布服务”及“网络交易”服务。结合本站在线销售、支付和软件下载，实名义务是否适用于本站及适用用户范围尚待主管部门或合格法律顾问结合运营主体、实际许可/备案、销售/分发模式书面确认；外部托管下载本身不能排除在线交易相关规定的适用，无 UGC、无即时通讯和仅邮箱注册均不能单独构成豁免依据。确认前不得宣称邮箱验证满足实名义务，也不得无明确依据擅自采集证件。若确认需要实名，应先确定境外用户可用的合规核验方式、处理依据、最少字段、告知、安全和留存要求，再实施服务端核验门禁。详细条文和官方来源见 `SEC-001-网站安全管理制度.md`。
+2026-11-03 补齐高权限财务/授权后台的审计缺口：订单、支付事件、余额、提现、授权、解绑申请和签名公钥的查看记录筛选条件与结果条数；审计写入失败时敏感列表接口不返回数据；提现审核、人工解绑审核、用户区域修改和签名密钥退役将成功审计与业务变更放入同一事务，失败尝试单独追加失败审计。SQLite controller/model 回归通过；当前环境未配置 MySQL/PostgreSQL 测试 DSN，也未运行数据库实例，跨数据库矩阵和生产验收未验证。2026-11-03 又将提现及人工解绑列表的审计失败响应统一为 `AUDIT_WRITE_FAILED`，新增 fail-closed 回归通过固定路径 controller 测试套件；Waffo 掩码卡标识的 HMAC 类型也已补齐并由 Waffo 专项回归覆盖。`go vet -p 1 ./controller ./model ./service`、`go build -p 1 ./controller ./model ./service` 在对应实现提交前通过；本次小改动后需重跑静态检查。
+
+本规格面向程序介绍、在线购买、下载、账户登录和授权管理；网站不提供用户公开内容发布、评论、即时通讯或群组功能，账户以邮箱识别并面向全球用户。负责人报告运营主体所在地为山东烟台、只销售自有 Desktop2Stereo 软件、不接受第三方或用户上架；“软件开发”是公司工商经营范围，ICP 备案服务类别目前不清楚；网站不托管安装包，只跳转至 GitHub、夸克网盘或百度网盘等外部下载地址。上述为负责人提供的信息，主体登记、备案材料和线上配置尚未独立核验。邮箱验证码仅证明邮箱控制权，不证明真实身份。当前无证件核验页面或 API 路由，不收集证件信息，也不宣称已实名。除《网络安全法》第二十六条及《互联网用户账号信息管理规定》第九条对特定服务功能的实名要求外，现行《反电信网络诈骗法》第二十一条第（四）项还列明“信息、软件发布服务”及“网络交易”服务。结合本站在线销售、支付和软件下载，实名义务是否适用于本站及适用用户范围尚待主管部门或合格法律顾问结合运营主体、实际许可/备案、销售/分发模式书面确认；外部托管下载本身不能排除在线交易相关规定的适用，无 UGC、无即时通讯和仅邮箱注册均不能单独构成豁免依据。确认前不得宣称邮箱验证满足实名义务，也不得无明确依据擅自采集证件。若确认需要实名，应先确定境外用户可用的合规核验方式、处理依据、最少字段、告知、安全和留存要求，再实施服务端核验门禁。当前提现模型还保存用户提交的支付宝账号和真实姓名，且字段为明文；这属于提现资料，不等同证件核验，隐私政策及生产必要性/保护评估应如实涵盖。详细条文和官方来源见 `SEC-001-网站安全管理制度.md`。
 
 ## 1. 数据模型
 
@@ -47,9 +49,11 @@
 
 字段：`id`、`operator_id`、`operator_email`、`operation_type`、`operation_time`、`target_resource`、`source_ip`、`result`、`details_json`。至少记录管理员登录、查看个人行为日志、两类导出、修改用户、账户紧急开关、批量操作、清理和权限变更。操作失败和拒绝也必须记录；`details_json` 仅保存必要参数、时间范围、影响数量和失败码，不存密码、验证码或支付凭据。
 
+高权限财务和授权接口另记录 `VIEW_ADMIN_ORDERS`、`VIEW_PAYMENT_EVENTS`、`VIEW_BALANCES`、`VIEW_WITHDRAWALS`、`VIEW_LICENSES`、`VIEW_UNBIND_REQUESTS`、`VIEW_SIGNING_KEYS`、`REVIEW_WITHDRAWAL`、`REVIEW_MANUAL_UNBIND`、`SET_USER_REGION` 和 `RETIRE_SIGNING_KEY`。成功审核/变更和成功审计须原子提交；业务失败需追加 `FAILURE`，不记录审核备注原文或支付账户资料。
+
 ### 1.4 购买留痕
 
-复用并扩展 `d2s_orders`，不得产生第二套可与支付账本分叉的订单来源。补充订单时邮箱快照、购买/完成时间、来源 IP 和支付账户标识哈希。既有字段映射：`order_id=id`、`product_id=product`、`amount=amount_minor`、`currency=currency`、`payment_method=provider`、`result_status=status`。支付标识只存脱敏显示值或带密钥的摘要；不保存完整银行卡号、PayPal 邮箱或其他支付凭据。
+复用并扩展 `d2s_orders`，不得产生第二套可与支付账本分叉的订单来源。补充订单时邮箱快照、购买/完成时间、来源 IP 和支付账户标识哈希。既有字段映射：`order_id=id`、`product_id=product`、`amount=amount_minor`、`currency=currency`、`payment_method=provider`、`result_status=status`。支付标识只存脱敏显示值或带密钥的摘要；不保存完整银行卡号、PayPal 邮箱或其他支付凭据。Waffo 的已验签支付通知若包含 `paymentInfo.payMethodResponse.maskCardData`，仅保存其 HMAC 摘要；该字段缺失或不能解析时留空。不得把本站传入 Waffo 的账户邮箱误记为付款方独立标识。字段依据 [Waffo Go SDK v1.3.2 webhook payload 示例](https://github.com/waffo-com/waffo-go/blob/v1.3.2/README.md)。
 
 ### 1.5 身份信息边界与账户控制
 
@@ -118,11 +122,22 @@
 
 两类导出均须先完成双人审批。审批哈希绑定导出类型及规范化后的全部筛选条件，下载时重新计算并精确比较；过滤范围变化、申请过期、未批准、已消费或申请人与下载人不一致时拒绝导出。审批在下载前以事务原子消费，消费审计先落库；导出 `STARTED` 记录包含审批 ID，以便将申请、决定、消费和导出终态审计串联。前端只在审批状态为 `APPROVED` 时显示下载操作，服务端仍独立强制校验。
 
-| `GET /api/v1/admin/purchases` | `account_operator` 或更高 | 分页查询购买记录；支付标识仅显示脱敏值/摘要 |
+| `GET /api/v1/admin/purchases` | `account_operator` 或更高 | 分页查询购买记录；成功审计记录时间范围、user_id、规范化邮箱/状态、分页参数和总数，失败审计记录失败类别；支付标识仅显示脱敏值/摘要 |
+| `GET /api/v1/admin/licenses` | `super_admin` | 查询授权及账户区域；记录筛选条件和返回数量 |
+| `GET /api/v1/admin/orders` | `super_admin` | 查询订单；记录状态/用户筛选条件和返回数量 |
+| `GET /api/v1/admin/payment-events` | `super_admin` | 查询渠道支付事件；记录渠道/订单/事件筛选条件和返回数量 |
+| `GET /api/v1/admin/balances` | `super_admin` | 查询账户余额；记录用户过滤、是否仅负余额及返回数量 |
+| `GET /api/v1/admin/withdrawals` | `super_admin` | 查看提现申请及收款资料；记录状态过滤与返回数量 |
+| `PUT /api/v1/admin/withdrawals/:id` | `super_admin` | 审核提现；余额释放/结算、申请状态和成功审计同事务提交；失败单独审计 |
+| `GET /api/v1/admin/unbind-requests` | `super_admin` | 查看人工解绑申请；记录状态过滤与返回数量 |
+| `PUT /api/v1/admin/unbind-requests/:id` | `super_admin` | 审核人工解绑；申请、授权变更和成功审计同事务提交；失败单独审计 |
+| `PUT /api/v1/admin/users/:id/region` | `super_admin` | 修改账户区域；区域变更和成功审计同事务提交；失败单独审计 |
+| `GET /api/v1/admin/signing-keys` | `super_admin` | 查看签名公钥状态；记录返回数量 |
+| `PUT /api/v1/admin/signing-keys/:id` | `super_admin` | 退役非当前签名密钥；密钥状态和成功审计同事务提交；失败单独审计 |
 | `GET /api/v1/admin/support/tickets` | `account_operator` 或更高 | 按状态筛选并分页查看投诉与服务咨询；访问写入管理员审计 |
 | `PUT /api/v1/admin/support/tickets/:id` | `account_operator` 或更高 | 更新处理状态及内部回复；状态变更和管理员审计在同一数据库事务提交 |
 | `PUT /api/v1/admin/users/:id/emergency` | `account_operator` 或更高 | 设置 `login_blocked`、`purchase_blocked`、`force_logout`；强制下线先记 `STARTED`，完成所有会话撤销、认证版本提升及在线租约释放后追加 `SUCCESS`，失败追加阶段性 `FAILURE` |
-| `POST /api/v1/admin/users/batch/preview` | `account_operator` 或更高 | 按注册 IP CIDR、邮箱域名、注册时间窗口筛选，返回命中数及短时有效预览 ID |
+| `POST /api/v1/admin/users/batch/preview` | `account_operator` 或更高 | 邮箱域名和注册时间窗口按当前用户邮箱/创建时间筛选，涵盖没有历史注册快照的账号；IP CIDR 按不可变注册快照中的注册 IP 筛选，并只命中未软删除账户。缺少注册快照时不推断 IP。返回命中数及短时有效预览 ID |
 | `POST /api/v1/admin/users/batch/apply` | `account_operator` 或更高 | 要求预览 ID、明确二次确认和操作项；服务端重算影响集并审计筛选参数、数量和结果 |
 | `POST /api/v1/admin/audit/retention/execute` | `super_admin` | 仅可调用受控清理；请求保留期小于 366 天时拒绝；用户行为日志、注册快照和管理员操作审计均按至少 366 天清理下限执行；清理审计逐表记录截止时间、范围和数量；事务失败后追加 `FAILURE` 记录；两类审计都无法写入时返回 `AUDIT_WRITE_FAILED` |
 | `GET /api/v1/admin/reconciliation` | `super_admin` 后台会话，或专用机器令牌 | 汇总指定 UTC 时间窗内支付与订单差异，不修改账本；每次成功或失败均追加 `RUN_RECONCILIATION` 审计，记录时间窗、结果及差异数 |
@@ -133,7 +148,7 @@
 
 机器令牌只用于 `GET /api/v1/admin/reconciliation`，从 `D2S_RECONCILIATION_TOKEN` 读取 32 字节随机值的 64 位十六进制编码，并以恒定时间比较。令牌需分别安全注入应用和 root-only systemd 环境文件；其它后台 API 仍只接受管理员 HttpOnly 会话。未配置或格式错误时对账接口返回服务不可用，令牌不能复用管理员密码。`pending_expired` 统计所有在报告截止时间前已到期、仍处于 pending 的订单，不受创建时间窗口限制；该差异会在订单进入终态前持续出现在报告中。订单与支付事件从同一只读事务快照读取，MySQL/PostgreSQL 显式请求 `REPEATABLE READ`；对账接口不自动更改订单状态。
 
-用户下载跟踪接口为 `POST /api/v1/downloads/:target/track`，需要前台登录会话；`target` 仅接受 `release`、`quark`、`baidu`。服务端检查邮箱验证及登录限制，成功追加 `DOWNLOAD/SUCCESS` 后返回 `logged: true`。该记录表示链接点击，不代表外部文件传输完成；匿名公开直链不经过该接口。
+用户下载跟踪接口为 `POST /api/v1/downloads/:target/track`，允许访客和登录用户调用；`target` 仅接受 `release`、`quark`、`baidu`。已登录账号须通过邮箱验证且未被禁止登录，成功后追加关联账户的 `DOWNLOAD/SUCCESS`。访客成功点击则追加 `user_id` 和 `email` 为空、带来源网络信息的 `DOWNLOAD/SUCCESS`；无效凭据、受限账号或日志写入失败不得跳转。该记录表示链接点击，不代表外部文件传输完成。
 
 导出审计必须写入 `EXPORT_LOG`，记录过滤器摘要、行数、文件名、开始/结束时间和结果。日志查看写 `VIEW_USER_LOG` 审计。CSV 使用标准 quoting；导出时对以 `=`、`+`、`-`、`@` 开头的用户可控字段添加单引号防公式注入，数据库原值保持不变。
 
@@ -143,9 +158,9 @@
 
 - 行为事件在服务端关键处理点写入；不得依赖浏览器提供的结果状态。
 - 下单时快照 `user_id`、`email`、UTC 时间、商品、分币金额、币种、支付渠道、来源 IP 和结果状态。Stripe、Creem、Waffo Pancake Checkout 使用订单邮箱快照，避免账户邮箱变更造成同一订单幂等重试参数变化；Creem 的用户标识元数据使用稳定 user ID。未知的服务目标/来源端口及设备摘要列保留并置空。
-- 支付渠道回调只更新订单业务状态，不得修改已完成事件日志。Stripe 和 Creem 的已验签支付成功回调优先取 `customer` ID，缺失时取客户邮箱；Waffo Pancake 的已验签 `order.completed` 回调取 `buyerEmail`。邮箱统一转小写。只将 `d2s-payment-account-v1` 域分离及 `common.SessionSecret` 派生密钥生成的 HMAC-SHA-256 摘要写入订单，不保存原始标识；缺失时为 NULL。模型仅允许 Stripe、Creem 和 Waffo Pancake 接受该摘要；其余渠道在稳定付款方标识契约确认前留空。Creem 字段见 [Webhook 文档](https://docs.creem.io/skills/creem-api/WEBHOOKS)，Waffo Pancake 字段见 [Go SDK API](https://pkg.go.dev/github.com/waffo-com/waffo-pancake-sdk-go)。
+- 支付渠道回调只更新订单业务状态，不得修改已完成事件日志。Stripe 和 Creem 的已验签支付成功回调优先取 `customer` ID，缺失时取客户邮箱；Waffo Pancake 的已验签 `order.completed` 回调取 `buyerEmail`。Waffo 的已验签 `PAYMENT_NOTIFICATION` 若含 `paymentInfo.payMethodResponse.maskCardData`，仅保存该掩码卡数据的 HMAC 摘要；Waffo `userInfo.userEmail` 是本站下单时传入的账户邮箱，不作为独立付款标识。邮箱标识统一转小写。只将 `d2s-payment-account-v1` 域分离及 `common.SessionSecret` 派生密钥生成的 HMAC-SHA-256 摘要写入订单，不保存原始标识；缺失时为 NULL。模型仅允许 Stripe、Creem、Waffo 和 Waffo Pancake 接受该摘要；易支付等渠道在稳定付款方标识契约确认前留空。Creem 字段见 [Webhook 文档](https://docs.creem.io/skills/creem-api/WEBHOOKS)，Waffo Pancake 字段见 [Go SDK API](https://pkg.go.dev/github.com/waffo-com/waffo-pancake-sdk-go)，Waffo 字段见 [Go SDK v1.3.2 webhook payload 示例](https://github.com/waffo-com/waffo-go/blob/v1.3.2/README.md)。
 - 登录限制由登录、刷新/会话、设备授权及适用的 OAuth/Passkey 入口统一执行；购买限制在报价/建单、Checkout、支付完成权益发放等服务端入口统一执行。不得只在 React 页面隐藏按钮。
-- 登录态首页的 GitHub Release、夸克和百度网盘入口先调用服务端白名单跟踪接口；服务端检查账户登录限制及邮箱验证，成功追加 `DOWNLOAD/SUCCESS` 后客户端才跳转。该事件表示链接点击已记录，不表示外部文件传输完成。匿名访问继续使用公开直链，无法关联账户；当前浏览器/服务端契约未提供设备指纹，因此设备摘要留空，端口和目标地址等不可取得字段留空。
+- 首页的 GitHub Release、夸克和百度网盘入口对访客及登录用户都先调用服务端白名单跟踪接口，成功写入日志后客户端才跳转。已验证账户的事件关联 user ID 和邮箱；访客事件保留来源 IP、User-Agent 等可用网络信息但不关联账户。该事件只证明链接点击已记录，不代表外部文件传输完成；当前浏览器/服务端契约未提供设备指纹，因此设备摘要留空，端口和目标地址等不可取得字段留空。
 
 ## 7. 实现验收门槛
 

@@ -186,6 +186,22 @@ try {
     }
     Write-Host "PASS rejected empty privacy policy"
 
+    foreach ($placeholderPolicy in @(
+        "Privacy policy draft: 【待填写】运营主体名称",
+        "Privacy policy draft: contact details TODO"
+    )) {
+        $placeholderRejected = $false
+        try {
+            Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true $placeholderPolicy
+        } catch {
+            $placeholderRejected = $_.Exception.Message -like "*contains unresolved placeholder text*"
+        }
+        if (-not $placeholderRejected) {
+            throw "Production readiness accepted privacy policy placeholder content: $placeholderPolicy"
+        }
+    }
+    Write-Host "PASS rejected privacy policy placeholder text"
+
     foreach ($case in @(
         @{ Name = "unapproved host"; Url = "https://support.example/ca/contact"; Available = $true },
         @{ Name = "wrong path"; Url = "https://work.weixin.qq.com/contact"; Available = $true },

@@ -76,6 +76,28 @@ func collectD2SBatchUserIDs(selector d2SBatchSelector, ipNet *net.IPNet) ([]int,
 }
 
 func collectD2SBatchUserIDsFromQuery(query *gorm.DB, selector d2SBatchSelector, ipNet *net.IPNet) ([]int, error) {
+	baseQuery := query.Session(&gorm.Session{NewDB: true})
+	if ipNet == nil {
+		userQuery := baseQuery.Model(&model.User{}).Select("id")
+		if selector.RegisterFrom > 0 {
+			userQuery = userQuery.Where("created_at >= ?", selector.RegisterFrom)
+		}
+		if selector.RegisterUntil > 0 {
+			userQuery = userQuery.Where("created_at <= ?", selector.RegisterUntil)
+		}
+		if selector.EmailDomain != "" {
+			userQuery = userQuery.Where("LOWER(email) LIKE ?", "%@"+strings.ToLower(selector.EmailDomain))
+		}
+		var userIDs []int
+		if err := userQuery.Order("created_at DESC").Order("id DESC").Limit(50001).Pluck("id", &userIDs).Error; err != nil {
+			return nil, err
+		}
+		if len(userIDs) > 50000 {
+			return nil, fmt.Errorf("selection exceeds the 50000 record safety bound")
+		}
+		return userIDs, nil
+	}
+
 	query = query.Model(&model.D2SRegistrationRecord{})
 	if selector.RegisterFrom > 0 {
 		query = query.Where("register_time >= ?", selector.RegisterFrom)
@@ -105,7 +127,14 @@ func collectD2SBatchUserIDsFromQuery(query *gorm.DB, selector d2SBatchSelector, 
 		seen[record.UserID] = struct{}{}
 		userIDs = append(userIDs, record.UserID)
 	}
-	return userIDs, nil
+	if len(userIDs) == 0 {
+		return userIDs, nil
+	}
+	var activeUserIDs []int
+	if err := baseQuery.Model(&model.User{}).Where("id IN ?", userIDs).Order("id DESC").Pluck("id", &activeUserIDs).Error; err != nil {
+		return nil, err
+	}
+	return activeUserIDs, nil
 }
 
 func sameD2SBatchUserIDs(left, right []int) bool {

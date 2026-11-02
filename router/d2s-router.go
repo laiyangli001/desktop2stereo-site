@@ -31,7 +31,7 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		v1.POST("/support/tickets", middleware.UserAuth(), middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.D2SSubmitSupportTicket)
 		v1.GET("/support/my-tickets", middleware.UserAuth(), controller.D2SUserSupportTickets)
 		downloads := v1.Group("/downloads")
-		downloads.Use(middleware.D2SUserActionLog("DOWNLOAD"), middleware.UserAuth())
+		downloads.Use(middleware.D2SUserActionLog("DOWNLOAD"), middleware.TryUserAuth())
 		{
 			downloads.POST("/:target/track", middleware.CriticalRateLimit(), controller.D2STrackDownload)
 		}

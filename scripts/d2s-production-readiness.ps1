@@ -373,10 +373,14 @@ if (-not $SkipHttp) {
     Write-Host "OK Enterprise WeChat support configuration is available"
 
     $privacyPolicy = Invoke-RestMethod -Uri "$normalizedBaseUrl/api/privacy-policy" -Method Get -TimeoutSec 20
-    if (-not $privacyPolicy.success -or [string]::IsNullOrWhiteSpace([string]$privacyPolicy.data)) {
+    $privacyPolicyText = [string]$privacyPolicy.data
+    if (-not $privacyPolicy.success -or [string]::IsNullOrWhiteSpace($privacyPolicyText)) {
         throw "Production privacy policy is not configured"
     }
-    Write-Host "OK public privacy policy is configured"
+    if ($privacyPolicyText -match '(?i)(\[\s*(fill in|to be completed|tbd|todo|placeholder)\s*\]|［\s*(填写|待填写|待补充)\s*］|【\s*(填写|待填写|待补充|待审核)\s*】|\{\{\s*[^}]+\s*\}\}|\b(TODO|TBD|PLACEHOLDER|LOREM IPSUM)\b|待填写|待补充|待审核|示例文本|请填写|此处填写|尚未配置)') {
+        throw "Production privacy policy contains unresolved placeholder text"
+    }
+    Write-Host "OK public privacy policy is configured without obvious unresolved placeholders"
 }
 
 Write-Host "Production readiness checks passed. Record the drill evidence before enabling public checkout."

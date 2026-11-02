@@ -38,13 +38,17 @@ $signingKeyId = Read-Host "请输入预期发布的签名 key_id"
 
 本地可用 `.\scripts\d2s-production-readiness-selftest.ps1` 运行无网络 mock 回归，覆盖无本地 Secret 的 HTTP-only 通过、预期 SHA 不匹配拒绝、无效 P-256 坐标拒绝、HTTP-only 参数冲突拒绝、有效企业微信链接、错误主机/路径、非默认端口和显式 `:443`、查询参数、用户信息、片段、客服 API 缺失、隐私政策已配置和空隐私政策拒绝。它不替代部署后的真实端点核验，也不审查隐私政策文本是否满足法律要求。
 
+就绪门禁还会拒绝常见隐私政策占位文本（如“待填写”、`TODO` 和 `{{...}}`），但不能
+验证政策内容是否真实、完整或符合法律要求；运营方仍须审核后再配置生产内容。
+
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty
 `TRUSTED_PROXIES` configuration before the HTTP checks are considered sufficient.
 HTTP readiness also requires `/api/v1/support/config` to return a valid HTTPS
 Enterprise WeChat contact URL on `work.weixin.qq.com/ca/`, and `/api/privacy-policy`
-to return non-empty public privacy-policy content. The script checks presence, not
-legal adequacy; the operator must configure and review the policy text, including
+to return non-empty public privacy-policy content without common unresolved
+template placeholders. The script does not verify factual accuracy or legal adequacy;
+the operator must configure and review the policy text, including
 support-ticket data categories, purposes, access, and retention. These checks do not
 replace authenticated ticket submission, account-isolation, or administrator workflow
 acceptance.

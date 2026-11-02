@@ -8,6 +8,15 @@
 
 若 360 报警的是正式客户端或服务端安装包，应以实际被拦截文件的名称和 SHA-256 为准，不能用 `controller.test.exe` 的结果代替正式产物检测。
 
+### 当前待核样本（2026-11-03）
+
+- 测试包：`github.com/QuantumNous/new-api/pkg/billingexpr`。
+- 固定路径：`E:\AI_2D_to_3D\4.LC700X_Desktop2Stereo\.go-test-binaries\github_com_quantumnous_new_api_pkg_billingexpr.test.exe`。
+- 编译成功后、启动前文件存在；当时 SHA-256 为 `BD8F25A8C9E6A04467F38279287A7E625BCA6BC4FB0A0B2989D49D5A2ED0630C`。调用该测试程序时 Windows 报“系统找不到指定的文件”，调用后原路径文件不存在。
+- 检查时发现 `360Safe` 和 `360tray` 进程运行；Windows Defender 最近事件中没有该文件的匹配记录。现有证据强烈指向 360 在启动时隔离或移除，但尚无 360 检测名称、隔离记录或截图，不能当作厂商已确认的误报结论。
+- 当前 SHA 来自本地未提交工作树下的 Go 测试二进制，代码基线 HEAD 为 `e5bc8b12914be139bc47e2685e1a4ef96fda7543`。它不是 Windows 用户发布产物。若向 360 申诉，应提交同一 SHA 的原始样本和 360 报警详情；不得通过关闭保护或设置通用排除项来替代厂商复核。
+- `scripts/d2s-fixed-go-test.ps1` 现会在启动测试程序前打印其 SHA-256，并检查构建后、启动期间及运行后的文件是否消失；发现消失时报告包名、路径和启动前哈希，并停止，不自动重试或调整安全软件设置。
+
 ## 向 360 提交误报样本
 
 1. 记录 360 产品名称和版本、病毒库更新时间、完整检测名称、报警截图、文件来源 URL、项目版本或 Git commit。

@@ -346,6 +346,10 @@ func D2SPublicSigningKeys() ([]D2SPublicJWK, error) {
 }
 
 func RetireD2SSigningKey(keyID string, now int64) error {
+	return RetireD2SSigningKeyWithAudit(keyID, now, nil)
+}
+
+func RetireD2SSigningKeyWithAudit(keyID string, now int64, audit *model.D2SAdminOperationAudit) error {
 	keyID = strings.TrimSpace(keyID)
 	if keyID == "" {
 		return model.ErrD2SOrderInvalid
@@ -356,16 +360,22 @@ func RetireD2SSigningKey(keyID string, now int64) error {
 	if now <= 0 {
 		now = time.Now().Unix()
 	}
-	result := model.DB.Model(&model.D2SSigningKey{}).
-		Where("key_id = ? AND status <> ?", keyID, "retired").
-		Updates(map[string]any{"status": "retired", "retired_at": now})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrD2SSigningKeyNotFound
-	}
-	return nil
+	return model.DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.D2SSigningKey{}).
+			Where("key_id = ? AND status <> ?", keyID, "retired").
+			Updates(map[string]any{"status": "retired", "retired_at": now})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return ErrD2SSigningKeyNotFound
+		}
+		if audit != nil {
+			audit.OperationTime = now
+			return model.RecordD2SAdminOperationAuditTx(tx, audit)
+		}
+		return nil
+	})
 }
 
 func IssueD2SOfflineEntitlement(userID int, licenseID, deviceHash, devicePublicKey string, requestedDays int, now int64) (string, *D2SOfflineClaims, error) {
