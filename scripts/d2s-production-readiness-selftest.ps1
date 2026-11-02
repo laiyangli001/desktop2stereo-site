@@ -224,6 +224,8 @@ try {
 
     Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
         "请参阅 [个人信息保护法](https://example.org/privacy) 相关说明。"
+    Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
+        "订单处于[待付款]状态时，用户仍可查询订单状态。"
     Write-Host "PASS accepted a bracketed legal reference without placeholders"
 
     foreach ($case in @(
