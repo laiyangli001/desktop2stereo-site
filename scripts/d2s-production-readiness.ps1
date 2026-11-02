@@ -377,7 +377,8 @@ if (-not $SkipHttp) {
     if (-not $privacyPolicy.success -or [string]::IsNullOrWhiteSpace($privacyPolicyText)) {
         throw "Production privacy policy is not configured"
     }
-    if ($privacyPolicyText -match '(?i)(\[\s*(fill in|to be completed|tbd|todo|placeholder)\s*\]|［\s*(填写|待填写|待补充)\s*］|【\s*(填写|待填写|待补充|待审核)\s*】|\{\{\s*[^}]+\s*\}\}|\b(TODO|TBD|PLACEHOLDER|LOREM IPSUM)\b|待填写|待补充|待审核|示例文本|请填写|此处填写|尚未配置)') {
+    $privacyPlaceholderPattern = '(?i)(\[[^\]]*(?:fill in|to be completed|tbd|todo|placeholder|填写|待|负责人|核实|运营主体完整名称|隐私联系|营业执照|注册地址|姓名或岗位|须依据)[^\]]*\]|［[^］]*(?:填写|待|负责人|核实|运营主体完整名称|隐私联系|营业执照|注册地址|姓名或岗位|须依据)[^］]*］|【[^】]*(?:填写|待|负责人|核实|运营主体完整名称|隐私联系|营业执照|注册地址|姓名或岗位|须依据)[^】]*】|\{\{\s*[^}]+\s*\}\}|\b(TODO|TBD|PLACEHOLDER|LOREM IPSUM)\b|待填写|待补充|待审核|待确定|示例文本|请填写|此处填写|尚未配置)'
+    if ($privacyPolicyText -match $privacyPlaceholderPattern) {
         throw "Production privacy policy contains unresolved placeholder text"
     }
     Write-Host "OK public privacy policy is configured without obvious unresolved placeholders"

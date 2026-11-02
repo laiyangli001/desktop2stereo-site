@@ -287,6 +287,8 @@ GORM 维护以下表：
 
 状态：`in_progress`。
 
+- 2026-11-03 以隐私政策内部草稿中的真实方括号占位内容检查 readiness 门禁，发现它只识别部分固定词组，可能放过 `[填写...]`、`[待确定]`、`[负责人核实...]` 等草稿标记。已扩展检查和 mock 回归覆盖这些形式，直接加载仓库的内部草稿并确认拒绝，同时验证正常 Markdown 法规链接不会误拒；`scripts/d2s-production-readiness-selftest.ps1` 和 PowerShell AST 检查通过。此门禁仅拦截明显占位符，不判断政策事实准确性或法律充分性，生产政策仍需负责人核实并审核。
+
 - 2026-11-02 无凭据只读 GET 复核：`/api/status` 返回 200，运行版本为 `26f524d11424a2866a8608a4883a63dd1f7fe16d`；新增投诉配置 API `/api/v1/support/config` 返回 404；`/support` 返回 200 HTML，但属于 SPA 回退响应，不能证明工单页面/API 已部署。由此确认本地投诉与企业微信入口代码尚未上线。本次未执行生产写操作。
 
 - 2026-11-02 当前工作树全仓交叉构建 `GOOS=linux GOARCH=amd64 go build -p 1 ./...` 与 `GOOS=darwin GOARCH=arm64 go build -p 1 ./...` 均通过。Docker 更新器增加运行版本 SHA 门禁：Docker healthy 后要求 `/api/status` 的成功响应 `data.version` 与目标 SHA 完全相同；状态读取失败、JSON 无效或 SHA 不符会回滚并记录失败，且已有 `.update-complete` 标记必须与当前运行 SHA 复核。Git Bash 隔离回归覆盖精确 SHA 成功、匹配标记快速返回、旧标记错配、运行版本错配回滚及状态接口不可用回滚，全部通过；Shell 语法检查通过。因当前 Windows 环境没有可用 Python 3，隔离回归用 Node 替身模拟更新器现有 Python JSON I/O，尚需在生产等价 Linux/Python 环境复跑；未部署生产。
