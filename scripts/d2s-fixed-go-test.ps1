@@ -15,9 +15,14 @@ $env:GOTMPDIR = $goTemp
 
 Push-Location $repoRoot
 try {
-    $testPackages = & go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' @Package
+    $listedPackages = & go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' @Package
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to inspect Go packages for test files (exit code $LASTEXITCODE)."
+    }
+
+    $testPackages = @($listedPackages | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($testPackages.Count -eq 0) {
+        Write-Host 'No Go test files found in the requested packages; skipping test execution.'
     }
 
     foreach ($packagePath in $testPackages) {
