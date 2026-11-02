@@ -135,6 +135,8 @@ jobs:
       GOTMPDIR: ${{ github.workspace }}/.ci-fixed/go-tmp
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - name: Test Docker updater migration gate and SHA rollback
+        run: bash deploy/test-desktop2stereo-docker-update.sh
       - name: Prepare fixed Go test directories
         run: mkdir -p "$GOCACHE" "$GOTMPDIR"
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
@@ -211,6 +213,10 @@ jobs:
           $env:REDIS_CONN_STRING = 'ci-placeholder'
           $env:SESSION_SECRET = 's' * 32
           $env:D2S_LICENSE_KEY_ID = 'ci-key'
+          $env:D2S_APP_SQL_DSN = 'postgres://d2s-app:placeholder@localhost:5432/d2s'
+          $env:D2S_AUDIT_MIGRATION_DIALECT = 'postgres'
+          $env:D2S_AUDIT_MIGRATION_DSN = 'postgres://d2s-migrator:placeholder@localhost:5432/d2s'
+          $env:D2S_AUDIT_CLEANUP_DSN = 'postgres://audit-cleanup:placeholder@localhost:5432/d2s'
           $bridgeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET'
           Set-Item "Env:$bridgeSecretName" ('p' * 32)
           $stripeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET_' + 'STRIPE'
@@ -454,6 +460,15 @@ jobs:
           exit 1
       - name: Run real database migration and concurrency matrix
         run: go test ./model -run '^TestD2S(SchemaConfiguredDatabases|ConcurrentCriticalPaths)$' -count=1 -v
+      - name: Verify PostgreSQL production role isolation
+        shell: bash
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: d2s
+          PGPASSWORD: d2s_test
+          PGDATABASE: d2s_test
+        run: bash deploy/test-d2s-postgresql-roles.sh
       - name: Remove database containers
         if: always()
         shell: bash

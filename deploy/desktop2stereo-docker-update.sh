@@ -211,6 +211,15 @@ docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/d
   --build-arg "GOPROXY=$BUILD_GOPROXY" \
   --build-arg "GOSUMDB=$BUILD_GOSUMDB" new-api
 docker image tag new-api-desktop2stereo-site:local "new-api-desktop2stereo-site:$SHA"
+CURRENT_PHASE="audit_ownership"
+write_status "running" "$CURRENT_PHASE" "正在配置应用数据库身份"
+docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" --profile maintenance run --rm --no-deps audit-ownership
+CURRENT_PHASE="audit_migration"
+write_status "running" "$CURRENT_PHASE" "正在迁移审计表"
+docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" --profile maintenance run --rm --no-deps audit-migrate
+CURRENT_PHASE="audit_permissions"
+write_status "running" "$CURRENT_PHASE" "正在校验审计表数据库权限"
+docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" --profile maintenance run --rm --no-deps audit-permissions
 CURRENT_PHASE="restart"
 write_status "running" "$CURRENT_PHASE" "正在重启应用容器"
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" up -d --no-deps new-api

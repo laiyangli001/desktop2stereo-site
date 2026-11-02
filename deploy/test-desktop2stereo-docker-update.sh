@@ -105,6 +105,9 @@ cat > "$MOCK_BIN/docker" <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 printf '%s\n' "$*" >> "$D2S_TEST_DOCKER_LOG"
+if [[ "${D2S_TEST_FAIL_PHASE:-}" == "audit_migration" && "$*" == *"audit-migrate"* ]]; then
+  exit 42
+fi
 if [[ "$1" == "inspect" ]]; then
   printf 'healthy\n'
 fi
@@ -154,6 +157,7 @@ run_update() {
   D2S_TEST_DOCKER_LOG="$root/docker.log" \
   D2S_TEST_RUNTIME_VERSION="$runtime_version" \
   D2S_TEST_STATUS_MODE="$status_mode" \
+  D2S_TEST_FAIL_PHASE="${4:-}" \
   PATH="$MOCK_BIN:$PATH" \
     "$UPDATE_SCRIPT" "$TARGET_SHA" test/repository main > "$root/run.log" 2>&1
 }
@@ -177,6 +181,14 @@ fi
 assert_status success succeeded
 [[ -f "$TEST_ROOT/cases/success/releases/$TARGET_SHA/.update-complete" ]]
 [[ "$(cat "$TEST_ROOT/cases/success/download-count")" == "1" ]]
+grep -Fq -- "--profile maintenance run --rm --no-deps audit-ownership" "$TEST_ROOT/cases/success/docker.log"
+grep -Fq -- "--profile maintenance run --rm --no-deps audit-migrate" "$TEST_ROOT/cases/success/docker.log"
+grep -Fq -- "--profile maintenance run --rm --no-deps audit-permissions" "$TEST_ROOT/cases/success/docker.log"
+ownership_line="$(grep -nF -- 'audit-ownership' "$TEST_ROOT/cases/success/docker.log" | head -n 1 | cut -d: -f1)"
+migration_line="$(grep -nF -- 'audit-migrate' "$TEST_ROOT/cases/success/docker.log" | head -n 1 | cut -d: -f1)"
+permissions_line="$(grep -nF -- 'audit-permissions' "$TEST_ROOT/cases/success/docker.log" | head -n 1 | cut -d: -f1)"
+restart_line="$(grep -nF -- 'up -d --no-deps new-api' "$TEST_ROOT/cases/success/docker.log" | head -n 1 | cut -d: -f1)"
+(( ownership_line < migration_line && migration_line < permissions_line && permissions_line < restart_line ))
 
 if ! run_update success "$TARGET_SHA" ok; then
   cat "$TEST_ROOT/cases/success/run.log" >&2
@@ -216,5 +228,19 @@ else
 fi
 assert_status unavailable failed
 grep -Fq "tag new-api-desktop2stereo-site:pre-$TARGET_SHA new-api-desktop2stereo-site:local" "$TEST_ROOT/cases/unavailable/docker.log"
+
+prepare_case migration-failure
+if run_update migration-failure "$TARGET_SHA" ok audit_migration; then
+  echo "audit migration failure incorrectly proceeded with deployment" >&2
+  exit 1
+else
+  exit_code=$?
+  [[ "$exit_code" == "42" ]]
+fi
+assert_status migration-failure failed
+if grep -Fq 'up -d --no-deps new-api' "$TEST_ROOT/cases/migration-failure/docker.log"; then
+  echo "application was restarted after audit migration failed" >&2
+  exit 1
+fi
 
 echo "Docker update SHA gate tests passed."

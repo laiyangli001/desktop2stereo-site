@@ -114,7 +114,8 @@ bash deploy/test-desktop2stereo-docker-update.sh
 4. 点击“更新服务器到此提交”。
 5. 服务端启动固定更新脚本，并把已校验的仓库、分支和 commit SHA 传给脚本。
 6. 脚本先备份数据库，再下载指定 commit。
-7. 在独立 release 目录编译前端和 Go 程序。
+7. 在独立 release 目录编译前端、Go 主程序和一次性审计迁移程序。
+8. PostgreSQL 部署在重启应用前运行 maintenance profile：准备非超级用户应用角色及普通业务表归属、迁移四张审计表、执行审计表权限脚本。`D2S_APP_SQL_DSN`、`D2S_AUDIT_MIGRATION_DSN` 和 `D2S_AUDIT_CLEANUP_DSN` 必须使用不同身份；迁移或权限检查失败时停止更新并保持旧应用继续运行。
    构建时将目标完整 commit SHA 注入前端版本、Go `common.Version` 和
    `org.opencontainers.image.revision`，并额外保留 `new-api-desktop2stereo-site:<commit-sha>` 镜像标签。
    服务器更新器默认使用腾讯云可达的 `https://goproxy.cn,direct`；由于生产服务器可能无法访问
@@ -130,7 +131,6 @@ bash deploy/test-desktop2stereo-docker-update.sh
    只有容器健康且 `/api/status` 返回的运行 SHA 与目标提交完全一致后，发布目录才会写入
    `.update-complete` 标记；中途失败或被终止留下的不完整目录会在同一 SHA 重试时清理并重新构建。
    即使已有该标记，更新器仍会核对当前运行版本；若版本不符，则重新构建并部署，不会直接报告成功。
-8. 原子切换 `current` 软链接。
 9. 重启服务并请求健康接口，再核对运行 SHA 与目标提交一致。
 10. 健康检查失败或版本 SHA 不符时恢复旧版本并记录失败状态。
 

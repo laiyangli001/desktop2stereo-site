@@ -31,7 +31,7 @@ services:
       - ./logs:/app/logs
       - ./update-requests:/app/update-requests
     environment:
-      - SQL_DSN=postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-new-api}
+      - SQL_DSN=${D2S_APP_SQL_DSN:-postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-new-api}}
 #      - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service, uncomment if using MySQL
 #      - LOG_SQL_DSN=postgresql://root:123456@postgres:5432/new-api-log # OPTIONAL: If you want a separate database for logging, uncomment and set this
 #      - LOG_SQL_DSN=clickhouse://default:123456@clickhouse:9000/new_api_logs # OPTIONAL: Use ClickHouse for logs only; also uncomment clickhouse in depends_on and the clickhouse service below
@@ -40,6 +40,7 @@ services:
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true # 是否启用错误日志记录 (Whether to enable error log recording)
       - D2S_DEVICE_VERIFICATION_URI=${D2S_DEVICE_VERIFICATION_URI:-http://localhost:3000/device}
+      - D2S_AUDIT_CLEANUP_DSN=${D2S_AUDIT_CLEANUP_DSN:-}
       - D2S_LICENSE_KEY_ID=${D2S_LICENSE_KEY_ID:-d2s-es256-2026-09}
       - D2S_LICENSE_PRIVATE_KEY_B64=${D2S_LICENSE_PRIVATE_KEY_B64:-}
       - D2S_RECONCILIATION_TOKEN=${D2S_RECONCILIATION_TOKEN:-}
@@ -90,6 +91,53 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  audit-migrate:
+    image: new-api-desktop2stereo-site:local
+    profiles: ["maintenance"]
+    entrypoint: ["/d2s-audit-migrate"]
+    environment:
+      - SQL_DSN=${D2S_APP_SQL_DSN:-postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgres:5432/${POSTGRES_DB:-new-api}}
+      - D2S_AUDIT_MIGRATION_DIALECT=${D2S_AUDIT_MIGRATION_DIALECT:-postgres}
+      - D2S_AUDIT_MIGRATION_DSN=${D2S_AUDIT_MIGRATION_DSN:-}
+    networks:
+      - new-api-network
+
+  audit-ownership:
+    image: postgres:15
+    profiles: ["maintenance"]
+    entrypoint: ["/bin/sh", "/run-db-maintenance.sh"]
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=${POSTGRES_USER:-root}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - PGDATABASE=${POSTGRES_DB:-new-api}
+      - D2S_PSQL_SCRIPT=/provision-roles.sql
+      - D2S_PSQL_SCRIPT_SECONDARY=/app-ownership.sql
+    volumes:
+      - ./deploy/d2s-postgresql-provision-roles.sql:/provision-roles.sql:ro
+      - ./deploy/d2s-postgresql-app-ownership.sql:/app-ownership.sql:ro
+      - ./deploy/d2s-postgresql-maintenance-runner.sh:/run-db-maintenance.sh:ro
+    networks:
+      - new-api-network
+
+  audit-permissions:
+    image: postgres:15
+    profiles: ["maintenance"]
+    entrypoint: ["/bin/sh", "/run-db-maintenance.sh"]
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGUSER=${POSTGRES_USER:-root}
+      - PGPASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - PGDATABASE=${POSTGRES_DB:-new-api}
+      - D2S_PSQL_SCRIPT=/audit-permissions.sql
+    volumes:
+      - ./deploy/d2s-audit-permissions.postgresql.sql:/audit-permissions.sql:ro
+      - ./deploy/d2s-postgresql-maintenance-runner.sh:/run-db-maintenance.sh:ro
+    networks:
+      - new-api-network
 
   redis:
     image: redis:latest

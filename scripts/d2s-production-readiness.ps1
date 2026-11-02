@@ -165,6 +165,14 @@ if ($RequireSecrets) {
     Assert-MinimumLengthEnvironmentVariable "SESSION_SECRET" 32
     Assert-MinimumLengthEnvironmentVariable "D2S_PAYMENT_BRIDGE_SECRET" 32
     Assert-NonEmptyEnvironmentVariable "D2S_LICENSE_PRIVATE_KEY_B64"
+    Assert-NonEmptyEnvironmentVariable "D2S_APP_SQL_DSN"
+    Assert-NonEmptyEnvironmentVariable "D2S_AUDIT_MIGRATION_DIALECT"
+    $auditMigrationDialect = [Environment]::GetEnvironmentVariable("D2S_AUDIT_MIGRATION_DIALECT").Trim().ToLowerInvariant()
+    if ($auditMigrationDialect -notin @("postgres", "postgresql", "mysql")) {
+        throw "D2S_AUDIT_MIGRATION_DIALECT must be postgres or mysql"
+    }
+    Assert-NonEmptyEnvironmentVariable "D2S_AUDIT_MIGRATION_DSN"
+    Assert-NonEmptyEnvironmentVariable "D2S_AUDIT_CLEANUP_DSN"
     Assert-PositiveIntegerEnvironmentVariable "D2S_OFFLINE_EXTENSION_CNY_MINOR"
     Assert-PositiveIntegerEnvironmentVariable "D2S_OFFLINE_EXTENSION_USD_MINOR"
     Assert-NonEmptyEnvironmentVariable "D2S_DEVICE_VERIFICATION_URI"

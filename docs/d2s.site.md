@@ -187,7 +187,7 @@ systemctl enable --now desktop2stereo-reconciliation.timer
   `D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE`，渠道专用值优先于全局值。
 - `D2S_OFFLINE_EXTENSION_CNY_MINOR=1990`（¥19.90）；`D2S_OFFLINE_EXTENSION_USD_MINOR=299`（$2.99）。价格以最小货币单位配置，运行时校验必须为正整数。
 
-部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本会实际解析签名私钥，
+部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本会检查非超级用户应用 DSN、独立审计迁移/清理 DSN 已配置并实际解析签名私钥，
 确认其包含私有标量且为有效 P-256 密钥，并拒绝错误 ASN.1、损坏密钥、仅公钥材料或非 P-256 曲线；还会校验离线延长
 价格为正整数，并拒绝 `0.0.0.0/0`、`::/0`、`*` 或 `all` 这类全网信任代理配置；
 `TRUSTED_PROXIES=none` 只能单独使用；会话 Secret 和支付桥 Secret 至少需要 32 个字符。
@@ -199,9 +199,10 @@ URL 还必须使用 BaseUrl 主机或其子域名，并匹配端口；脚本会�
 
 审计表迁移与权限：
 
-- PostgreSQL/MySQL 首次部署或升级审计表时，使用独立迁移身份设置 `D2S_AUDIT_MIGRATION_DIALECT` 和 `D2S_AUDIT_MIGRATION_DSN`；迁移 DSN 必须指向与 `SQL_DSN` 相同的数据库和 schema。随后执行 `go run ./cmd/d2s-audit-migrate`。该 DSN 只提供给迁移命令，不注入长期运行的应用容器。
+- PostgreSQL/MySQL 首次部署或升级审计表时，使用独立迁移身份设置 `D2S_AUDIT_MIGRATION_DIALECT` 和 `D2S_AUDIT_MIGRATION_DSN`；迁移 DSN 必须指向与 `D2S_APP_SQL_DSN` 相同的数据库和 schema。Docker 发布流程在专用 maintenance profile 临时容器中运行随镜像编译的 `/d2s-audit-migrate`；迁移 DSN 不传入长期运行的应用容器。`D2S_APP_SQL_DSN` 使用非超级用户 `d2s_app`，对审计表只具有 SELECT/INSERT。
 - 迁移完成后，由数据库管理员执行 `deploy/d2s-audit-permissions.postgresql.sql` 或 `deploy/d2s-audit-permissions.mysql.sql`，按实际数据库、schema 和账户调整占位符，并核对脚本结果。PostgreSQL 脚本检查有效表权限、列级 UPDATE、TRUNCATE 和清理身份的额外写权限；MySQL 必须检查 `SHOW GRANTS` 和继承角色，确认没有更宽的全局或数据库授权覆盖表级限制。
-- 运行服务的 `SQL_DSN` 对四张审计表只应有 SELECT/INSERT；`D2S_AUDIT_CLEANUP_DSN` 连接相同数据库和 schema，使用独立清理身份。缺少审计表时，MySQL/PostgreSQL 服务启动会失败；清理 DSN 未配置时，受控清理接口返回不可用且不会删除数据。
+- PostgreSQL Docker 更新器每次切换应用前，在同一 maintenance profile 中顺序执行角色/业务表归属准备、审计表迁移和权限脚本；任一步失败都会停止更新并保留正在运行的版本。`POSTGRES_USER`/`POSTGRES_PASSWORD` 只提供给短生命周期的数据库维护容器，不传给应用容器。首次部署须先为三个独立角色配置随机密码，并配置 `D2S_APP_SQL_DSN`、`D2S_AUDIT_MIGRATION_DSN`、`D2S_AUDIT_CLEANUP_DSN`。
+- Docker Compose 将 `D2S_AUDIT_CLEANUP_DSN` 传给应用用于受控清理；该 DSN 应连接相同数据库和 schema，并使用独立清理身份。缺少审计表时，MySQL/PostgreSQL 服务启动会失败；清理 DSN 未配置时，受控清理接口返回不可用且不会删除数据。
 - SQLite 开发环境仍由应用自动迁移，SQLite 不提供表级账户权限，不能据此声称生产权限隔离已经落实。
 
 同时在 new-api 管理设置中启用邮箱验证、SMTP、支付合规确认和实际使用的支付渠道。
@@ -259,7 +260,7 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
 9. 用测试账号完成注册、邮箱验证、试用创建、设备码登录、绑定、离线签发、在线租约和沙箱
    支付闭环后，才允许开放公网购买。
 
-常规业务表通过主服务 GORM 迁移。PostgreSQL/MySQL 的四张审计表通过独立的 `D2S_AUDIT_MIGRATION_DSN` 和 `go run ./cmd/d2s-audit-migrate` 创建或升级；迁移 DSN 不得注入长期运行的应用服务。迁移完成后执行 `deploy/d2s-audit-permissions.postgresql.sql` 或 `deploy/d2s-audit-permissions.mysql.sql`。SQLite 本地开发仍由主服务自动迁移审计表。每次升级前必须做数据库快照，在同版本影子库连续执行两次迁移并
+常规业务表由 `d2s_app` 运行主服务 GORM 迁移。PostgreSQL/MySQL 的四张审计表通过独立的 `D2S_AUDIT_MIGRATION_DSN` 创建或升级；Docker 发布流程在短生命周期维护容器中执行迁移和权限核验，迁移/清理身份不得注入长期运行的应用服务。SQLite 本地开发仍由主服务自动迁移审计表。每次升级前必须做数据库快照，在同版本影子库连续执行两次迁移并
 运行最小业务回归，再滚动生产节点。禁止多个不兼容版本同时执行结构变更。
 
 ## 7. 发布与回滚
