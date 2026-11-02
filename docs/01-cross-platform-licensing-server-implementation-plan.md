@@ -151,6 +151,7 @@ GORM 维护以下表：
 
 - 2026-11-03 复测最近后台审计改动：固定路径 `controller`、`model`、`service`、`router` 全包测试通过；`go vet -p 1 ./...` 与 `go build -p 1 ./...` 通过。尝试对全部含测试包执行固定路径测试时，360 拒绝启动 `e2e.test.exe`；排除该包重跑后，360 在 `middleware.test.exe` 启动期间移除了二进制，脚本按设计停止。其它包未完成全套复跑；当前全量 Go 测试仍需在 360 暂时退出后执行，不得把本轮部分结果记为全量通过。
 - 2026-11-03 继续复跑固定路径全仓 Go 测试：`common`、`constant`、`controller`、`dto` 测试包通过；`e2e.test.exe` 编译完成并计算 SHA-256 后，在启动时被 360 移除，既有脚本停止后续包。未更改 360 设置、隔离区或安全策略；本轮不能记为全仓测试通过。随后当前工作树 `go vet -p 1 ./...` 与 `go build -p 1 ./...` 均通过。
+- 2026-11-03 在隔离本机 PostgreSQL 15.14/MySQL 8.4.9 上，用固定路径 runner 执行完整 `model`、`controller`、`service`、`router` 包测试，均通过；`model` 测试进程配置了两种数据库 DSN，并实际运行配置数据库迁移和并发矩阵。全仓 Go 测试仍因 `e2e.test.exe` 被 360 移除而未完成；数据库服务已停止。
 
 - 导入 new-api、保留上游和 AGPL-3.0 信息。
 - 增加 D2S 模型、迁移、路由、授权状态机、设备码、ES256 和在线租约。
@@ -175,7 +176,7 @@ GORM 维护以下表：
 
 ### S2：三数据库与并发
 
-状态：`in_progress`；基础 SQLite/MySQL/PostgreSQL 并发和迁移验证曾通过；近期新增的数据库审计回归矩阵尚未在本地数据库服务上复验，需补齐当前工作树测试。
+状态：`verified`；较早的空库/升级矩阵与权限隔离测试通过；当前工作树的 MySQL/PostgreSQL 配置迁移和并发矩阵已复验。
 
 - SQLite、MySQL、PostgreSQL 新建库连续执行两次迁移：`verified`。
 - 已在 SQLite、MySQL、PostgreSQL 验证并发试用、绑定、租约、订单、区域锁、余额和支付幂等；人工解绑的跨申请并发审批回归现已验证每账号最多一笔成功。
@@ -185,6 +186,7 @@ GORM 维护以下表：
 - 2026-11-02 加强并实测 PostgreSQL 权限脚本：除表级 UPDATE/DELETE 外，脚本撤销并断言无列级 UPDATE、TRUNCATE、REFERENCES 和 TRIGGER；清理身份在三张留存表仅有 SELECT/DELETE，在留存审计表仅有 SELECT/INSERT。隔离 PostgreSQL 15.14 中临时授予应用账号单列 UPDATE 后，脚本撤销额外权限并通过有效权限断言。MySQL 8.4.9 与 PostgreSQL 15.14 上分别执行权限脚本；运行账号对四表 SELECT 成功，四表 INSERT 均在回滚事务中成功，24 次 UPDATE/DELETE/TRUNCATE 尝试全部被拒绝，未留下测试行。MySQL SHOW GRANTS 显示运行及清理账号仅有预期表级授权。仅证明隔离库配置，不替代生产权限与继承角色验收。
 - CI 中保留真实 MySQL/PostgreSQL 服务测试。
 - 2026-11-02 扩展隔离数据库矩阵，实测 MySQL 8.4.13 与 PostgreSQL 17.11 上单账户紧急锁定/解除、服务端登录/购买限制读取及对应 `EMERGENCY_LOCK`/`EMERGENCY_UNLOCK` 审计落库；矩阵测试通过，`go test -p 1 ./model -count=1`、`go vet -p 1 ./model`、`go build -p 1 ./model` 通过。两套数据库测试实例随后停止；此证据不替代生产账号权限与生产环境验收。
+- 2026-11-03 当前分支数据库复验：以隔离 `d2s_test` 账号连接本机 PostgreSQL 15.14（5433）与 MySQL 8.4.9（3307），固定路径 `model` 全包测试通过，实际执行 `TestD2SSchemaConfiguredDatabases` 和 `TestD2SConcurrentCriticalPaths` 两种数据库子项。覆盖迁移重复执行、用户紧急锁定/解除与审计、授权绑定、工单创建/处理与审计、区域/提现/解绑审核、支付对账及并发路径。`controller`、`service`、`router` 固定路径全包测试随后也通过。数据库 DSN 只在本次子进程环境中注入并清除；本地 PostgreSQL/MySQL 实例已停止。此次使用的是隔离持久测试库，不据此声称本轮测试数据库为空库。
 - 2026-09-09 已将本地与 GitHub Actions 的 Go、Vitest 缓存及临时目录固定到工作区路径；扫描确认 D2S 测试不再调用 `t.TempDir`、`os.MkdirTemp` 或 `os.CreateTemp`，Actions `34278684231` 已通过固定目录回归。
 - 2026-09-09 已将登录/注册验证码从拖动拼图切换为自托管点击验证码：后端使用 `go-captcha/v2/click` 生成主图和提示图，服务端保存目标区域并一次性校验坐标数组；登录、注册、前端组件测试和 `controller` 回归均已覆盖。
 
