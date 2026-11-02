@@ -15,7 +15,12 @@ $env:GOTMPDIR = $goTemp
 
 Push-Location $repoRoot
 try {
-    foreach ($packagePath in $Package) {
+    $testPackages = & go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' @Package
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to inspect Go packages for test files (exit code $LASTEXITCODE)."
+    }
+
+    foreach ($packagePath in $testPackages) {
         $binaryName = ($packagePath -replace '[^A-Za-z0-9]+', '_').Trim('_').ToLowerInvariant()
         if ([string]::IsNullOrWhiteSpace($binaryName)) {
             throw "Cannot derive a fixed test binary name from package '$packagePath'."

@@ -157,6 +157,7 @@ GORM 维护以下表：
 - 2026-11-02 360 暂停期间复跑全量 `go test -p 1 ./... -count=1`，包含 controller 测试且退出码 0；本地 Vitest 直接运行通过 75 个文件、462 项测试。`pnpm test` 因 `es5-ext@0.10.64` 构建脚本未获批准而停止，未批准该脚本；改用 `node node_modules/vitest/vitest.mjs run --reporter=dot` 完成测试。敏感扫描（2,345 个工作树文件）和固定路径扫描（271 个 Go 测试文件）通过。
 - 2026-11-02 修复 relay/channel 的原始 HTTP/2 测试服务器过早关闭连接导致的 Windows Winsock reset：服务器通过 PING/ACK 同步控制帧及响应关闭，GOAWAY 旧连接在客户端断开或 1 秒确认窗口后释放。涉及的 GOAWAY、REFUSED_STREAM 用例连续 10 次通过，`go test -p 1 ./relay/channel` 通过。全量 `go test -p 1 ./... -count=1` 中 relay/channel 已通过，但 Windows 对临时目录里的 `router.test.exe`、`config.test.exe` 返回 `Access is denied`；将这两个包分别编译到固定工作区路径后运行均通过。全量命令仍未整体退出 0，故不记录为全量通过；`git diff --check` 通过。
 - 2026-11-02 将含测试的 39 个 Go 包逐包编译到工作区固定路径并运行，全部通过（含 controller、model、relay/channel、router、service 和 setting/config）。该验证绕过了 Windows 对临时目录测试可执行文件的启动限制；常规 `go test -p 1 ./... -count=1` 仍因临时 `router.test.exe`、`config.test.exe` 被系统拒绝而未整体通过，因此分别记录命令结果与固定路径全仓结果。随后 `go vet -p 1 ./...`、`go build -p 1 ./...` 均通过，敏感信息扫描检查 2,345 个工作树文件并通过。
+- 2026-11-02 固定路径测试脚本在传入全部 83 个 Go 包时，因根包无测试文件且 `go test -c` 不生成可执行文件而错误退出；脚本现先用一次 `go list` 筛选含内部或外部测试文件的包。PowerShell AST 解析与 `git diff --check` 通过；按该脚本对全部 39 个含测试包逐一编译并运行，全部通过。
 
 退出条件：D2S 单元测试、完整 Go 测试、`go vet`、根模块构建和敏感信息扫描通过。
 
