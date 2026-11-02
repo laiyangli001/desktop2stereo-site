@@ -168,6 +168,45 @@ function Get-P256SigningPublicJwk([byte[]]$PrivateKeyBytes) {
     }
 }
 
+function Test-P256PublicJwk([string]$X, [string]$Y) {
+    if ($X -notmatch '\A[A-Za-z0-9_-]{43}\z' -or $Y -notmatch '\A[A-Za-z0-9_-]{43}\z') {
+        return $false
+    }
+
+    $key = [Security.Cryptography.ECDsa]::Create()
+    try {
+        $decodeBase64Url = {
+            param([string]$Value)
+            $base64 = $Value.Replace('-', '+').Replace('_', '/')
+            switch ($base64.Length % 4) {
+                0 { }
+                2 { $base64 += '==' }
+                3 { $base64 += '=' }
+                default { throw 'Invalid Base64URL length' }
+            }
+            return ,([Convert]::FromBase64String($base64))
+        }
+        $xBytes = & $decodeBase64Url $X
+        $yBytes = & $decodeBase64Url $Y
+        if ($xBytes.Length -ne 32 -or $yBytes.Length -ne 32) {
+            return $false
+        }
+
+        $point = [Security.Cryptography.ECPoint]::new()
+        $point.X = $xBytes
+        $point.Y = $yBytes
+        $parameters = [Security.Cryptography.ECParameters]::new()
+        $parameters.Curve = [Security.Cryptography.ECCurve+NamedCurves]::nistP256
+        $parameters.Q = $point
+        $key.ImportParameters($parameters)
+        return $true
+    } catch {
+        return $false
+    } finally {
+        $key.Dispose()
+    }
+}
+
 if (-not $HttpOnly) {
     @(
         "SQL_DSN",
@@ -281,7 +320,8 @@ if (-not $SkipHttp) {
     }
     $publishedKeys = @($keys.data.keys)
     $validKeys = @($publishedKeys | Where-Object {
-        $_.kid -and $_.alg -eq "ES256" -and $_.crv -eq "P-256" -and $_.x -and $_.y
+        $_.kid -and $_.alg -eq "ES256" -and $_.crv -eq "P-256" -and
+        (Test-P256PublicJwk ([string]$_.x) ([string]$_.y))
     })
     if ($validKeys.Count -eq 0) {
         throw "License key endpoint did not publish a usable ES256 public key"

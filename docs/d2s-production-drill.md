@@ -36,7 +36,7 @@ $signingKeyId = Read-Host "请输入预期发布的签名 key_id"
 不会证明本机配置、私钥与公钥匹配、数据库角色、支付配置或生产业务闭环。完整部署验收仍须在具备受控
 运行配置的应用节点执行上方 `-RequireSecrets` 命令。
 
-本地可用 `.\scripts\d2s-production-readiness-selftest.ps1` 运行无网络 mock 回归，覆盖无本地 Secret 的 HTTP-only 通过、预期 SHA 不匹配拒绝、HTTP-only 参数冲突拒绝、有效企业微信链接、错误主机/路径、非默认端口和显式 `:443`、查询参数、用户信息、片段、客服 API 缺失、隐私政策已配置和空隐私政策拒绝。它不替代部署后的真实端点核验，也不审查隐私政策文本是否满足法律要求。
+本地可用 `.\scripts\d2s-production-readiness-selftest.ps1` 运行无网络 mock 回归，覆盖无本地 Secret 的 HTTP-only 通过、预期 SHA 不匹配拒绝、无效 P-256 坐标拒绝、HTTP-only 参数冲突拒绝、有效企业微信链接、错误主机/路径、非默认端口和显式 `:443`、查询参数、用户信息、片段、客服 API 缺失、隐私政策已配置和空隐私政策拒绝。它不替代部署后的真实端点核验，也不审查隐私政策文本是否满足法律要求。
 
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty

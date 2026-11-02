@@ -37,11 +37,13 @@ try {
         [bool]$SupportEndpointAvailable,
         [string]$PrivacyPolicy = "Configured privacy policy for readiness self-test.",
         [string]$ExpectedVersion = "",
+        [bool]$ValidSigningKey = $true,
         [switch]$HttpOnly
     ) {
         $global:d2sReadinessSelfTestState.SupportUrl = $SupportUrl
         $global:d2sReadinessSelfTestState.SupportEndpointAvailable = $SupportEndpointAvailable
         $global:d2sReadinessSelfTestState.PrivacyPolicy = $PrivacyPolicy
+        $global:d2sReadinessSelfTestState.ValidSigningKey = $ValidSigningKey
 
         function Invoke-WebRequest {
             param([string]$Uri, [switch]$UseBasicParsing)
@@ -61,8 +63,8 @@ try {
                             kid = "readiness-selftest-kid"
                             alg = "ES256"
                             crv = "P-256"
-                            x = "selftest-x"
-                            y = "selftest-y"
+                            x = if ($global:d2sReadinessSelfTestState.ValidSigningKey) { "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY" } else { "invalid-x" }
+                            y = if ($global:d2sReadinessSelfTestState.ValidSigningKey) { "T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU" } else { "invalid-y" }
                         })
                     }
                 }
@@ -114,6 +116,18 @@ try {
         throw "HTTP-only readiness did not reject a running version mismatch."
     }
     Write-Host "PASS HTTP-only readiness rejects an unexpected release SHA"
+
+    $invalidJwkRejected = $false
+    try {
+        Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
+            -ExpectedVersion "d11d0cc1da5070bc65b57ff72181ed2865043833" -ValidSigningKey $false -HttpOnly
+    } catch {
+        $invalidJwkRejected = $_.Exception.Message -like "*did not publish a usable ES256 public key*"
+    }
+    if (-not $invalidJwkRejected) {
+        throw "HTTP-only readiness accepted an invalid P-256 public key."
+    }
+    Write-Host "PASS HTTP-only readiness rejects malformed P-256 coordinates"
 
     $validHttpOnlyArguments = @{
         HttpOnly = $true
