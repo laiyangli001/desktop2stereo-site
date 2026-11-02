@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import axios from 'axios'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -616,6 +617,25 @@ export function D2SWorkspace(
 
   const content = (
     <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
+      {view !== 'wallet' && (
+        <nav
+          aria-label={t('Support options')}
+          className='flex flex-wrap gap-4 text-sm'
+        >
+          <Link
+            className='underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4'
+            to='/support'
+          >
+            {t('Complaints and support')}
+          </Link>
+          <Link
+            className='underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4'
+            to='/d2s/support-tickets'
+          >
+            {t('My support tickets')}
+          </Link>
+        </nav>
+      )}
       {d2sDataLoading && (
         <p role='status' className='text-muted-foreground text-sm'>
           {t('Loading Desktop2Stereo data')}

@@ -180,8 +180,6 @@ systemctl enable --now desktop2stereo-reconciliation.timer
   `ce18716f3dbd9728aab595812a2746367be667e76a0024bb117b03a2d1d2016a`；核心资源更新后必须同步轮换该环境变量。
 - `D2S_PARALLAX_CORE_KEY_HEX`：加密视差资源对应的 AES-256 密钥，只能通过生产部署 Secret 注入，
   不得写入公开仓库、客户端或后台网页表单。
-- `D2S_ID_DOCUMENT_HMAC_KEY`：身份核验号码摘要专用的 32 字节随机密钥，要求为恰好 64 位十六进制；
-  可用 `openssl rand -hex 32` 生成，必须与数据库分开保管，不得复用支付或会话密钥。缺失或格式错误时，身份核验写入返回 `503` 并失败关闭。
 - `D2S_PAYMENT_BRIDGE_SECRET`；推荐按渠道配置 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`、
   `D2S_PAYMENT_BRIDGE_SECRET_CREEM`、`D2S_PAYMENT_BRIDGE_SECRET_EPAY`、
   `D2S_PAYMENT_BRIDGE_SECRET_PAYMENTFM`、`D2S_PAYMENT_BRIDGE_SECRET_ALIPAY`、
@@ -189,7 +187,7 @@ systemctl enable --now desktop2stereo-reconciliation.timer
   `D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE`，渠道专用值优先于全局值。
 - `D2S_OFFLINE_EXTENSION_CNY_MINOR=1990`（¥19.90）；`D2S_OFFLINE_EXTENSION_USD_MINOR=299`（$2.99）。价格以最小货币单位配置，运行时校验必须为正整数。
 
-部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本会校验身份核验 HMAC 密钥格式，并实际解析签名私钥，
+部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本会实际解析签名私钥，
 确认其包含私有标量且为有效 P-256 密钥，并拒绝错误 ASN.1、损坏密钥、仅公钥材料或非 P-256 曲线；还会校验离线延长
 价格为正整数，并拒绝 `0.0.0.0/0`、`::/0`、`*` 或 `all` 这类全网信任代理配置；
 `TRUSTED_PROXIES=none` 只能单独使用；会话 Secret 和支付桥 Secret 至少需要 32 个字符。

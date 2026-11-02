@@ -37,6 +37,18 @@ export type D2SOrder = {
   expires_at: number
 }
 
+export type D2SSupportTicket = {
+  id: string
+  category: string
+  order_id: string
+  subject: string
+  message: string
+  status: string
+  admin_reply: string
+  created_at: number
+  updated_at: number
+}
+
 export type D2SPaymentEvent = {
   id: string
   provider: string

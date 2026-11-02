@@ -69,7 +69,31 @@ func TestD2SAuditSchemaMigratesIdempotentlyOnSQLite(t *testing.T) {
 	require.NoError(t, DB.AutoMigrate(auditModels...), "audit migration must be idempotent")
 }
 
-func TestD2SAuditRecordsAreAppendOnlyAndRetentionIsAtLeast180Days(t *testing.T) {
+func TestD2SAuditRetentionCutoffsEnforce366DayMinimum(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		now  string
+		want string
+	}{
+		{name: "366 day minimum", now: "2025-10-31T12:00:00Z", want: "2024-10-30T12:00:00Z"},
+		{name: "leap year", now: "2024-08-31T12:00:00Z", want: "2023-08-31T12:00:00Z"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			nowTime, err := time.Parse(time.RFC3339, testCase.now)
+			require.NoError(t, err)
+			wantTime, err := time.Parse(time.RFC3339, testCase.want)
+			require.NoError(t, err)
+			requested, action := d2sAuditRetentionCutoffs(D2SMinimumAuditRetentionDays, nowTime.Unix())
+			require.Equal(t, wantTime.Unix(), action)
+			require.Equal(t, requested, action)
+
+			longerRequested, longerAction := d2sAuditRetentionCutoffs(730, nowTime.Unix())
+			require.Equal(t, longerRequested, longerAction)
+		})
+	}
+}
+
+func TestD2SAuditRecordsAreAppendOnlyAndRetainAtLeast366Days(t *testing.T) {
 	useD2STestDB(t)
 	previousCleanupDB := D2SAuditCleanupDB
 	D2SAuditCleanupDB = nil
@@ -91,15 +115,17 @@ func TestD2SAuditRecordsAreAppendOnlyAndRetentionIsAtLeast180Days(t *testing.T) 
 	}
 
 	const now int64 = 2_000_000_000
-	cutoff := now - int64(D2SMinimumAuditRetentionDays)*86400
-	oldTime := cutoff - 1
-	recentTime := cutoff
-	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "old-action", ActionType: D2SActionLogin, EventTime: oldTime, SourceIP: "192.0.2.3", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("b", 64)}).Error)
-	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "boundary-action", ActionType: D2SActionLogin, EventTime: recentTime, SourceIP: "192.0.2.4", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("c", 64)}).Error)
-	require.NoError(t, DB.Create(&D2SRegistrationRecord{ID: "old-registration", UserID: 52, Email: "old@example.com", RegisterIP: "192.0.2.5", RegisterTime: oldTime, EmailVerified: true, EmailVerifiedAt: oldTime}).Error)
-	require.NoError(t, DB.Create(&D2SRegistrationRecord{ID: "boundary-registration", UserID: 53, Email: "boundary@example.com", RegisterIP: "192.0.2.6", RegisterTime: recentTime, EmailVerified: true, EmailVerifiedAt: recentTime}).Error)
-	require.NoError(t, DB.Create(&D2SAdminOperationAudit{ID: "old-admin-audit", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: oldTime, Result: "SUCCESS"}).Error)
-	require.NoError(t, DB.Create(&D2SAdminOperationAudit{ID: "boundary-admin-audit", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: recentTime, Result: "SUCCESS"}).Error)
+	requestedCutoff, actionCutoff := d2sAuditRetentionCutoffs(D2SMinimumAuditRetentionDays, now)
+	actionOldTime := actionCutoff - 1
+	requestedOldTime := requestedCutoff - 1
+	require.Equal(t, actionCutoff, requestedCutoff)
+	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "old-action", ActionType: D2SActionLogin, EventTime: actionOldTime, SourceIP: "192.0.2.3", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("b", 64)}).Error)
+	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "boundary-action", ActionType: D2SActionLogin, EventTime: actionCutoff, SourceIP: "192.0.2.4", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("c", 64)}).Error)
+	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "within-retention-action", ActionType: D2SActionLogin, EventTime: now - 365*86400, SourceIP: "192.0.2.10", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("e", 64)}).Error)
+	require.NoError(t, DB.Create(&D2SRegistrationRecord{ID: "old-registration", UserID: 52, Email: "old@example.com", RegisterIP: "192.0.2.5", RegisterTime: requestedOldTime, EmailVerified: true, EmailVerifiedAt: requestedOldTime}).Error)
+	require.NoError(t, DB.Create(&D2SRegistrationRecord{ID: "boundary-registration", UserID: 53, Email: "boundary@example.com", RegisterIP: "192.0.2.6", RegisterTime: requestedCutoff, EmailVerified: true, EmailVerifiedAt: requestedCutoff}).Error)
+	require.NoError(t, DB.Create(&D2SAdminOperationAudit{ID: "old-admin-audit", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: requestedOldTime, Result: "SUCCESS"}).Error)
+	require.NoError(t, DB.Create(&D2SAdminOperationAudit{ID: "boundary-admin-audit", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: requestedCutoff, Result: "SUCCESS"}).Error)
 
 	_, err := PruneD2SAuditData(D2SMinimumAuditRetentionDays-1, 1, "admin@example.com", "192.0.2.7", now)
 	require.ErrorIs(t, err, ErrD2SAuditRetention)
@@ -110,29 +136,35 @@ func TestD2SAuditRecordsAreAppendOnlyAndRetentionIsAtLeast180Days(t *testing.T) 
 	}
 	var actionCount int64
 	require.NoError(t, DB.Model(&D2SUserActionLog{}).Count(&actionCount).Error)
-	assert.EqualValues(t, 3, actionCount)
+	assert.EqualValues(t, 4, actionCount)
 
 	run, err := PruneD2SAuditData(D2SMinimumAuditRetentionDays, 1, "admin@example.com", "192.0.2.7", now)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, run.RecordCount)
-	require.Equal(t, oldTime, run.RangeStart)
-	require.Equal(t, cutoff, run.CutoffAt)
+	require.Equal(t, actionOldTime, run.RangeStart)
+	require.Equal(t, actionCutoff, run.CutoffAt)
 	assert.Contains(t, run.DetailsJSON, `"record_count":3`)
+	assert.Contains(t, run.DetailsJSON, `"table_cutoffs"`)
+	assert.Contains(t, run.DetailsJSON, `"table_ranges"`)
 
 	for _, table := range []struct {
-		model any
-		where string
+		model  any
+		where  string
+		cutoff int64
 	}{
-		{&D2SUserActionLog{}, "event_time < ?"},
-		{&D2SRegistrationRecord{}, "register_time < ?"},
-		{&D2SAdminOperationAudit{}, "operation_time < ?"},
+		{&D2SUserActionLog{}, "event_time < ?", actionCutoff},
+		{&D2SRegistrationRecord{}, "register_time < ?", requestedCutoff},
+		{&D2SAdminOperationAudit{}, "operation_time < ?", requestedCutoff},
 	} {
 		var oldCount, boundaryCount int64
-		require.NoError(t, DB.Model(table.model).Where(table.where, cutoff).Count(&oldCount).Error)
+		require.NoError(t, DB.Model(table.model).Where(table.where, table.cutoff).Count(&oldCount).Error)
 		assert.Zero(t, oldCount)
-		require.NoError(t, DB.Model(table.model).Where(strings.Replace(table.where, "< ?", "= ?", 1), cutoff).Count(&boundaryCount).Error)
+		require.NoError(t, DB.Model(table.model).Where(strings.Replace(table.where, "< ?", "= ?", 1), table.cutoff).Count(&boundaryCount).Error)
 		assert.EqualValues(t, 1, boundaryCount)
 	}
+	var actionInsideRetention int64
+	require.NoError(t, DB.Model(&D2SUserActionLog{}).Where("id = ?", "within-retention-action").Count(&actionInsideRetention).Error)
+	assert.EqualValues(t, 1, actionInsideRetention)
 	var cleanupRunCount int64
 	require.NoError(t, DB.Model(&D2SAuditRetentionRun{}).Where("id = ?", run.ID).Count(&cleanupRunCount).Error)
 	assert.EqualValues(t, 1, cleanupRunCount)
@@ -148,7 +180,7 @@ func TestPruneD2SAuditDataPersistsFailureAuditAfterRollback(t *testing.T) {
 		&D2SUserActionLog{}, &D2SRegistrationRecord{}, &D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
 	))
 	const now int64 = 2_000_000_000
-	cutoff := now - int64(D2SMinimumAuditRetentionDays)*86400
+	_, cutoff := d2sAuditRetentionCutoffs(D2SMinimumAuditRetentionDays, now)
 	require.NoError(t, DB.Create(&D2SUserActionLog{
 		ID: "cleanup-failure-action", ActionType: D2SActionLogin, EventTime: cutoff - 1,
 		SourceIP: "192.0.2.8", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("d", 64),

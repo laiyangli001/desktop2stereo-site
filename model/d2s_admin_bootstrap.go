@@ -9,7 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
-func validD2SAdminBootstrapPassword(password string) bool {
+func ValidD2SAdminPassword(password string) bool {
 	if len(password) < 12 || len(password) > 72 {
 		return false
 	}
@@ -43,7 +43,7 @@ func BootstrapD2SAdminFromEnvironment() error {
 	if email == "" && password == "" {
 		return nil
 	}
-	if email == "" || common.Validate.Var(email, "required,email") != nil || !validD2SAdminBootstrapPassword(password) {
+	if email == "" || common.Validate.Var(email, "required,email") != nil || !ValidD2SAdminPassword(password) {
 		return errors.New("invalid D2S admin bootstrap credentials")
 	}
 	count, err := CountD2SAdminAccounts()

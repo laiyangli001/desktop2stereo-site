@@ -11,12 +11,20 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+func TestD2SIdentityVerificationIsNotAutoMigrated(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(d2sCoreMigrationModels()...))
+	assert.False(t, db.Migrator().HasTable(&D2SIdentityVerification{}), "identity verification is not an active product feature")
+}
 
 func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 	tests := []struct {
@@ -58,7 +66,7 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
 				&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
 				&D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
-				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
+				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{}, &D2SAdminExportApproval{}, &D2SUserSecurityControl{}, &D2SSupportTicket{},
 			}
 			require.NoError(t, db.AutoMigrate(models...))
 			require.NoError(t, db.AutoMigrate(models...), "migration must be idempotent")
@@ -67,12 +75,86 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 			shortSuffix := suffix[len(suffix)-10:]
 			user := User{Username: "m-" + test.name + "-" + shortSuffix, Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "matrix-" + test.name + "-" + suffix + "@example.com", AffCode: "m-" + test.name + "-" + shortSuffix, Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 			require.NoError(t, db.Create(&user).Error)
+
+			lockTime := time.Now().UTC().Unix()
+			lockControl := &D2SUserSecurityControl{
+				UserID: user.Id, LoginBlocked: true, PurchaseBlocked: true,
+				Reason: "matrix emergency lock", UpdatedAt: lockTime, UpdatedBy: 1,
+			}
+			lockAudit := &D2SAdminOperationAudit{
+				OperatorID: 1, OperatorEmail: "matrix-admin@example.com", OperationType: "EMERGENCY_LOCK",
+				OperationTime: lockTime, TargetResource: strconv.Itoa(user.Id), SourceIP: "192.0.2.10",
+				Result: "SUCCESS", DetailsJSON: `{"login_blocked":true,"purchase_blocked":true}`,
+			}
+			require.NoError(t, SetD2SUserSecurityControlWithAudit(lockControl, lockAudit))
+			loginBlocked, err := IsD2SUserLoginBlocked(user.Id)
+			require.NoError(t, err)
+			assert.True(t, loginBlocked)
+			purchaseBlocked, err := IsD2SUserPurchaseBlocked(user.Id)
+			require.NoError(t, err)
+			assert.True(t, purchaseBlocked)
+
+			unlockTime := lockTime + 1
+			unlockControl := &D2SUserSecurityControl{
+				UserID: user.Id, LoginBlocked: false, PurchaseBlocked: false,
+				Reason: "matrix emergency unlock", UpdatedAt: unlockTime, UpdatedBy: 1,
+			}
+			unlockAudit := &D2SAdminOperationAudit{
+				OperatorID: 1, OperatorEmail: "matrix-admin@example.com", OperationType: "EMERGENCY_UNLOCK",
+				OperationTime: unlockTime, TargetResource: strconv.Itoa(user.Id), SourceIP: "192.0.2.10",
+				Result: "SUCCESS", DetailsJSON: `{"login_blocked":false,"purchase_blocked":false}`,
+			}
+			require.NoError(t, SetD2SUserSecurityControlWithAudit(unlockControl, unlockAudit))
+			loginBlocked, err = IsD2SUserLoginBlocked(user.Id)
+			require.NoError(t, err)
+			assert.False(t, loginBlocked)
+			purchaseBlocked, err = IsD2SUserPurchaseBlocked(user.Id)
+			require.NoError(t, err)
+			assert.False(t, purchaseBlocked)
+
+			var emergencyAudits []D2SAdminOperationAudit
+			require.NoError(t, db.Where("target_resource = ? AND operation_type IN ?", strconv.Itoa(user.Id), []string{"EMERGENCY_LOCK", "EMERGENCY_UNLOCK"}).Order("operation_time ASC").Find(&emergencyAudits).Error)
+			require.Len(t, emergencyAudits, 2)
+			assert.Equal(t, "EMERGENCY_LOCK", emergencyAudits[0].OperationType)
+			assert.Equal(t, "EMERGENCY_UNLOCK", emergencyAudits[1].OperationType)
+			assert.Equal(t, "SUCCESS", emergencyAudits[0].Result)
+			assert.Equal(t, "SUCCESS", emergencyAudits[1].Result)
+			assert.Equal(t, "192.0.2.10", emergencyAudits[0].SourceIP)
+
 			licenses, err := ListD2SLicenses(user.Id, 2_000_700_000)
 			require.NoError(t, err)
 			require.Len(t, licenses, 1)
 			bound, err := BindD2SLicense(user.Id, licenses[0].ID, fmt.Sprintf("%064x", uint64(time.Now().UnixNano())), 1, 2_000_700_001)
 			require.NoError(t, err)
 			assert.Equal(t, D2SLicenseModeOnline, bound.Mode)
+
+			ticket := &D2SSupportTicket{
+				UserID: user.Id, Category: "ACCOUNT", ContactEmail: user.Email,
+				Subject: "Database matrix support request", Message: "Verify support ticket persistence across configured databases.",
+			}
+			require.NoError(t, CreateD2SSupportTicket(ticket))
+			userTickets, userTicketCount, err := ListD2SUserSupportTickets(user.Id, 1, 10)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, userTicketCount)
+			require.Len(t, userTickets, 1)
+			assert.Equal(t, ticket.ID, userTickets[0].ID)
+			assert.Equal(t, "Database matrix support request", userTickets[0].Subject)
+
+			updatedTicket, err := UpdateD2SSupportTicketWithAudit(
+				ticket.ID, D2SSupportInProgress, "We received your request.", 1,
+				"matrix-admin@example.com", "192.0.2.10", `{"status":"IN_PROGRESS"}`,
+			)
+			require.NoError(t, err)
+			assert.Equal(t, D2SSupportInProgress, updatedTicket.Status)
+			userTickets, _, err = ListD2SUserSupportTickets(user.Id, 1, 10)
+			require.NoError(t, err)
+			require.Len(t, userTickets, 1)
+			assert.Equal(t, "We received your request.", userTickets[0].AdminReply)
+			var supportAudit D2SAdminOperationAudit
+			require.NoError(t, db.Where("operation_type = ? AND target_resource = ?", "UPDATE_SUPPORT_TICKET", "d2s_support_tickets:"+ticket.ID).First(&supportAudit).Error)
+			assert.Equal(t, "SUCCESS", supportAudit.Result)
+			assert.Equal(t, 1, supportAudit.OperatorID)
+			assert.Equal(t, "192.0.2.10", supportAudit.SourceIP)
 
 			reconcileNow := time.Now().UTC().Unix()
 			order := D2SOrder{
@@ -129,7 +211,7 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
 				&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
 				&D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
-				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
+				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{}, &D2SUserSecurityControl{},
 			}
 			require.NoError(t, db.AutoMigrate(models...))
 			suffix := time.Now().UnixNano()

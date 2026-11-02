@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/csv"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -181,6 +182,28 @@ func recordD2SCSVTerminalAudit(c *gin.Context, operationType, filename, result, 
 	}
 }
 
+func requireD2SExportApproval(c *gin.Context, approvalID, exportType, target string, snapshot map[string]any) bool {
+	err := consumeD2SExportApproval(c, approvalID, exportType, snapshot)
+	if err == nil {
+		return true
+	}
+	status, code, reason := http.StatusForbidden, "EXPORT_APPROVAL_REQUIRED", "approval_missing_or_invalid"
+	switch {
+	case errors.Is(err, model.ErrD2SExportApprovalExpired):
+		status, code, reason = http.StatusGone, "EXPORT_APPROVAL_EXPIRED", "approval_expired"
+	case errors.Is(err, model.ErrD2SExportApprovalNotFound):
+		status, code, reason = http.StatusForbidden, "EXPORT_APPROVAL_REQUIRED", "approval_not_found"
+	case errors.Is(err, model.ErrD2SExportApprovalFilterMismatch):
+		status, code, reason = http.StatusForbidden, "EXPORT_APPROVAL_SCOPE_MISMATCH", "scope_mismatch"
+	case errors.Is(err, model.ErrD2SExportApprovalNotApproved):
+		status, code, reason = http.StatusForbidden, "EXPORT_APPROVAL_REQUIRED", "approval_not_approved_or_already_used"
+	case !errors.Is(err, model.ErrD2SExportApprovalInvalid):
+		status, code, reason = http.StatusInternalServerError, "EXPORT_APPROVAL_CHECK_FAILED", "approval_check_failed"
+	}
+	respondD2SAdminAuditedFailure(c, "EXPORT_LOG", target, reason, status, code)
+	return false
+}
+
 func D2SAdminExportUserActionLogs(c *gin.Context) {
 	f, err := parseD2SActionLogFilters(c, false)
 	if err != nil {
@@ -192,9 +215,12 @@ func D2SAdminExportUserActionLogs(c *gin.Context) {
 		respondD2SAdminAuditedFailure(c, "EXPORT_LOG", "d2s_user_action_logs", "query_failed", http.StatusInternalServerError, "LOG_QUERY_FAILED")
 		return
 	}
+	if !requireD2SExportApproval(c, c.Query("approval_id"), model.D2SExportApprovalTypeUserActionLogs, "d2s_user_action_logs", d2sFilterDetails(f)) {
+		return
+	}
 	filename := "access_log_" + time.Now().UTC().Format("20060102_150405") + ".csv"
 	details := d2sFilterDetails(f)
-	details["record_count"] = total
+	details["record_count"], details["approval_id"] = total, c.Query("approval_id")
 	if err := writeD2SAdminAudit(c, "EXPORT_LOG", filename, "STARTED", details); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
@@ -244,8 +270,11 @@ func D2SAdminExportRegistrationRecords(c *gin.Context) {
 		respondD2SAdminAuditedFailure(c, "EXPORT_REGISTRATION", "d2s_registration_records", "query_failed", http.StatusInternalServerError, "REGISTRATION_QUERY_FAILED")
 		return
 	}
+	if !requireD2SExportApproval(c, c.Query("approval_id"), model.D2SExportApprovalTypeRegistrations, "d2s_registration_records", map[string]any{"start_time": startTime, "end_time": endTime}) {
+		return
+	}
 	filename := "registration_records_" + time.Now().UTC().Format("20060102_150405") + ".csv"
-	if err := writeD2SAdminAudit(c, "EXPORT_REGISTRATION", filename, "STARTED", map[string]any{"start_time": startTime, "end_time": endTime, "record_count": total}); err != nil {
+	if err := writeD2SAdminAudit(c, "EXPORT_REGISTRATION", filename, "STARTED", map[string]any{"start_time": startTime, "end_time": endTime, "record_count": total, "approval_id": c.Query("approval_id")}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}

@@ -378,21 +378,8 @@ func is64BitIntegerType(dbType common.DatabaseType, dataType string) bool {
 	}
 }
 
-func migrateDB() error {
-	if err := migrateTokenKeyUniqueness(DB); err != nil {
-		return err
-	}
-	if err := migratePrefillGroupUniqueness(DB); err != nil {
-		return err
-	}
-	// Migrate price_amount column from float/double to decimal for existing tables
-	migrateSubscriptionPlanPriceAmount()
-	// Migrate model_limits column from varchar to text for existing tables
-	if err := migrateTokenModelLimitsToText(); err != nil {
-		return err
-	}
-
-	err := DB.AutoMigrate(
+func d2sCoreMigrationModels() []any {
+	return []any{
 		&Channel{},
 		&Token{},
 		&User{},
@@ -440,6 +427,7 @@ func migrateDB() error {
 		&D2SPaidRevokeQuota{},
 		&D2SManualUnbindRequest{},
 		&D2SOrder{},
+		&D2SSupportTicket{},
 		&D2SPaymentEvent{},
 		&D2SBalanceAccount{},
 		&D2SBalanceTransaction{},
@@ -448,10 +436,27 @@ func migrateDB() error {
 		&D2SSigningKey{},
 		&D2SAdminAccount{},
 		&D2SAdminSession{},
+		&D2SAdminExportApproval{},
 		&D2SUserSecurityControl{},
-		&D2SIdentityVerification{},
 		&D2SAdminBatchPreview{},
-	)
+	}
+}
+
+func migrateDB() error {
+	if err := migrateTokenKeyUniqueness(DB); err != nil {
+		return err
+	}
+	if err := migratePrefillGroupUniqueness(DB); err != nil {
+		return err
+	}
+	// Migrate price_amount column from float/double to decimal for existing tables
+	migrateSubscriptionPlanPriceAmount()
+	// Migrate model_limits column from varchar to text for existing tables
+	if err := migrateTokenModelLimitsToText(); err != nil {
+		return err
+	}
+
+	err := DB.AutoMigrate(d2sCoreMigrationModels()...)
 	if err != nil {
 		return err
 	}

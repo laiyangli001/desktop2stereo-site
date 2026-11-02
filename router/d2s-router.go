@@ -27,6 +27,9 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		}
 
 		v1.GET("/license/keys", controller.D2SLicensePublicKeys)
+		v1.GET("/support/config", controller.D2SSupportConfig)
+		v1.POST("/support/tickets", middleware.UserAuth(), middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.D2SSubmitSupportTicket)
+		v1.GET("/support/my-tickets", middleware.UserAuth(), controller.D2SUserSupportTickets)
 		downloads := v1.Group("/downloads")
 		downloads.Use(middleware.D2SUserActionLog("DOWNLOAD"), middleware.UserAuth())
 		{
@@ -96,22 +99,20 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		accountAdmin := v1.Group("/admin")
 		accountAdmin.Use(middleware.D2SAdminAuth(), middleware.D2SAdminRequireRole("account_operator"))
 		{
+			accountAdmin.GET("/support/tickets", controller.D2SAdminSupportTickets)
+			accountAdmin.PUT("/support/tickets/:id", controller.D2SAdminUpdateSupportTicket)
 			accountAdmin.PUT("/users/:id/emergency", controller.D2SAdminSetEmergencyControl)
 			accountAdmin.GET("/purchases", controller.D2SAdminPurchaseRecords)
 			accountAdmin.POST("/users/batch/preview", controller.D2SAdminBatchEmergencyPreview)
 			accountAdmin.POST("/users/batch/apply", controller.D2SAdminBatchEmergencyApply)
-		}
-		identityAdmin := v1.Group("/admin")
-		identityAdmin.Use(middleware.D2SAdminAuth(), middleware.D2SAdminRequireRole("identity_reviewer"))
-		{
-			identityAdmin.GET("/users/:id/identity", controller.D2SAdminGetIdentityVerification)
-			identityAdmin.PUT("/users/:id/identity", controller.D2SAdminReviewIdentityVerification)
 		}
 		auditAdmin := v1.Group("/admin")
 		auditAdmin.Use(middleware.D2SAdminAuth(), middleware.D2SAdminRequireRole("audit_reader"))
 		{
 			auditAdmin.GET("/audit/user-events", controller.D2SAdminUserActionLogs)
 			auditAdmin.GET("/audit/registrations", controller.D2SAdminRegistrationRecords)
+			auditAdmin.POST("/audit/export-approvals", middleware.SessionCookieOriginGuard(), controller.D2SAdminRequestExportApproval)
+			auditAdmin.GET("/audit/export-approvals/:id", controller.D2SAdminGetExportApproval)
 			auditAdmin.GET("/audit/user-events/export.csv", controller.D2SAdminExportUserActionLogs)
 			auditAdmin.POST("/audit/user-events/:id/verify-hash", controller.D2SAdminVerifyUserActionLog)
 			auditAdmin.GET("/audit/registrations/export.csv", controller.D2SAdminExportRegistrationRecords)
@@ -119,6 +120,8 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 		admin := v1.Group("/admin")
 		admin.Use(middleware.D2SAdminAuth(), middleware.D2SAdminRequireRole("super_admin"))
 		{
+			admin.GET("/audit/export-approvals", controller.D2SAdminListExportApprovals)
+			admin.PUT("/audit/export-approvals/:id", middleware.SessionCookieOriginGuard(), controller.D2SAdminReviewExportApproval)
 			admin.POST("/audit/retention/execute", controller.D2SAdminExecuteAuditRetention)
 			admin.GET("/licenses", controller.D2SAdminLicenses)
 			admin.GET("/orders", controller.D2SAdminOrders)

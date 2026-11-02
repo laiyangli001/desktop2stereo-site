@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	D2SMinimumAuditRetentionDays = 180
+	D2SMinimumAuditRetentionDays = 366
 	D2SMaximumAuditRetentionDays = 2_147_483_647
 
 	D2SActionRegister      = "REGISTER"
@@ -34,14 +34,13 @@ const (
 	D2SAdminRoleSuperAdmin      = "super_admin"
 	D2SAdminRoleAuditReader     = "audit_reader"
 	D2SAdminRoleAccountOperator = "account_operator"
-	D2SAdminRoleIdentityReview  = "identity_reviewer"
 	D2SAdminStatusActive        = "active"
 	D2SAdminStatusDisabled      = "disabled"
 )
 
 var (
 	ErrD2SAppendOnlyRecord         = errors.New("audit record is append-only")
-	ErrD2SAuditRetention           = errors.New("audit retention must be between 180 and 2147483647 days")
+	ErrD2SAuditRetention           = errors.New("audit retention must be between 366 and 2147483647 days")
 	ErrD2SAuditCleanupUnavailable  = errors.New("dedicated audit cleanup database is unavailable")
 	ErrD2SAuditCleanupFailed       = errors.New("audit cleanup transaction failed")
 	ErrD2SAuditCleanupFailureAudit = errors.New("audit cleanup failed and failure audit could not be persisted")
@@ -144,6 +143,27 @@ func (entry *D2SAdminOperationAudit) BeforeDelete(tx *gorm.DB) error {
 	}
 	return ErrD2SAppendOnlyRecord
 }
+
+type D2SAdminExportApproval struct {
+	ID               string `json:"id" gorm:"type:varchar(64);primaryKey"`
+	ExportType       string `json:"export_type" gorm:"type:varchar(32);not null;index"`
+	FilterHash       string `json:"filter_hash" gorm:"type:char(64);not null"`
+	FilterSnapshot   string `json:"filter_snapshot" gorm:"type:text;not null"`
+	RequestReason    string `json:"request_reason" gorm:"type:varchar(500);not null"`
+	RequestedByID    int    `json:"requested_by_id" gorm:"not null;index"`
+	RequestedByEmail string `json:"requested_by_email" gorm:"type:varchar(254);not null"`
+	RequestedAt      int64  `json:"requested_at" gorm:"type:bigint;not null;index"`
+	ExpiresAt        int64  `json:"expires_at" gorm:"type:bigint;not null;index"`
+	Status           string `json:"status" gorm:"type:varchar(16);not null;index"`
+	ReviewedByID     int    `json:"reviewed_by_id" gorm:"not null;default:0"`
+	ReviewedByEmail  string `json:"reviewed_by_email" gorm:"type:varchar(254)"`
+	ReviewedAt       int64  `json:"reviewed_at" gorm:"type:bigint;not null;default:0"`
+	ReviewReason     string `json:"review_reason" gorm:"type:varchar(500)"`
+	ConsumedByID     int    `json:"consumed_by_id" gorm:"not null;default:0"`
+	ConsumedAt       int64  `json:"consumed_at" gorm:"type:bigint;not null;default:0"`
+}
+
+func (D2SAdminExportApproval) TableName() string { return "d2s_admin_export_approvals" }
 
 type D2SUserSecurityControl struct {
 	UserID          int    `json:"user_id" gorm:"primaryKey"`
@@ -441,6 +461,24 @@ func d2sRetentionCountAndMin(tx *gorm.DB, table any, column string, cutoff int64
 	return count, first, nil
 }
 
+// d2sAuditRetentionCutoffs keeps every audit table at least 366 days and
+// user network logs through the longer of the requested period or six calendar months.
+func d2sAuditRetentionCutoffs(retentionDays int, now int64) (int64, int64) {
+	requestedCutoff := now - int64(retentionDays)*86400
+	nowTime := time.Unix(now, 0).UTC()
+	targetMonth := time.Date(nowTime.Year(), nowTime.Month()-6, 1, nowTime.Hour(), nowTime.Minute(), nowTime.Second(), 0, time.UTC)
+	targetMonthLastDay := targetMonth.AddDate(0, 1, -1).Day()
+	targetDay := nowTime.Day()
+	if targetDay > targetMonthLastDay {
+		targetDay = targetMonthLastDay
+	}
+	sixCalendarMonthsAgo := time.Date(targetMonth.Year(), targetMonth.Month(), targetDay, nowTime.Hour(), nowTime.Minute(), nowTime.Second(), 0, time.UTC).Unix()
+	if sixCalendarMonthsAgo < requestedCutoff {
+		return requestedCutoff, sixCalendarMonthsAgo
+	}
+	return requestedCutoff, requestedCutoff
+}
+
 // PruneD2SAuditData is explicit and is never scheduled by default.
 func PruneD2SAuditData(retentionDays int, operatorID int, operatorEmail, sourceIP string, now int64) (*D2SAuditRetentionRun, error) {
 	if retentionDays < D2SMinimumAuditRetentionDays || int64(retentionDays) > D2SMaximumAuditRetentionDays {
@@ -460,9 +498,15 @@ func PruneD2SAuditData(retentionDays int, operatorID int, operatorEmail, sourceI
 		return nil, ErrD2SAuditCleanupUnavailable
 	}
 
-	cutoff := now - int64(retentionDays)*86400
-	run := &D2SAuditRetentionRun{ID: uuid.NewString(), OperatorID: operatorID, OperatorEmail: NormalizeEmail(operatorEmail), SourceIP: truncateD2SText(sourceIP, 64), RetentionDays: retentionDays, CutoffAt: cutoff, CreatedAt: now, Result: "SUCCESS"}
+	requestedCutoff, userActionCutoff := d2sAuditRetentionCutoffs(retentionDays, now)
+	tableCutoffs := map[string]int64{
+		"d2s_user_action_logs":       userActionCutoff,
+		"d2s_registration_records":   requestedCutoff,
+		"d2s_admin_operation_audits": requestedCutoff,
+	}
+	run := &D2SAuditRetentionRun{ID: uuid.NewString(), OperatorID: operatorID, OperatorEmail: NormalizeEmail(operatorEmail), SourceIP: truncateD2SText(sourceIP, 64), RetentionDays: retentionDays, CutoffAt: userActionCutoff, CreatedAt: now, Result: "SUCCESS"}
 	counts := make(map[string]int64, 3)
+	tableRanges := make(map[string]map[string]int64, 3)
 	stage := "count_records"
 	err := cleanupDB.Transaction(func(tx *gorm.DB) error {
 		var earliest int64
@@ -470,29 +514,35 @@ func PruneD2SAuditData(retentionDays int, operatorID int, operatorEmail, sourceI
 			model  any
 			column string
 			name   string
+			cutoff int64
 		}{
-			{&D2SUserActionLog{}, "event_time", "d2s_user_action_logs"},
-			{&D2SRegistrationRecord{}, "register_time", "d2s_registration_records"},
-			{&D2SAdminOperationAudit{}, "operation_time", "d2s_admin_operation_audits"},
+			{&D2SUserActionLog{}, "event_time", "d2s_user_action_logs", userActionCutoff},
+			{&D2SRegistrationRecord{}, "register_time", "d2s_registration_records", requestedCutoff},
+			{&D2SAdminOperationAudit{}, "operation_time", "d2s_admin_operation_audits", requestedCutoff},
 		}
 		for _, table := range tables {
-			count, first, err := d2sRetentionCountAndMin(tx, table.model, table.column, cutoff)
+			count, first, err := d2sRetentionCountAndMin(tx, table.model, table.column, table.cutoff)
 			if err != nil {
 				return err
 			}
 			counts[table.name] = count
+			if first == 0 {
+				first = table.cutoff
+			}
+			tableRanges[table.name] = map[string]int64{"range_start": first, "range_end": table.cutoff, "record_count": count}
 			run.RecordCount += count
-			if first > 0 && (earliest == 0 || first < earliest) {
+			if count > 0 && (earliest == 0 || first < earliest) {
 				earliest = first
 			}
 		}
 		run.RangeStart = earliest
 		if run.RangeStart == 0 {
-			run.RangeStart = cutoff
+			run.RangeStart = run.CutoffAt
 		}
 		details := map[string]any{
-			"range_start": run.RangeStart, "range_end": cutoff, "record_count": run.RecordCount,
-			"table_counts": counts, "retention_days": retentionDays, "result": run.Result,
+			"range_start": run.RangeStart, "range_end": run.CutoffAt, "record_count": run.RecordCount,
+			"table_counts": counts, "table_cutoffs": tableCutoffs, "table_ranges": tableRanges,
+			"requested_cutoff_at": requestedCutoff, "retention_days": retentionDays, "result": run.Result,
 		}
 		auditJSON, err := common.Marshal(details)
 		if err != nil {
@@ -506,7 +556,7 @@ func PruneD2SAuditData(retentionDays int, operatorID int, operatorEmail, sourceI
 		for _, table := range tables {
 			stage = "delete_" + table.name
 			cleanupTx := tx.Session(&gorm.Session{NewDB: true}).Set("d2s_audit_retention_cleanup", true)
-			if err := cleanupTx.Where(table.column+" < ?", cutoff).Delete(table.model).Error; err != nil {
+			if err := cleanupTx.Where(table.column+" < ?", table.cutoff).Delete(table.model).Error; err != nil {
 				return err
 			}
 		}
@@ -517,12 +567,12 @@ func PruneD2SAuditData(retentionDays int, operatorID int, operatorEmail, sourceI
 		candidateCount := run.RecordCount
 		run.RecordCount = 0
 		if run.RangeStart == 0 {
-			run.RangeStart = cutoff
+			run.RangeStart = run.CutoffAt
 		}
 		failureDetails, marshalErr := common.Marshal(map[string]any{
-			"range_start": run.RangeStart, "range_end": cutoff, "record_count": run.RecordCount,
-			"candidate_record_count": candidateCount, "table_counts": counts,
-			"retention_days": retentionDays, "result": run.Result,
+			"range_start": run.RangeStart, "range_end": run.CutoffAt, "record_count": run.RecordCount,
+			"candidate_record_count": candidateCount, "table_counts": counts, "table_cutoffs": tableCutoffs, "table_ranges": tableRanges,
+			"requested_cutoff_at": requestedCutoff, "retention_days": retentionDays, "result": run.Result,
 			"failed_stage": stage, "failure_code": "CLEANUP_TRANSACTION_FAILED",
 		})
 		if marshalErr == nil {

@@ -2,10 +2,12 @@ package controller
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +34,7 @@ func setupD2SAdminExportTestDB(t *testing.T, name string, models ...any) *gorm.D
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
+	models = append(models, &model.D2SAdminExportApproval{})
 	require.NoError(t, db.AutoMigrate(models...))
 	return db
 }
@@ -45,6 +48,44 @@ func newD2SAdminExportTestContext(method, target string) (*gin.Context, *httptes
 	return context, recorder
 }
 
+func createAndApproveD2SExport(t *testing.T, exportType, exportTarget string) string {
+	t.Helper()
+	parsed, err := url.Parse(exportTarget)
+	require.NoError(t, err)
+	query := parsed.Query()
+	query.Set("export_type", exportType)
+	requestContext, requestRecorder := newD2SAdminExportTestContext(http.MethodPost, "/api/v1/admin/audit/export-approvals?"+query.Encode())
+	requestContext.Request = httptest.NewRequest(http.MethodPost, requestContext.Request.URL.String(), strings.NewReader(`{"reason":"Investigate documented compliance request R-123"}`))
+	requestContext.Request.Header.Set("Content-Type", "application/json")
+	D2SAdminRequestExportApproval(requestContext)
+	require.Equal(t, http.StatusCreated, requestRecorder.Code)
+	var response struct {
+		Data model.D2SAdminExportApproval `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(requestRecorder.Body.Bytes(), &response))
+	require.NotEmpty(t, response.Data.ID)
+
+	reviewContext, reviewRecorder := newD2SAdminExportTestContext(http.MethodPut, "/api/v1/admin/audit/export-approvals/"+response.Data.ID)
+	reviewContext.Params = gin.Params{{Key: "id", Value: response.Data.ID}}
+	reviewContext.Set("d2s_admin_id", 43)
+	reviewContext.Set("d2s_admin_email", "security@example.com")
+	reviewContext.Request = httptest.NewRequest(http.MethodPut, reviewContext.Request.URL.String(), strings.NewReader(`{"decision":"APPROVED","reason":"Approved under request R-123"}`))
+	reviewContext.Request.Header.Set("Content-Type", "application/json")
+	D2SAdminReviewExportApproval(reviewContext)
+	require.Equal(t, http.StatusOK, reviewRecorder.Code)
+	return response.Data.ID
+}
+
+func addD2SExportApprovalID(t *testing.T, target, approvalID string) string {
+	t.Helper()
+	parsed, err := url.Parse(target)
+	require.NoError(t, err)
+	query := parsed.Query()
+	query.Set("approval_id", approvalID)
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
+}
+
 func TestD2SAdminRegistrationExportAuditsCompletion(t *testing.T) {
 	db := setupD2SAdminExportTestDB(t, "d2s_admin_registration_export_test",
 		&model.D2SRegistrationRecord{}, &model.D2SAdminOperationAudit{},
@@ -55,7 +96,9 @@ func TestD2SAdminRegistrationExportAuditsCompletion(t *testing.T) {
 		RegisterUserAgent: "test-agent", EmailVerified: true, EmailVerifiedAt: 1_800_000_010,
 	}).Error)
 
-	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/audit/registrations/export")
+	target := "/api/v1/admin/audit/registrations/export"
+	approvalID := createAndApproveD2SExport(t, model.D2SExportApprovalTypeRegistrations, target)
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, addD2SExportApprovalID(t, target, approvalID))
 	D2SAdminExportRegistrationRecords(context)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -112,10 +155,9 @@ func TestD2SAdminExportUserActionLogsIncludesAllFieldsAndAudits(t *testing.T) {
 		RecordHash: strings.Repeat("c", 64),
 	}).Error)
 
-	context, recorder := newD2SAdminExportTestContext(
-		http.MethodGet,
-		"/api/v1/admin/audit/user-events/export.csv?start_time=1799999999&end_time=1800000001&user_id=7&email=%3Dformula%40example.com&source_ip=203.0.113.9&action_type=LOGIN",
-	)
+	target := "/api/v1/admin/audit/user-events/export.csv?start_time=1799999999&end_time=1800000001&user_id=7&email=%3Dformula%40example.com&source_ip=203.0.113.9&action_type=LOGIN"
+	approvalID := createAndApproveD2SExport(t, model.D2SExportApprovalTypeUserActionLogs, target)
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, addD2SExportApprovalID(t, target, approvalID))
 	D2SAdminExportUserActionLogs(context)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -162,10 +204,9 @@ func TestD2SAdminExportUserActionLogsPaginatesAllRows(t *testing.T) {
 	}
 	require.NoError(t, db.CreateInBatches(&entries, 100).Error)
 
-	context, recorder := newD2SAdminExportTestContext(
-		http.MethodGet,
-		"/api/v1/admin/audit/user-events/export.csv",
-	)
+	target := "/api/v1/admin/audit/user-events/export.csv"
+	approvalID := createAndApproveD2SExport(t, model.D2SExportApprovalTypeUserActionLogs, target)
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, addD2SExportApprovalID(t, target, approvalID))
 	D2SAdminExportUserActionLogs(context)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
@@ -190,7 +231,7 @@ func TestD2SAdminExportUserActionLogsPaginatesAllRows(t *testing.T) {
 
 func TestD2SAdminUserActionExportRequiresAuditBeforeStreaming(t *testing.T) {
 	db := setupD2SAdminExportTestDB(t, "d2s_admin_user_action_export_audit_required_test",
-		&model.D2SUserActionLog{},
+		&model.D2SUserActionLog{}, &model.D2SAdminExportApproval{},
 	)
 	userID := 17
 	require.NoError(t, db.Create(&model.D2SUserActionLog{
@@ -200,10 +241,19 @@ func TestD2SAdminUserActionExportRequiresAuditBeforeStreaming(t *testing.T) {
 		RecordHash: strings.Repeat("d", 64),
 	}).Error)
 
-	context, recorder := newD2SAdminExportTestContext(
-		http.MethodGet,
-		"/api/v1/admin/audit/user-events/export.csv",
-	)
+	filterSnapshot, filterHash, err := d2sExportApprovalFingerprint(model.D2SExportApprovalTypeUserActionLogs, map[string]any{
+		"start_time": int64(0), "end_time": int64(0), "user_id": (*int)(nil),
+		"email": "", "source_ip": "", "action_type": "",
+	})
+	require.NoError(t, err)
+	approval := model.D2SAdminExportApproval{
+		ID: "approval-audit-failure", ExportType: model.D2SExportApprovalTypeUserActionLogs,
+		FilterHash: filterHash, FilterSnapshot: filterSnapshot,
+		RequestReason: "Required audit failure fixture", RequestedByID: 42, RequestedByEmail: "admin@example.com",
+		RequestedAt: time.Now().UTC().Unix(), ExpiresAt: time.Now().UTC().Unix() + 1800, Status: model.D2SExportApprovalApproved,
+	}
+	require.NoError(t, db.Create(&approval).Error)
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/audit/user-events/export.csv?approval_id="+approval.ID)
 	D2SAdminExportUserActionLogs(context)
 
 	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -253,6 +303,54 @@ func TestD2SAdminReadFailuresRequireAuditableFailure(t *testing.T) {
 	}
 }
 
+func TestD2SAdminPendingExportApprovalsReturnsEmptyArray(t *testing.T) {
+	setupD2SAdminExportTestDB(t, "d2s_admin_export_approval_empty_list_test", &model.D2SAdminOperationAudit{})
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/audit/export-approvals")
+	context.Set("d2s_admin_role", model.D2SAdminRoleSuperAdmin)
+	D2SAdminListExportApprovals(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload struct {
+		Data struct {
+			Items []model.D2SAdminExportApproval `json:"items"`
+			Total int64                          `json:"total"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &payload))
+	assert.NotNil(t, payload.Data.Items)
+	assert.Empty(t, payload.Data.Items)
+	assert.Zero(t, payload.Data.Total)
+}
+
+func TestD2SAdminExportApprovalRejectsSelfReviewAndAuditsDenial(t *testing.T) {
+	db := setupD2SAdminExportTestDB(t, "d2s_admin_export_approval_self_review_test", &model.D2SAdminOperationAudit{})
+	requestContext, requestRecorder := newD2SAdminExportTestContext(http.MethodPost, "/api/v1/admin/audit/export-approvals?export_type=REGISTRATIONS")
+	requestContext.Request = httptest.NewRequest(http.MethodPost, requestContext.Request.URL.String(), strings.NewReader(`{"reason":"Review registration records for case R-42"}`))
+	requestContext.Request.Header.Set("Content-Type", "application/json")
+	D2SAdminRequestExportApproval(requestContext)
+	require.Equal(t, http.StatusCreated, requestRecorder.Code)
+	var response struct {
+		Data model.D2SAdminExportApproval `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(requestRecorder.Body.Bytes(), &response))
+	require.NotEmpty(t, response.Data.ID)
+
+	reviewContext, reviewRecorder := newD2SAdminExportTestContext(http.MethodPut, "/api/v1/admin/audit/export-approvals/"+response.Data.ID)
+	reviewContext.Params = gin.Params{{Key: "id", Value: response.Data.ID}}
+	reviewContext.Request = httptest.NewRequest(http.MethodPut, reviewContext.Request.URL.String(), strings.NewReader(`{"decision":"APPROVED","reason":"Self review"}`))
+	reviewContext.Request.Header.Set("Content-Type", "application/json")
+	D2SAdminReviewExportApproval(reviewContext)
+	assert.Equal(t, http.StatusForbidden, reviewRecorder.Code)
+	assert.Contains(t, reviewRecorder.Body.String(), "EXPORT_SELF_APPROVAL_FORBIDDEN")
+
+	approval, err := model.GetD2SAdminExportApproval(response.Data.ID)
+	require.NoError(t, err)
+	assert.Equal(t, model.D2SExportApprovalPending, approval.Status)
+	var audit model.D2SAdminOperationAudit
+	require.NoError(t, db.Where("operation_type = ? AND result = ?", "REVIEW_EXPORT_APPROVAL", "FAILURE").First(&audit).Error)
+	assert.Equal(t, response.Data.ID, audit.TargetResource)
+}
+
 func TestD2SAdminInvalidRegistrationQueryAppendsFailureAudit(t *testing.T) {
 	db := setupD2SAdminExportTestDB(t, "d2s_admin_invalid_registration_query_audit_test", &model.D2SAdminOperationAudit{})
 	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/audit/registrations?page=0")
@@ -269,7 +367,7 @@ func TestD2SAdminRetentionFailureRequiresAudit(t *testing.T) {
 	t.Run("audit storage unavailable", func(t *testing.T) {
 		setupD2SAdminExportTestDB(t, "d2s_admin_retention_audit_unavailable_test", &model.D2SUserActionLog{})
 		context, recorder := newD2SAdminExportTestContext(http.MethodPost, "/audit/retention/execute")
-		context.Request = httptest.NewRequest(http.MethodPost, "/audit/retention/execute", strings.NewReader(`{"retention_days":179}`))
+		context.Request = httptest.NewRequest(http.MethodPost, "/audit/retention/execute", strings.NewReader(`{"retention_days":365}`))
 		D2SAdminExecuteAuditRetention(context)
 
 		assert.Equal(t, http.StatusInternalServerError, recorder.Code)
@@ -279,7 +377,7 @@ func TestD2SAdminRetentionFailureRequiresAudit(t *testing.T) {
 	t.Run("rejected retention is recorded", func(t *testing.T) {
 		db := setupD2SAdminExportTestDB(t, "d2s_admin_retention_rejection_audit_test", &model.D2SAdminOperationAudit{})
 		context, recorder := newD2SAdminExportTestContext(http.MethodPost, "/audit/retention/execute")
-		context.Request = httptest.NewRequest(http.MethodPost, "/audit/retention/execute", strings.NewReader(`{"retention_days":179}`))
+		context.Request = httptest.NewRequest(http.MethodPost, "/audit/retention/execute", strings.NewReader(`{"retention_days":364}`))
 		D2SAdminExecuteAuditRetention(context)
 
 		assert.Equal(t, http.StatusBadRequest, recorder.Code)

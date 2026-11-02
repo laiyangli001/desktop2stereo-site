@@ -42,6 +42,15 @@ access token。
   `account_login_blocked`，并消费本次已批准设备码，不能在之后解锁时复用旧码。
 - `POST /api/v1/device/cancel`：取消尚未批准的设备码。
 
+## 投诉、建议与服务咨询
+
+- `GET /api/v1/support/config`：公开返回企业微信客服入口链接。默认链接为 `https://work.weixin.qq.com/ca/cawcde40faa1d08998`，可用 `D2S_ENTERPRISE_WECHAT_URL` 覆盖；服务端只返回 HTTPS `work.weixin.qq.com/ca/` 链接，并拒绝非指定主机/路径、端口、URL 凭据、查询参数和片段。
+- `POST /api/v1/support/tickets`：要求已注册并登录的前台账户，按部署的关键请求限流。字段为 `category`（`PAYMENT`、`ORDER_LICENSE`、`DOWNLOAD`、`SOFTWARE`、`ACCOUNT`、`OTHER`）、`contact_email`、可选 `order_id`、`subject`、`message`。成功返回 `ticket_id`；服务端从认证上下文绑定账户 ID，不接受客户端指定账户。不得提交密码、验证码或完整支付卡号。
+- `GET /api/v1/support/my-tickets`：要求前台登录，只返回当前服务端账户 ID 绑定的工单及用户可见字段，包含后台回复，不包含联系邮箱、来源 IP、User-Agent 或后台经办人信息；不能通过邮箱参数查询其他账户工单。
+- 后台 `GET /api/v1/admin/support/tickets` 与 `PUT /api/v1/admin/support/tickets/:id` 仅对独立 D2S 后台的 `account_operator` 及更高角色开放，支持分页查看、更新状态及登记回复。读取、修改均写入管理员操作审计；修改和成功审计在同一事务提交。
+
+网站右侧浮动“投诉与咨询”按钮打开联系面板，包含企业微信客服链接和站内留言入口。访客可直接使用企业微信入口；选择站内留言时必须先登录。企业微信消息由客服系统接收，站内表单创建的留言关联登录账户并可在“我的工单”和网站后台查看。
+
 ## 授权
 
 - `GET /api/v1/license/list`
@@ -136,3 +145,5 @@ PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 `orphan_payment_event`、`payment_order_mismatch` 和 `pending_expired`，仅报告异常，不自动改账。
 
 后台独立认证、用户行为日志、注册快照、CSV 导出、哈希校验、购买留痕、账户紧急限制、批量处置、独立管理员审计与受控留存的 API 和字段契约，统一见 [`d2s-admin-management-spec.md`](d2s-admin-management-spec.md)。本 API 文档中列出的管理端点均须由该规格定义的独立后台身份和角色授权保护。
+
+日志和注册信息 CSV 导出须先通过独立管理员双人审批：申请人提交用途和筛选范围，另一名超级管理员批准后，申请人在 30 分钟内使用一次性审批编号下载。审批编号绑定导出类型及精确筛选条件；下载时任何范围变化、审批人自批、过期或重复使用均会被服务端拒绝。审批申请、决定、消费及最终导出结果均写入管理员审计。

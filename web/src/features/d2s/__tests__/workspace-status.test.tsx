@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { D2SWorkspace, D2SWalletSection } from '..'
@@ -25,6 +26,22 @@ const apiMocks = vi.hoisted(() => ({
 }))
 
 vi.mock('../api', () => apiMocks)
+
+vi.mock('@tanstack/react-router', () => ({
+  Link: ({
+    children,
+    to,
+    ...props
+  }: {
+    children: ReactNode
+    to: string
+    className?: string
+  }) => (
+    <a href={to} {...props}>
+      {children}
+    </a>
+  ),
+}))
 
 describe('D2SWorkspace data status', () => {
   it('announces unavailable data instead of showing an empty account state', async () => {

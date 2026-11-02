@@ -1,10 +1,14 @@
 # Desktop2Stereo 后台账户审计与治理规格
 
-版本：1.0
+版本：1.4
 
-状态：接口与实现规格；独立管理员后端和 `/d2s-admin-console` 管理页面已落地，前端 `tsgo -b` 与 Rsbuild 生产构建已通过；MySQL 8.4.9/PostgreSQL 15.14 隔离库权限脚本执行通过，应用账号 INSERT/SELECT 成功，UPDATE/DELETE/TRUNCATE 被拒绝；PostgreSQL 单列 UPDATE 注入后由权限脚本撤销，清理权限范围也经断言。对账专用机器令牌和每次对账审计已在本地实现并通过 Go 测试，尚未部署生产；生产部署仓库与本地基线不同且工作区有既有改动，因此定时器保持禁用。生产权限与迁移及端到端验收仍待完成，具体状态以 `docs/01-cross-platform-licensing-server-implementation-plan.md` 为准。
+状态：接口与实现规格；独立管理员后端和 `/d2s-admin-console` 管理页面已落地，前端 `tsgo -b` 与 Rsbuild 生产构建已通过；MySQL 8.4.9/PostgreSQL 15.14 隔离库权限脚本执行通过，应用账号 INSERT/SELECT 成功，UPDATE/DELETE/TRUNCATE 被拒绝；PostgreSQL 单列 UPDATE 注入后由权限脚本撤销，清理权限范围也经断言。2026-11-02 又在隔离 MySQL 8.4.13/PostgreSQL 17.11 上通过最新工作树完整 `go test -p 1 ./... -count=1`、重复 `AutoMigrate`、工单数据库矩阵及关键并发矩阵。另以最近已发布版本 `26f524d11424a2866a8608a4883a63dd1f7fe16d` 构建两种数据库的代表性旧 schema，并完成旧版迁移、审计独立迁移和当前 `model.InitDB()` 的重复升级；用户、授权和订单数据保留，订单购买时间回填、审计/工单新表、订单快照列和关键唯一索引均通过检查。该夹具不是生产数据备份。对账专用机器令牌和每次对账审计已在本地实现并通过 Go 测试，尚未部署生产；生产部署仓库与本地基线不同且工作区有既有改动，因此定时器保持禁用。生产权限和端到端验收仍待完成，具体状态以 `docs/01-cross-platform-licensing-server-implementation-plan.md` 为准。
 
-本规格面向仅用于程序购买、账户登录和授权管理的服务。网站不提供公开内容发布、评论、即时通讯或群组功能；账户以邮箱识别，面向包括没有中国手机号或身份证件的全球用户。注册不强制实名，境外证件字段仅在触发式核验时使用。
+2026-11-02 扩展隔离数据库矩阵，实测 MySQL 8.4.13 与 PostgreSQL 17.11 上单账户紧急锁定/解除、登录/购买限制读取及对应操作审计记录；矩阵、模型包全套测试、`go vet` 和 `go build` 均通过，测试实例已停止。该结果不替代生产账号权限及生产环境验收。
+
+2026-11-03 增加 CSV 导出双人审批与离线管理员开通命令。全量 Go 测试、审批/导出专项回归、`go vet`、`go build`、前端 Vitest 76 文件/476 项、`tsgo -b` 和 Rsbuild 构建通过。审批前端拒绝同邮箱管理员执行自批操作，服务端仍按管理员 ID 校验；精确筛选范围、30 分钟期限、一次性消费和审批 ID 审计关联已覆盖。本轮没有配置 MySQL/PostgreSQL DSN，也未执行生产数据库或生产账号验收。
+
+本规格面向仅用于程序介绍、购买、下载、账户登录和授权管理的服务。网站不提供用户公开内容发布、评论、即时通讯或群组功能；账户以邮箱识别，面向全球用户。邮箱验证码只证明邮箱控制权，不证明真实身份。当前不收集身份证件或声明已完成实名核验。按现行《网络安全法》第二十六条及《互联网用户账号信息管理规定》第九条，已知服务功能未显示要求所有购买/下载账户一律证件实名；但该规定第二十三条将应用软件下载列入互联网信息服务提供者定义，且另有适用于下载服务的安全管理义务，因此这不是确定豁免结论。2026 年《互联网信息服务管理办法》修订草案中的广泛实名条款仍为征求意见稿。提交自评估前须核实运营主体、许可/备案类别并向属地主管部门或合格法律顾问确认；详细条文、范围限制及官方链接见 `SEC-001-网站安全管理制度.md`。
 
 ## 1. 数据模型
 
@@ -41,24 +45,28 @@
 
 ### 1.3 管理员操作审计 `d2s_admin_operation_audits`
 
-字段：`id`、`operator_id`、`operator_email`、`operation_type`、`operation_time`、`target_resource`、`source_ip`、`result`、`details_json`。至少记录管理员登录、查看个人行为日志、两类导出、修改用户、证件核验、账户紧急开关、批量操作、清理和权限变更。操作失败和拒绝也必须记录；`details_json` 仅保存必要参数、时间范围、影响数量和失败码，不存密码、验证码、支付凭据或证件明文。
+字段：`id`、`operator_id`、`operator_email`、`operation_type`、`operation_time`、`target_resource`、`source_ip`、`result`、`details_json`。至少记录管理员登录、查看个人行为日志、两类导出、修改用户、账户紧急开关、批量操作、清理和权限变更。操作失败和拒绝也必须记录；`details_json` 仅保存必要参数、时间范围、影响数量和失败码，不存密码、验证码或支付凭据。
 
 ### 1.4 购买留痕
 
 复用并扩展 `d2s_orders`，不得产生第二套可与支付账本分叉的订单来源。补充订单时邮箱快照、购买/完成时间、来源 IP 和支付账户标识哈希。既有字段映射：`order_id=id`、`product_id=product`、`amount=amount_minor`、`currency=currency`、`payment_method=provider`、`result_status=status`。支付标识只存脱敏显示值或带密钥的摘要；不保存完整银行卡号、PayPal 邮箱或其他支付凭据。
 
-### 1.5 可选身份核验与账户控制
+### 1.5 身份信息边界与账户控制
 
-`d2s_identity_verifications`：`user_id`、`id_document_type`（`PASSPORT`/`FOREIGN_PERMANENT_RESIDENT_ID`/`OTHER`）、`id_document_number_hash`、`id_document_number_hash_version`、`id_document_country`、`id_verification_status`（`NOT_REQUIRED`/`PENDING`/`VERIFIED`/`REJECTED`）、`id_verified_at`、`id_verified_by`。注册时不要求填写；证件号码不存明文。号码摘要采用 `d2s-identity-document-v1` 域分离的 HMAC-SHA-256，独立密钥由 `D2S_ID_DOCUMENT_HMAC_KEY` 提供且为 32 字节随机值（64 位十六进制）；密钥缺失或无效时拒绝写入。旧版未标记算法版本的普通 SHA-256 摘要不得用于 `VERIFIED` 状态；后台读取时会在审计事务内将旧记录降为 `PENDING` 并清除旧摘要，需重新提交号码后才能核验。提交、审核和状态变更均写管理员审计。
+`D2SIdentityVerification` 类型仅为兼容既有数据库保留，不纳入新库自动迁移；后台身份录入页面与读取/写入 API 未注册路由，不在当前产品流程中收集、审核、导出或使用证件号码。既有 `d2s_identity_verifications` 表及历史记录不会因本次调整而删除；若存在历史数据，须先按合法目的、访问权限和保存期限单独盘点。重新启用前须重新评估适用义务、合法性基础、必要性、告知方式和安全控制。邮箱验证不得映射为 `VERIFIED`。
 
 `d2s_user_security_controls`：`user_id`、`login_blocked`、`purchase_blocked`、`reason`、`updated_at`、`updated_by`。购买限制在授权订单、Checkout 和购买权益发放入口服务端生效。强制下线必须撤销所有现存会话或递增用户认证版本，使已签发凭据失效。
+
+### 1.6 服务投诉与咨询工单 `d2s_support_tickets`
+
+登录用户通过 `/support` 表单提交付款未到账、订单/授权、下载、软件使用、账户及其他问题。记录工单 ID、必填账户 ID、分类、联系邮箱、可选订单号、标题、用户描述、来源 IP、User-Agent、状态、后台对用户的回复（`admin_reply`）、创建/更新时间及处理管理员。前端路由和服务端提交 API 均要求已注册并登录；访客不能创建工单。`GET /api/v1/support/my-tickets` 按服务端会话中的 user ID 查询，返回工单状态和后台回复，不返回联系邮箱、IP、User-Agent 或经办管理员身份；当前没有独立内部备注字段，管理员填写的回复会展示给该工单提交者。页面提示不要提交密码、验证码或完整支付卡信息。工单不属于行为日志表，不参与日志清理；处理完成后按个人信息最短必要期限评估后续保存或处置，不作无限期保留承诺。
 
 ## 2. 追加写入、权限和留存
 
 - 应用运行身份对审计表只授予 INSERT/SELECT；不得授予 UPDATE、DELETE、TRUNCATE 或列级 UPDATE。PostgreSQL 权限脚本按有效权限检查表级/列级授权，并验证清理身份不持有范围外写权限。应用模型和路由不得提供日志编辑、删除或清空 API。
 - PostgreSQL/MySQL 审计表建表与升级使用独立 `D2S_AUDIT_MIGRATION_DSN`，目标须与 `SQL_DSN` 的数据库和 schema 一致，再执行 `go run ./cmd/d2s-audit-migrate`；主服务运行时不迁移这四张审计表，只检查其存在及留存审计必需的 `result` 字段；字段缺失时启动失败并提示先运行独立迁移。SQLite 开发模式继续由主服务自动迁移。清理必须通过独立的 `D2S_AUDIT_CLEANUP_DSN` 连接执行；未配置时接口拒绝清理。维护身份只授予三张留存表的 SELECT/DELETE 和 `d2s_audit_retention_runs` 的 SELECT/INSERT。清理成功时审计记录与限定范围删除在同一事务提交；任一步失败时该事务回滚，随后用新事务追加 `result=FAILURE` 记录、失败阶段、范围、实际删除数量及候选记录统计数。若清理审计写入失败，管理 API 会尝试在主应用数据库追加失败管理审计；只有该审计也失败时才返回 `AUDIT_WRITE_FAILED`。SQLite 开发模式不具备表级权限隔离。
-- 默认不自动清理。若启用清理，最短保留天数在代码中固定为 180；拒绝任何小于 180 的请求或配置。最大值限制为有符号数据库整数可表示的天数，避免秒数换算溢出。清理不得触及未到期数据；清理审计记录不得由该清理任务删除。后台不提供一键清空或删除日志表入口。
-- 行为日志、注册快照、后台操作审计和清理审计默认留存至少 180 天。不能将 ClickHouse TTL 或通用日志配置直接套用到这些表。
+- 默认不自动清理。若启用清理，行为日志、注册快照和管理员操作审计的最短保留天数在服务端硬编码为 366，拒绝任何小于 366 的请求。用户行为日志还保留六个日历月基线保护逻辑。最大值限制为有符号数据库整数可表示的天数，避免秒数换算溢出。清理不得触及未到期数据；清理审计记录不得由该清理任务删除。后台不提供一键清空或删除日志表入口。
+- 行为日志、注册快照和管理员操作审计默认至少留存 366 天；清理审计记录不得由该任务删除。该策略仅适用于本规格列明的安全审计数据，工单正文和支付数据按各自目的评估，不因本策略自动延长。每次清理审计须分别记录各表截止时间、时间范围和删除数量。不能将 ClickHouse TTL 或通用日志配置直接套用到这些表。
 - MySQL/PostgreSQL 使用专用数据库身份和表授权落实运行账户权限。SQLite 没有表级用户/权限系统；SQLite 环境只能依靠独立文件访问控制、追加写代码路径及可选防变更触发器，不能声称满足数据库用户级 INSERT/SELECT 授权。
 - 定期将审计数据复制到独立只追加或对象锁定的备份介质；备份校验和哈希检查结果纳入运维记录。
 
@@ -71,7 +79,9 @@
 
 ## 4. 独立后台身份和角色
 
-管理员账户、密码验证、会话、失败计数及角色独立于前台 `users` 登录；前台用户即使拥有产品管理员标记，也不能通过后台专用登录接口认证。首个超级管理员只能经一次性 CLI/受控部署初始化创建，不提供公开注册接口。
+管理员账户、密码验证、会话、失败计数及角色独立于前台 `users` 登录；前台用户即使拥有产品管理员标记，也不能通过后台专用登录接口认证。首个超级管理员只能经一次性受控部署初始化创建，不提供公开注册接口。后续账号只能使用 `go run ./cmd/d2s-admin-provision` 离线建立；该命令要求现有启用中的超级管理员邮箱和密码验证，将账号创建和 `CREATE_ADMIN_ACCOUNT` 审计放入同一事务。需双人审批时，至少配置两名各自独立的超级管理员。
+
+命令从环境变量读取 `SQL_DSN`、`D2S_ADMIN_PROVISION_OPERATOR_EMAIL`、`D2S_ADMIN_PROVISION_OPERATOR_PASSWORD`、`D2S_ADMIN_PROVISION_EMAIL`、`D2S_ADMIN_PROVISION_PASSWORD` 和可选 `D2S_ADMIN_PROVISION_ROLE`（默认 `audit_reader`）。密码至少 12 个字符并满足至少三类字符。执行后应在同一 shell 立即清除这组变量；不得将真实凭据写入仓库、脚本、命令行参数或日志。
 
 后台密码使用现有安全密码哈希机制；新密码至少 12 个字符并执行强度校验。连续 5 次失败登录在 15 分钟窗口内触发至少 15 分钟锁定；窗口过期、锁定结束或成功登录后清零失败计数。后台登录、失败、锁定和解锁均写管理员审计。会话使用安全 HttpOnly Cookie 或等效服务端可撤销凭据，退出和紧急撤销立即失效。
 
@@ -80,8 +90,9 @@
 - `super_admin`：全部管理权限，包括角色管理、紧急措施和受控清理发起。
 - `audit_reader`：查询全部审计字段、校验哈希、导出行为日志和注册快照。
 - `account_operator`：用户资料和账户限制操作。
-- `identity_reviewer`：触发式身份核验的读取与审核。
 - 非授权角色默认拒绝。授权查看日志的角色看到全部字段；不得因为不是超级管理员而隐去本规格要求的列。
+
+导出审批是可变的工作流状态，保存在 `d2s_admin_export_approvals`；该表不是日志/注册/管理员审计表。审批状态只允许按条件从 `PENDING` 转为 `APPROVED`/`REJECTED`，批准后按条件一次性转为 `CONSUMED`，到期申请在读取/操作时视为过期。所有状态转移必须与对应的只追加管理员审计事务原子提交。
 
 所有管理页面/API 默认要求独立管理员身份。敏感读操作（日志查看、导出）和所有写操作均记录操作者、时间、来源 IP、目标和结果。接口需按角色进行服务端授权，前端隐藏入口不能替代后端校验。
 
@@ -95,20 +106,30 @@
 | `POST /api/v1/admin/auth/logout` | 管理员 | 撤销当前管理会话 |
 | `GET /api/v1/admin/audit/user-events` | `audit_reader` | 按 `start_time`、`end_time`、`user_id`、`email`、`source_ip`、`action_type` 筛选；返回全部日志字段和分页信息 |
 | `POST /api/v1/admin/audit/user-events/:id/verify-hash` | `audit_reader` | 重算哈希，返回 `consistent` 布尔值和日志 ID |
-| `GET /api/v1/admin/audit/user-events/export.csv` | `audit_reader` | 按同等筛选导出全部日志字段，UTF-8 CSV，文件名 `access_log_YYYYMMDD_HHMMSS.csv` |
+| `GET /api/v1/admin/audit/user-events/export.csv` | `audit_reader` | 必须带有效的一次性 `approval_id`，按审批绑定的筛选导出全部日志字段，UTF-8 CSV，文件名 `access_log_YYYYMMDD_HHMMSS.csv` |
 | `GET /api/v1/admin/audit/registrations` | `audit_reader` | 分页查询注册快照和时间过滤 |
-| `GET /api/v1/admin/audit/registrations/export.csv` | `audit_reader` | 按时间范围导出邮箱、注册 IP/时间、邮箱验证状态/时间；UTF-8 CSV |
+| `GET /api/v1/admin/audit/registrations/export.csv` | `audit_reader` | 必须带有效的一次性 `approval_id`，按审批绑定的时间范围导出邮箱、注册 IP/时间、邮箱验证状态/时间；UTF-8 CSV |
+| `POST /api/v1/admin/audit/export-approvals?export_type=...&<filters>` | `audit_reader` 或更高 | 以 `reason` 说明用途；申请记录精确规范化的导出类型及筛选快照，30 分钟失效 |
+| `GET /api/v1/admin/audit/export-approvals/:id` | `audit_reader` 或更高 | 仅申请人或超级管理员可查看审批状态 |
+| `GET /api/v1/admin/audit/export-approvals` | `super_admin` | 分页列出待审批且未过期申请 |
+| `PUT /api/v1/admin/audit/export-approvals/:id` | `super_admin` | `decision=APPROVED|REJECTED` 且必须填写审查理由；申请人不得自批，审批仅可决定一次 |
 
 两类 CSV 导出在设置响应头和发送内容前，必须追加 `STARTED` 审计记录，并包含筛选范围与预估记录数；完成 CSV 写入和 flush 后再追加 `SUCCESS`。标题、数据写入或 flush 失败时追加 `FAILURE`。如果只存在 `STARTED` 而没有终态记录，应按未完成导出处理；审计写入 `STARTED` 失败时不得发送 CSV 内容。
 
+两类导出均须先完成双人审批。审批哈希绑定导出类型及规范化后的全部筛选条件，下载时重新计算并精确比较；过滤范围变化、申请过期、未批准、已消费或申请人与下载人不一致时拒绝导出。审批在下载前以事务原子消费，消费审计先落库；导出 `STARTED` 记录包含审批 ID，以便将申请、决定、消费和导出终态审计串联。前端只在审批状态为 `APPROVED` 时显示下载操作，服务端仍独立强制校验。
+
 | `GET /api/v1/admin/purchases` | `account_operator` 或更高 | 分页查询购买记录；支付标识仅显示脱敏值/摘要 |
+| `GET /api/v1/admin/support/tickets` | `account_operator` 或更高 | 按状态筛选并分页查看投诉与服务咨询；访问写入管理员审计 |
+| `PUT /api/v1/admin/support/tickets/:id` | `account_operator` 或更高 | 更新处理状态及内部回复；状态变更和管理员审计在同一数据库事务提交 |
 | `PUT /api/v1/admin/users/:id/emergency` | `account_operator` 或更高 | 设置 `login_blocked`、`purchase_blocked`、`force_logout`；强制下线先记 `STARTED`，完成所有会话撤销、认证版本提升及在线租约释放后追加 `SUCCESS`，失败追加阶段性 `FAILURE` |
 | `POST /api/v1/admin/users/batch/preview` | `account_operator` 或更高 | 按注册 IP CIDR、邮箱域名、注册时间窗口筛选，返回命中数及短时有效预览 ID |
 | `POST /api/v1/admin/users/batch/apply` | `account_operator` 或更高 | 要求预览 ID、明确二次确认和操作项；服务端重算影响集并审计筛选参数、数量和结果 |
-| `GET /api/v1/admin/users/:id/identity` | `identity_reviewer` 或更高 | 读取可选核验状态及哈希，不返回证件明文 |
-| `PUT /api/v1/admin/users/:id/identity` | `identity_reviewer` 或更高 | 创建/审核触发式核验；身份状态和成功审计在同一事务提交，证件号仅保存带独立密钥的域分离 HMAC-SHA-256 摘要 |
-| `POST /api/v1/admin/audit/retention/execute` | `super_admin` | 仅可调用受控清理；请求保留期小于 180 天时拒绝；成功清理提交范围与数量审计，失败清理在事务回滚后追加 `FAILURE` 记录；两类审计都无法写入时返回 `AUDIT_WRITE_FAILED` |
+| `POST /api/v1/admin/audit/retention/execute` | `super_admin` | 仅可调用受控清理；请求保留期小于 366 天时拒绝；用户行为日志、注册快照和管理员操作审计均按至少 366 天清理下限执行；清理审计逐表记录截止时间、范围和数量；事务失败后追加 `FAILURE` 记录；两类审计都无法写入时返回 `AUDIT_WRITE_FAILED` |
 | `GET /api/v1/admin/reconciliation` | `super_admin` 后台会话，或专用机器令牌 | 汇总指定 UTC 时间窗内支付与订单差异，不修改账本；每次成功或失败均追加 `RUN_RECONCILIATION` 审计，记录时间窗、结果及差异数 |
+
+用户端另提供 `GET /api/v1/support/config`（公开，只返回 HTTPS `work.weixin.qq.com/ca/` 链接；拒绝其他主机/路径、端口、凭据、查询和片段）、`POST /api/v1/support/tickets`（前台用户登录、限流并限制请求体）和 `GET /api/v1/support/my-tickets`（前台用户登录）。企业微信联系窗口默认指向运营方提供的 `https://work.weixin.qq.com/ca/cawcde40faa1d08998`，可由 `D2S_ENTERPRISE_WECHAT_URL` 覆盖。网站右侧浮动联系按钮同时提供企业微信客服和站内投诉留言入口；企业微信联系入口对访客可见，站内表单必须登录后提交。
+
+`GET /api/v1/support/my-tickets` 要求前台账户登录，分页列出该账户提交的工单。表单 API 使用强制前台会话认证，并从服务端认证上下文写入不可由客户端覆盖的 user ID。账户列表完全依据服务端账户 ID 隔离，不按用户提交的联系邮箱授权。
 
 机器令牌只用于 `GET /api/v1/admin/reconciliation`，从 `D2S_RECONCILIATION_TOKEN` 读取 32 字节随机值的 64 位十六进制编码，并以恒定时间比较。令牌需分别安全注入应用和 root-only systemd 环境文件；其它后台 API 仍只接受管理员 HttpOnly 会话。未配置或格式错误时对账接口返回服务不可用，令牌不能复用管理员密码。`pending_expired` 统计所有在报告截止时间前已到期、仍处于 pending 的订单，不受创建时间窗口限制；该差异会在订单进入终态前持续出现在报告中。订单与支付事件从同一只读事务快照读取，MySQL/PostgreSQL 显式请求 `REPEATABLE READ`；对账接口不自动更改订单状态。
 
@@ -116,7 +137,7 @@
 
 导出审计必须写入 `EXPORT_LOG`，记录过滤器摘要、行数、文件名、开始/结束时间和结果。日志查看写 `VIEW_USER_LOG` 审计。CSV 使用标准 quoting；导出时对以 `=`、`+`、`-`、`@` 开头的用户可控字段添加单引号防公式注入，数据库原值保持不变。
 
-独立管理页面使用路由 `/d2s-admin-console`，通过后台 HttpOnly 会话访问上述 API。界面包含管理员登录、全字段日志查询和 CSV 导出、哈希校验、注册快照查询/导出、购买记录、账户限制和批量预览/确认、身份核验及 180 天以上的受控清理入口。页面权限仅用于显示入口，服务端角色检查仍为最终授权边界。
+独立管理页面使用路由 `/d2s-admin-console`，通过后台 HttpOnly 会话访问上述 API。界面包含管理员登录、全字段日志查询和 CSV 导出、哈希校验、注册快照查询/导出、购买记录、账户限制和批量预览/确认，以及最低 366 天的受控清理入口。页面不提供证件信息录入或身份核验功能。页面权限仅用于显示入口，服务端角色检查仍为最终授权边界。
 
 ## 6. 购买关联与服务端执行点
 
@@ -128,4 +149,4 @@
 
 ## 7. 实现验收门槛
 
-实施计划逐条标记完成状态。至少验证：新库创建、最新版代表库升级、重复迁移、SQLite/MySQL/PostgreSQL 兼容；追加写和数据库权限；180 天边界和先审计后清理；登录/注册/购买门禁及限速；管理员独立会话与角色拒绝；查询分页、全字段 CSV、哈希不一致检测；单用户和批量紧急限制在服务端生效；订单对用户快照的关联；管理员操作审计全链路。未完成的数据库、环境凭据或端到端验收必须明确列为未验证，不得标记生产就绪。
+实施计划逐条标记完成状态。至少验证：新库创建、最新版代表库升级、重复迁移、SQLite/MySQL/PostgreSQL 兼容；追加写和数据库权限；行为日志、注册快照及管理员审计的 366 天边界和先审计后清理；登录/注册/购买门禁及限速；管理员独立会话与角色拒绝；查询分页、全字段 CSV、哈希不一致检测；单用户和批量紧急限制在服务端生效；订单对用户快照的关联；登录用户工单创建、账户隔离、后台角色控制、状态变更与审计原子性；管理员操作审计全链路。未完成的数据库、环境凭据或端到端验收必须明确列为未验证，不得标记生产就绪。

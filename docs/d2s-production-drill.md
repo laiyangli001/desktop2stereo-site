@@ -22,9 +22,18 @@ $releaseSha = Read-Host "请输入待验收的 40 位 Git 提交 SHA"
 `-ExpectedVersion` 会将 `/api/status` 返回的运行版本与本次发布 SHA 做区分大小写的精确比较；
 版本不匹配、响应 JSON 无效或同时指定 `-SkipHttp` 时检查失败。部署后必须传入目标 SHA，避免旧实例健康但新版本尚未生效时被判定为通过。
 
+本地可用 `.\scripts\d2s-production-readiness-selftest.ps1` 运行无网络 mock 回归，覆盖有效企业微信链接、错误主机/路径、非默认端口和显式 `:443`、查询参数、用户信息、片段、客服 API 缺失、隐私政策已配置和空隐私政策拒绝。它不替代部署后的真实端点核验，也不审查隐私政策文本是否满足法律要求。
+
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty
 `TRUSTED_PROXIES` configuration before the HTTP checks are considered sufficient.
+HTTP readiness also requires `/api/v1/support/config` to return a valid HTTPS
+Enterprise WeChat contact URL on `work.weixin.qq.com/ca/`, and `/api/privacy-policy`
+to return non-empty public privacy-policy content. The script checks presence, not
+legal adequacy; the operator must configure and review the policy text, including
+support-ticket data categories, purposes, access, and retention. These checks do not
+replace authenticated ticket submission, account-isolation, or administrator workflow
+acceptance.
 It also validates positive integer offline-extension prices and Base64 private-key
 material, requires 32-character session and payment-bridge secrets, rejects
 wildcard or whole-address-space trusted-proxy entries, and requires the device and
@@ -89,7 +98,19 @@ curl -H 'Authorization: Bearer <D2S_RECONCILIATION_TOKEN>' \
 （`0600`），报告写入 `/opt/desktop2stereo-site/reconciliation-reports/`；同一天重复执行不会覆盖
 原报告。差异会使 service 失败，必须通过 systemd/journal 的服务器监控告警并人工核对渠道结算文件。
 
-## 3. 密钥轮换
+## 3. 后台管理员与导出双人审批
+
+1. 通过受控部署初始化首位超级管理员，再由其使用 `cmd/d2s-admin-provision` 创建第二名独立超级管理员；确认创建审计记录操作者和目标账号。两名管理员分别登录，核实会话身份不同。
+2. 以申请管理员提交用户日志和注册信息导出申请，填写用途并保存审批 ID、导出类型和筛选快照。
+3. 使用申请账号尝试审批自己的申请，预期服务端拒绝并记录失败审计；审批状态不得变成已批准。
+4. 由另一名超级管理员分别批准和拒绝测试申请，核对操作者、时间、意见、来源 IP 及审批范围均已审计。
+5. 对获批申请测试原筛选范围成功、任一筛选条件变化被拒、30 分钟到期被拒、第二次使用被拒，以及其他管理员尝试使用被拒。
+6. 以审批 ID 核对 `REQUEST_EXPORT_APPROVAL`、`APPROVE_EXPORT`/`REJECT_EXPORT`、`USE_EXPORT_APPROVAL`、`EXPORT_LOG`/`EXPORT_REGISTRATION` 审计链；确认 CSV 开始审计失败时不返回文件内容。
+7. 使用 `audit_reader` 调用审批列表和决定 API 应被服务端拒绝；未经审批直接调用 CSV 导出也应被拒绝。
+
+任何一项失败都不得启用生产导出或在自评估中标记该项已落实。
+
+## 4. 密钥轮换
 
 1. 发布包含新公钥的客户端版本，记录客户端版本和新 `key_id`。
 2. 切换服务端 `D2S_LICENSE_KEY_ID` 与私钥，滚动重启两个实例。
@@ -97,7 +118,7 @@ curl -H 'Authorization: Bearer <D2S_RECONCILIATION_TOKEN>' \
 4. 等待旧离线凭证全部过期后才将旧公钥标记 `retired`。
 5. 确认私钥未进入日志、镜像、数据库或客户端包。
 
-## 4. 备份恢复与回滚
+## 5. 备份恢复与回滚
 
 1. 对 PostgreSQL 执行加密备份并复制到不同故障域 COS。
 2. 在隔离恢复库执行恢复，核对用户、订单、支付事件、余额流水、授权事件和签名记录的
@@ -119,7 +140,7 @@ deploy/desktop2stereo-db-restore-verify-docker.sh \
 仓库、备份文件或日志。该脚本只证明备份可在隔离库恢复，仍需记录真实 COS 跨故障域复制和
 恢复库数据核对结果。
 
-## 5. Windows/Linux/macOS 授权端到端验收
+## 6. Windows/Linux/macOS 授权端到端验收
 
 在生产等价环境中使用每个平台独立的发布包和预置隔离账号/许可证；记录客户端发布 SHA、API
 版本、操作系统版本、时间和验收人。不要在真实用户许可证上测试永久绑定或人工解绑。
@@ -136,7 +157,7 @@ deploy/desktop2stereo-db-restore-verify-docker.sh \
 证明同一账号第二次申请或审批被拒绝。不得保存密码、访问令牌、刷新令牌、设备原始标识、私钥或支付 Secret。
 三个平台的证据齐全前，S5 保持 `in_progress`。
 
-## 6. 监控和告警
+## 7. 监控和告警
 
 演练中人为触发一次签名失败、金额不符、租约冲突、拒付和负余额，确认告警包含订单/事件
 标识但不包含 Secret、令牌、原始设备标识或完整支付资料。没有保存完整证据前，S5 不能标记

@@ -60,3 +60,36 @@ func TestRecordD2SAdminLoginFailureUsesWindowAndResetsAfterLock(t *testing.T) {
 	require.Zero(t, reloaded.FailureWindowStartedAt)
 	require.Zero(t, reloaded.LockedUntil)
 }
+
+func TestCreateD2SAdminAccountRequiresSuperAdminAndAuditsAtomically(t *testing.T) {
+	useD2STestDB(t)
+	require.NoError(t, DB.AutoMigrate(&D2SAdminAccount{}, &D2SAdminOperationAudit{}))
+	operator, err := CreateInitialD2SAdminAccount("owner@example.com", "existing-hash", 1000)
+	require.NoError(t, err)
+
+	created, err := CreateD2SAdminAccountWithAudit(
+		"reviewer@example.com", "new-hash", D2SAdminRoleSuperAdmin,
+		operator.ID, operator.Email, 1100,
+	)
+	require.NoError(t, err)
+	require.Equal(t, D2SAdminRoleSuperAdmin, created.Role)
+	var audit D2SAdminOperationAudit
+	require.NoError(t, DB.Where("operation_type = ? AND target_resource = ?", "CREATE_ADMIN_ACCOUNT", created.Email).First(&audit).Error)
+	require.Equal(t, operator.ID, audit.OperatorID)
+	require.Equal(t, "SUCCESS", audit.Result)
+
+	reader := D2SAdminAccount{
+		Email: "reader@example.com", PasswordHash: "reader-hash",
+		Role: D2SAdminRoleAuditReader, Status: D2SAdminStatusActive,
+		CreatedAt: 1000, UpdatedAt: 1000,
+	}
+	require.NoError(t, DB.Create(&reader).Error)
+	_, err = CreateD2SAdminAccountWithAudit(
+		"not-created@example.com", "new-hash", D2SAdminRoleAuditReader,
+		reader.ID, reader.Email, 1200,
+	)
+	require.ErrorIs(t, err, ErrD2SAdminForbidden)
+	var count int64
+	require.NoError(t, DB.Model(&D2SAdminAccount{}).Where("email = ?", "not-created@example.com").Count(&count).Error)
+	require.Zero(t, count)
+}

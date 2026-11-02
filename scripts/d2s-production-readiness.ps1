@@ -35,14 +35,6 @@ function Assert-PositiveIntegerEnvironmentVariable([string]$Name) {
     Write-Host "OK positive integer config present: $Name"
 }
 
-function Assert-ExactHexEnvironmentVariable([string]$Name, [int]$HexLength) {
-    $value = [Environment]::GetEnvironmentVariable($Name)
-    if ($value -notmatch "\A[0-9a-fA-F]{$HexLength}\z") {
-        throw "Required environment variable must contain exactly $HexLength hexadecimal characters: $Name"
-    }
-    Write-Host "OK hexadecimal secret format present: $Name"
-}
-
 function Assert-MinimumLengthEnvironmentVariable([string]$Name, [int]$MinimumLength) {
     $value = [Environment]::GetEnvironmentVariable($Name)
     if ($value.Length -lt $MinimumLength) {
@@ -170,7 +162,6 @@ $productionBaseHostSuffix = "." + $productionBaseUri.Host
 $configuredSigningKeyJwk = $null
 
 if ($RequireSecrets) {
-    Assert-ExactHexEnvironmentVariable "D2S_ID_DOCUMENT_HMAC_KEY" 64
     Assert-MinimumLengthEnvironmentVariable "SESSION_SECRET" 32
     Assert-MinimumLengthEnvironmentVariable "D2S_PAYMENT_BRIDGE_SECRET" 32
     Assert-NonEmptyEnvironmentVariable "D2S_LICENSE_PRIVATE_KEY_B64"
@@ -281,6 +272,35 @@ if (-not $SkipHttp) {
         Write-Host "OK configured private key matches the published P-256 public key"
     }
     Write-Host "OK public signing keys endpoint ($($validKeys.Count) usable key(s)); configured kid is published"
+
+    $supportConfig = Invoke-RestMethod -Uri "$normalizedBaseUrl/api/v1/support/config" -Method Get -TimeoutSec 20
+    if (-not $supportConfig.success) {
+        throw "Support configuration endpoint returned an unsuccessful response"
+    }
+    try {
+        $enterpriseWeChatUri = [Uri][string]$supportConfig.data.enterprise_wechat_url
+    } catch {
+        throw "Support configuration endpoint did not return a valid Enterprise WeChat URL"
+    }
+    if (
+        $enterpriseWeChatUri.Scheme -ne "https" -or
+        -not [StringComparer]::OrdinalIgnoreCase.Equals($enterpriseWeChatUri.Host, "work.weixin.qq.com") -or
+        $enterpriseWeChatUri.OriginalString -notmatch '\Ahttps://work\.weixin\.qq\.com/' -or
+        -not $enterpriseWeChatUri.IsDefaultPort -or
+        -not $enterpriseWeChatUri.AbsolutePath.StartsWith("/ca/", [StringComparison]::Ordinal) -or
+        $enterpriseWeChatUri.UserInfo -or
+        $enterpriseWeChatUri.Query -or
+        $enterpriseWeChatUri.Fragment
+    ) {
+        throw "Support configuration endpoint did not return an approved Enterprise WeChat contact URL"
+    }
+    Write-Host "OK Enterprise WeChat support configuration is available"
+
+    $privacyPolicy = Invoke-RestMethod -Uri "$normalizedBaseUrl/api/privacy-policy" -Method Get -TimeoutSec 20
+    if (-not $privacyPolicy.success -or [string]::IsNullOrWhiteSpace([string]$privacyPolicy.data)) {
+        throw "Production privacy policy is not configured"
+    }
+    Write-Host "OK public privacy policy is configured"
 }
 
 Write-Host "Production readiness checks passed. Record the drill evidence before enabling public checkout."

@@ -47,6 +47,42 @@ func CreateInitialD2SAdminAccount(email, passwordHash string, now int64) (*D2SAd
 	return account, err
 }
 
+func CreateD2SAdminAccountWithAudit(email, passwordHash, role string, operatorID int, operatorEmail string, now int64) (*D2SAdminAccount, error) {
+	email = NormalizeEmail(email)
+	operatorEmail = NormalizeEmail(operatorEmail)
+	role = NormalizeD2SAdminRole(role)
+	if email == "" || passwordHash == "" || operatorID <= 0 || operatorEmail == "" ||
+		(role != D2SAdminRoleSuperAdmin && role != D2SAdminRoleAuditReader && role != D2SAdminRoleAccountOperator) {
+		return nil, ErrD2SAdminInvalid
+	}
+	if now <= 0 {
+		now = time.Now().UTC().Unix()
+	}
+	account := &D2SAdminAccount{
+		Email: email, PasswordHash: passwordHash, Role: role,
+		Status: D2SAdminStatusActive, CreatedAt: now, UpdatedAt: now,
+	}
+	details, err := common.Marshal(map[string]any{"email": email, "role": role, "provisioning": "verified_cli"})
+	if err != nil {
+		return nil, err
+	}
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var operator D2SAdminAccount
+		if err := tx.Where("id = ? AND email = ? AND role = ? AND status = ?", operatorID, operatorEmail, D2SAdminRoleSuperAdmin, D2SAdminStatusActive).First(&operator).Error; err != nil {
+			return ErrD2SAdminForbidden
+		}
+		if err := tx.Create(account).Error; err != nil {
+			return err
+		}
+		audit := &D2SAdminOperationAudit{
+			OperatorID: operator.ID, OperatorEmail: operator.Email, OperationType: "CREATE_ADMIN_ACCOUNT",
+			OperationTime: now, TargetResource: account.Email, Result: "SUCCESS", DetailsJSON: string(details),
+		}
+		return createD2SAdminOperationAudit(tx, audit)
+	})
+	return account, err
+}
+
 func GetD2SAdminAccountByEmail(email string) (*D2SAdminAccount, error) {
 	var account D2SAdminAccount
 	err := DB.Where("email = ?", NormalizeEmail(email)).First(&account).Error

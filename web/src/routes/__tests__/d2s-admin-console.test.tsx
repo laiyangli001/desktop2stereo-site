@@ -361,7 +361,7 @@ describe('D2SAdminConsole login', () => {
     })
   })
 
-  it('exports filtered audit logs with the server filename and session credentials', async () => {
+  it('requests a second-admin export approval before downloading filtered logs', async () => {
     const csv = new Blob(['id,email\\n1,user@example.com'], {
       type: 'text/csv',
     })
@@ -387,6 +387,38 @@ describe('D2SAdminConsole login', () => {
                   email: 'auditor@example.com',
                   role: 'super_admin',
                 },
+              },
+            }),
+          } as Response
+        }
+        if (path.includes('/api/v1/admin/audit/export-approvals?')) {
+          return {
+            ok: true,
+            status: 201,
+            json: async () => ({
+              success: true,
+              data: {
+                id: 'approval-123',
+                export_type: 'USER_ACTION_LOGS',
+                status: 'PENDING',
+                filter_snapshot: '{"email":"user@example.com"}',
+              },
+            }),
+          } as Response
+        }
+        if (
+          path.endsWith('/api/v1/admin/audit/export-approvals/approval-123')
+        ) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: {
+                id: 'approval-123',
+                export_type: 'USER_ACTION_LOGS',
+                status: 'APPROVED',
+                filter_snapshot: '{"email":"user@example.com"}',
               },
             }),
           } as Response
@@ -423,7 +455,15 @@ describe('D2SAdminConsole login', () => {
     await user.type(screen.getByLabelText('邮箱'), 'user@example.com')
     await user.type(screen.getByLabelText('来源 IP'), '203.0.113.7')
     await user.type(screen.getByLabelText('行为类型'), 'LOGIN')
-    await user.click(screen.getByRole('button', { name: '导出 CSV' }))
+    await user.type(
+      screen.getByLabelText('导出用途（审批必填）'),
+      '核查用户请求'
+    )
+    await user.click(screen.getByRole('button', { name: '申请导出审批' }))
+    expect(await screen.findByText(/状态：PENDING/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '刷新审批状态' }))
+    expect(await screen.findByText(/状态：APPROVED/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: '下载已批准 CSV' }))
 
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce())
     expect(downloadBlob).toHaveBeenCalledWith(
@@ -443,7 +483,18 @@ describe('D2SAdminConsole login', () => {
       email: 'user@example.com',
       source_ip: '203.0.113.7',
       action_type: 'LOGIN',
+      approval_id: 'approval-123',
     })
+    const approvalCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes('/api/v1/admin/audit/export-approvals?')
+    )
+    expect(approvalCall?.[1]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+        cache: 'no-store',
+      })
+    )
   })
 
   it('loads later pages for logs, registrations, and purchases', async () => {
@@ -705,9 +756,9 @@ describe('D2SAdminConsole login', () => {
     await user.click(screen.getByRole('button', { name: '日志留存' }))
 
     const retentionInput = screen.getByRole('spinbutton', {
-      name: '保留天数（最少 180 天）',
+      name: '保留天数（最少 366 天）',
     })
-    expect(retentionInput).toHaveAttribute('min', '180')
+    expect(retentionInput).toHaveAttribute('min', '366')
     expect(retentionInput).toHaveAttribute('max', '2147483647')
     expect(retentionInput).toHaveAttribute('step', '1')
 
@@ -768,5 +819,115 @@ describe('D2SAdminConsole login', () => {
       name: '可横向滚动的记录结果',
     })
     expect(recordRegion).toHaveAttribute('tabindex', '0')
+  })
+
+  it('lets an account operator review and update a support ticket', async () => {
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const path = String(input)
+        if (path.endsWith('/api/v1/admin/auth/session')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: {
+                admin: {
+                  id: 18,
+                  email: 'operator@example.com',
+                  role: 'account_operator',
+                },
+              },
+            }),
+          } as Response
+        }
+        if (path.startsWith('/api/v1/admin/support/tickets?')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: {
+                items: [
+                  {
+                    id: 'ticket-123',
+                    user_id: 42,
+                    category: 'PAYMENT',
+                    contact_email: 'customer@example.com',
+                    order_id: 'order-456',
+                    subject: 'Payment not reflected',
+                    message: 'My payment completed but no license is shown.',
+                    status: 'OPEN',
+                    admin_reply: '',
+                    created_at: 1_800_000_000,
+                  },
+                ],
+                total: 1,
+              },
+            }),
+          } as Response
+        }
+        if (path.endsWith('/api/v1/admin/support/tickets/ticket-123')) {
+          expect(init?.method).toBe('PUT')
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: {
+                id: 'ticket-123',
+                status: 'RESOLVED',
+                admin_reply: 'We restored your license.',
+              },
+            }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ success: true, data: {} }),
+        } as Response
+      }
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const user = userEvent.setup()
+    render(<D2SAdminConsole />)
+
+    await screen.findByRole('heading', { name: '账户紧急限制' })
+    await user.click(screen.getByRole('button', { name: '投诉与咨询' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Payment not reflected' })
+    ).toBeInTheDocument()
+    expect(screen.getByText('customer@example.com')).toBeInTheDocument()
+
+    await user.type(
+      screen.getByRole('textbox', { name: '内部处理备注' }),
+      'We restored your license.'
+    )
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: '更新状态' }),
+      'RESOLVED'
+    )
+    await user.click(screen.getByRole('button', { name: '保存处理状态与备注' }))
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).endsWith('/api/v1/admin/support/tickets/ticket-123')
+      )
+      expect(updateCall?.[1]).toEqual(
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({
+            status: 'RESOLVED',
+            admin_reply: 'We restored your license.',
+          }),
+        })
+      )
+    })
+    expect(
+      await screen.findByText('工单处理结果已保存并写入审计')
+    ).toBeInTheDocument()
   })
 })

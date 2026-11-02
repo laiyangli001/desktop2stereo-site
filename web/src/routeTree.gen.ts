@@ -15,6 +15,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as D2sAdminConsoleRouteImport } from './routes/d2s-admin-console'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
+import { Route as SupportRouteImport } from './routes/support'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
 import { Route as authOauthRouteImport } from './routes/(auth)/oauth'
@@ -40,6 +41,7 @@ import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
 import { Route as AuthenticatedD2sAdminIndexRouteImport } from './routes/_authenticated/d2s-admin/index'
 import { Route as AuthenticatedD2sIndexRouteImport } from './routes/_authenticated/d2s/index'
+import { Route as AuthenticatedD2sSupportTicketsRouteImport } from './routes/_authenticated/d2s/support-tickets'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
@@ -99,6 +101,11 @@ const DeviceRoute = DeviceRouteImport.update({
 const PrivacyPolicyRoute = PrivacyPolicyRouteImport.update({
   id: '/privacy-policy',
   path: '/privacy-policy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SupportRoute = SupportRouteImport.update({
+  id: '/support',
+  path: '/support',
   getParentRoute: () => rootRouteImport,
 } as any)
 const UserAgreementRoute = UserAgreementRouteImport.update({
@@ -229,6 +236,12 @@ const AuthenticatedD2sIndexRoute = AuthenticatedD2sIndexRouteImport.update({
   path: '/d2s/',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedD2sSupportTicketsRoute =
+  AuthenticatedD2sSupportTicketsRouteImport.update({
+    id: '/d2s/support-tickets',
+    path: '/d2s/support-tickets',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/dashboard/',
@@ -424,6 +437,7 @@ export interface FileRoutesByFullPath {
   '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/support': typeof SupportRoute
   '/user-agreement': typeof UserAgreementRoute
   '/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
@@ -446,6 +460,7 @@ export interface FileRoutesByFullPath {
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/d2s/support-tickets': typeof AuthenticatedD2sSupportTicketsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -487,6 +502,7 @@ export interface FileRoutesByTo {
   '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/support': typeof SupportRoute
   '/user-agreement': typeof UserAgreementRoute
   '/forgot-password': typeof authForgotPasswordRoute
   '/oauth': typeof authOauthRoute
@@ -508,6 +524,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/d2s/support-tickets': typeof AuthenticatedD2sSupportTicketsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -552,6 +569,7 @@ export interface FileRoutesById {
   '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
+  '/support': typeof SupportRoute
   '/user-agreement': typeof UserAgreementRoute
   '/_authenticated/system-settings': typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
@@ -574,6 +592,7 @@ export interface FileRoutesById {
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/_authenticated/d2s/support-tickets': typeof AuthenticatedD2sSupportTicketsRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/models/$section': typeof AuthenticatedModelsSectionRoute
@@ -617,6 +636,7 @@ export interface FileRouteTypes {
     | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
+    | '/support'
     | '/user-agreement'
     | '/system-settings'
     | '/forgot-password'
@@ -639,6 +659,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/d2s/support-tickets'
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
@@ -680,6 +701,7 @@ export interface FileRouteTypes {
     | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
+    | '/support'
     | '/user-agreement'
     | '/forgot-password'
     | '/oauth'
@@ -701,6 +723,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/d2s/support-tickets'
     | '/dashboard/$section'
     | '/errors/$error'
     | '/models/$section'
@@ -744,6 +767,7 @@ export interface FileRouteTypes {
     | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
+    | '/support'
     | '/user-agreement'
     | '/_authenticated/system-settings'
     | '/(auth)/forgot-password'
@@ -766,6 +790,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
+    | '/_authenticated/d2s/support-tickets'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
     | '/_authenticated/models/$section'
@@ -810,6 +835,7 @@ export interface RootRouteChildren {
   D2sAdminConsoleRoute: typeof D2sAdminConsoleRoute
   DeviceRoute: typeof DeviceRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
+  SupportRoute: typeof SupportRoute
   UserAgreementRoute: typeof UserAgreementRoute
   errors401Route: typeof errors401Route
   errors403Route: typeof errors403Route
@@ -866,6 +892,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy-policy'
       fullPath: '/privacy-policy'
       preLoaderRoute: typeof PrivacyPolicyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/support': {
+      id: '/support'
+      path: '/support'
+      fullPath: '/support'
+      preLoaderRoute: typeof SupportRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/user-agreement': {
@@ -1041,6 +1074,13 @@ declare module '@tanstack/react-router' {
       path: '/d2s'
       fullPath: '/d2s/'
       preLoaderRoute: typeof AuthenticatedD2sIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/d2s/support-tickets': {
+      id: '/_authenticated/d2s/support-tickets'
+      path: '/d2s/support-tickets'
+      fullPath: '/d2s/support-tickets'
+      preLoaderRoute: typeof AuthenticatedD2sSupportTicketsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard/': {
@@ -1357,6 +1397,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
+  AuthenticatedD2sSupportTicketsRoute: typeof AuthenticatedD2sSupportTicketsRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedModelsSectionRoute: typeof AuthenticatedModelsSectionRoute
@@ -1383,6 +1424,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
+  AuthenticatedD2sSupportTicketsRoute: AuthenticatedD2sSupportTicketsRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedModelsSectionRoute: AuthenticatedModelsSectionRoute,
@@ -1415,6 +1457,7 @@ const rootRouteChildren: RootRouteChildren = {
   D2sAdminConsoleRoute: D2sAdminConsoleRoute,
   DeviceRoute: DeviceRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
+  SupportRoute: SupportRoute,
   UserAgreementRoute: UserAgreementRoute,
   errors401Route: errors401Route,
   errors403Route: errors403Route,

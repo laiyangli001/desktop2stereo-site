@@ -13,9 +13,34 @@ import type {
   D2SSigningKey,
   D2SUnbindRequest,
   D2SReconciliationReport,
+  D2SSupportTicket,
 } from './types'
 
 export type D2SDownloadTarget = 'release' | 'quark' | 'baidu'
+
+export async function submitD2SSupportTicket(input: {
+  category: string
+  contact_email: string
+  order_id: string
+  subject: string
+  message: string
+  website: string
+}) {
+  const response = await api.post('/api/v1/support/tickets', input)
+  return response.data as D2SResponse<{ ticket_id: string }>
+}
+
+export async function getD2SMySupportTickets(page = 1) {
+  const response = await api.get('/api/v1/support/my-tickets', {
+    params: { page, page_size: 50 },
+  })
+  return response.data as D2SResponse<{
+    items: D2SSupportTicket[]
+    total: number
+    page: number
+    page_size: number
+  }>
+}
 
 export type D2SModeRequest = {
   license_id: string
