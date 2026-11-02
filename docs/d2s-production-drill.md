@@ -22,7 +22,21 @@ $releaseSha = Read-Host "请输入待验收的 40 位 Git 提交 SHA"
 `-ExpectedVersion` 会将 `/api/status` 返回的运行版本与本次发布 SHA 做区分大小写的精确比较；
 版本不匹配、响应 JSON 无效或同时指定 `-SkipHttp` 时检查失败。部署后必须传入目标 SHA，避免旧实例健康但新版本尚未生效时被判定为通过。
 
-本地可用 `.\scripts\d2s-production-readiness-selftest.ps1` 运行无网络 mock 回归，覆盖有效企业微信链接、错误主机/路径、非默认端口和显式 `:443`、查询参数、用户信息、片段、客服 API 缺失、隐私政策已配置和空隐私政策拒绝。它不替代部署后的真实端点核验，也不审查隐私政策文本是否满足法律要求。
+不在应用服务器上的审查机可单独核对公开 HTTP 状态，不需要本机数据库或 Secret：
+
+```powershell
+$releaseSha = Read-Host "请输入待核验的 40 位 Git 提交 SHA"
+$signingKeyId = Read-Host "请输入预期发布的签名 key_id"
+.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -HttpOnly `
+  -ExpectedVersion $releaseSha -ExpectedSigningKeyId $signingKeyId
+```
+
+`-HttpOnly` 必须与预期运行 SHA 和签名 `key_id` 一起使用，并拒绝与 `-RequireSecrets`、
+`-RequiredPaymentProviders` 或 `-SkipHttp` 混用。它只验证公开健康、签名公钥、客服链接和隐私政策端点；
+不会证明本机配置、私钥与公钥匹配、数据库角色、支付配置或生产业务闭环。完整部署验收仍须在具备受控
+运行配置的应用节点执行上方 `-RequireSecrets` 命令。
+
+本地可用 `.\scripts\d2s-production-readiness-selftest.ps1` 运行无网络 mock 回归，覆盖无本地 Secret 的 HTTP-only 通过、预期 SHA 不匹配拒绝、HTTP-only 参数冲突拒绝、有效企业微信链接、错误主机/路径、非默认端口和显式 `:443`、查询参数、用户信息、片段、客服 API 缺失、隐私政策已配置和空隐私政策拒绝。它不替代部署后的真实端点核验，也不审查隐私政策文本是否满足法律要求。
 
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty

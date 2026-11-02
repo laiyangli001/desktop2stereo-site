@@ -3,8 +3,10 @@ param(
     [string]$BaseUrl = "https://d2s.site",
     [switch]$RequireSecrets,
     [switch]$SkipHttp,
+    [switch]$HttpOnly,
     [string[]]$RequiredPaymentProviders = @(),
-    [string]$ExpectedVersion = ""
+    [string]$ExpectedVersion = "",
+    [string]$ExpectedSigningKeyId = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +18,23 @@ if (-not [string]::IsNullOrWhiteSpace($ExpectedVersion)) {
     if ($SkipHttp) {
         throw "-ExpectedVersion cannot be used with -SkipHttp"
     }
+}
+
+if ($HttpOnly) {
+    if ($SkipHttp) {
+        throw "-HttpOnly cannot be combined with -SkipHttp"
+    }
+    if ($RequireSecrets -or $RequiredPaymentProviders.Count -gt 0) {
+        throw "-HttpOnly cannot be combined with local secret or payment-provider checks"
+    }
+    if ([string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+        throw "-HttpOnly requires -ExpectedVersion"
+    }
+    if ([string]::IsNullOrWhiteSpace($ExpectedSigningKeyId)) {
+        throw "-HttpOnly requires -ExpectedSigningKeyId"
+    }
+} elseif (-not [string]::IsNullOrWhiteSpace($ExpectedSigningKeyId)) {
+    throw "-ExpectedSigningKeyId can only be used with -HttpOnly"
 }
 
 function Assert-NonEmptyEnvironmentVariable([string]$Name) {
@@ -149,19 +168,21 @@ function Get-P256SigningPublicJwk([byte[]]$PrivateKeyBytes) {
     }
 }
 
-@(
-    "SQL_DSN",
-    "REDIS_CONN_STRING",
-    "SESSION_SECRET",
-    "D2S_LICENSE_KEY_ID",
-    "D2S_PAYMENT_BRIDGE_SECRET"
-) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
+if (-not $HttpOnly) {
+    @(
+        "SQL_DSN",
+        "REDIS_CONN_STRING",
+        "SESSION_SECRET",
+        "D2S_LICENSE_KEY_ID",
+        "D2S_PAYMENT_BRIDGE_SECRET"
+    ) | ForEach-Object { Assert-NonEmptyEnvironmentVariable $_ }
+}
 
 $productionBaseUri = Assert-ProductionBaseUrl $BaseUrl
 $productionBaseHostSuffix = "." + $productionBaseUri.Host
 $configuredSigningKeyJwk = $null
 
-if ($RequireSecrets) {
+if ($RequireSecrets -and -not $HttpOnly) {
     Assert-MinimumLengthEnvironmentVariable "SESSION_SECRET" 32
     Assert-MinimumLengthEnvironmentVariable "D2S_PAYMENT_BRIDGE_SECRET" 32
     Assert-NonEmptyEnvironmentVariable "D2S_LICENSE_PRIVATE_KEY_B64"
@@ -265,7 +286,14 @@ if (-not $SkipHttp) {
     if ($validKeys.Count -eq 0) {
         throw "License key endpoint did not publish a usable ES256 public key"
     }
-    $configuredKeyId = [Environment]::GetEnvironmentVariable("D2S_LICENSE_KEY_ID")
+    $configuredKeyId = if ($HttpOnly) {
+        $ExpectedSigningKeyId
+    } else {
+        [Environment]::GetEnvironmentVariable("D2S_LICENSE_KEY_ID")
+    }
+    if ([string]::IsNullOrWhiteSpace($configuredKeyId)) {
+        throw "D2S_LICENSE_KEY_ID or -ExpectedSigningKeyId must identify the published signing key"
+    }
     $matchingKeys = @($validKeys | Where-Object { $_.kid -eq $configuredKeyId })
     if ($matchingKeys.Count -ne 1) {
         throw "License key endpoint did not publish the configured D2S_LICENSE_KEY_ID"

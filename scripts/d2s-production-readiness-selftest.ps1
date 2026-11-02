@@ -35,7 +35,9 @@ try {
     function Invoke-ReadinessMock(
         [string]$SupportUrl,
         [bool]$SupportEndpointAvailable,
-        [string]$PrivacyPolicy = "Configured privacy policy for readiness self-test."
+        [string]$PrivacyPolicy = "Configured privacy policy for readiness self-test.",
+        [string]$ExpectedVersion = "",
+        [switch]$HttpOnly
     ) {
         $global:d2sReadinessSelfTestState.SupportUrl = $SupportUrl
         $global:d2sReadinessSelfTestState.SupportEndpointAvailable = $SupportEndpointAvailable
@@ -43,7 +45,10 @@ try {
 
         function Invoke-WebRequest {
             param([string]$Uri, [switch]$UseBasicParsing)
-            [pscustomobject]@{ StatusCode = 200 }
+            [pscustomobject]@{
+                StatusCode = 200
+                Content = '{"data":{"version":"d11d0cc1da5070bc65b57ff72181ed2865043833"}}'
+            }
         }
 
         function Invoke-RestMethod {
@@ -82,8 +87,76 @@ try {
             throw "Unexpected readiness endpoint: $Uri"
         }
 
-        & $script:readinessScript -BaseUrl "https://readiness.example"
+        $arguments = @{ BaseUrl = "https://readiness.example" }
+        if ($HttpOnly) {
+            $arguments.HttpOnly = $true
+            $arguments.ExpectedVersion = $ExpectedVersion
+            $arguments.ExpectedSigningKeyId = "readiness-selftest-kid"
+        }
+        & $script:readinessScript @arguments
     }
+
+    foreach ($name in $requiredVariables) {
+        [Environment]::SetEnvironmentVariable($name, $null, "Process")
+    }
+    Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
+        -ExpectedVersion "d11d0cc1da5070bc65b57ff72181ed2865043833" -HttpOnly
+    Write-Host "PASS HTTP-only readiness checks the expected release without local secrets"
+
+    $versionMismatchRejected = $false
+    try {
+        Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
+            -ExpectedVersion "0000000000000000000000000000000000000000" -HttpOnly
+    } catch {
+        $versionMismatchRejected = $_.Exception.Message -like "*does not match the expected release SHA*"
+    }
+    if (-not $versionMismatchRejected) {
+        throw "HTTP-only readiness did not reject a running version mismatch."
+    }
+    Write-Host "PASS HTTP-only readiness rejects an unexpected release SHA"
+
+    $validHttpOnlyArguments = @{
+        HttpOnly = $true
+        ExpectedVersion = "d11d0cc1da5070bc65b57ff72181ed2865043833"
+        ExpectedSigningKeyId = "readiness-selftest-kid"
+    }
+    foreach ($case in @(
+        @{ Name = "missing expected version"; Arguments = @{ HttpOnly = $true; ExpectedSigningKeyId = "readiness-selftest-kid" } },
+        @{ Name = "missing expected signing key ID"; Arguments = @{ HttpOnly = $true; ExpectedVersion = "d11d0cc1da5070bc65b57ff72181ed2865043833" } },
+        @{ Name = "secret checks"; Arguments = ($validHttpOnlyArguments + @{ RequireSecrets = $true }) },
+        @{ Name = "payment-provider checks"; Arguments = ($validHttpOnlyArguments + @{ RequiredPaymentProviders = @("stripe") }) },
+        @{ Name = "skipped HTTP checks"; Arguments = ($validHttpOnlyArguments + @{ SkipHttp = $true }) }
+    )) {
+        $rejected = $false
+        try {
+            $arguments = $case.Arguments.Clone()
+            $arguments.BaseUrl = "https://readiness.example"
+            & $script:readinessScript @arguments
+        } catch {
+            $rejected = $true
+        }
+        if (-not $rejected) {
+            throw "HTTP-only readiness accepted $($case.Name)."
+        }
+        Write-Host "PASS rejected HTTP-only combination: $($case.Name)"
+    }
+
+    $unexpectedSigningKeyArgumentRejected = $false
+    try {
+        & $script:readinessScript -BaseUrl "https://readiness.example" `
+            -ExpectedSigningKeyId "readiness-selftest-kid"
+    } catch {
+        $unexpectedSigningKeyArgumentRejected = $_.Exception.Message -like "*-ExpectedSigningKeyId can only be used with -HttpOnly*"
+    }
+    if (-not $unexpectedSigningKeyArgumentRejected) {
+        throw "Readiness accepted -ExpectedSigningKeyId without -HttpOnly."
+    }
+    Write-Host "PASS rejected signing key ID outside HTTP-only mode"
+
+    foreach ($name in $requiredVariables) {
+        [Environment]::SetEnvironmentVariable($name, "selftest-placeholder", "Process")
+    }
+    [Environment]::SetEnvironmentVariable("D2S_LICENSE_KEY_ID", "readiness-selftest-kid", "Process")
 
     Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true
     Write-Host "PASS valid Enterprise WeChat contact URL and configured privacy policy"
