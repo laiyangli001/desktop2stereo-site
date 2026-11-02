@@ -252,6 +252,8 @@ GORM 维护以下表：
 
 状态：`in_progress`。
 
+- 2026-11-02 当前工作树全仓交叉构建 `GOOS=linux GOARCH=amd64 go build -p 1 ./...` 与 `GOOS=darwin GOARCH=arm64 go build -p 1 ./...` 均通过。Docker 更新器增加运行版本 SHA 门禁：Docker healthy 后要求 `/api/status` 的成功响应 `data.version` 与目标 SHA 完全相同；状态读取失败、JSON 无效或 SHA 不符会回滚并记录失败，且已有 `.update-complete` 标记必须与当前运行 SHA 复核。Git Bash 隔离回归覆盖精确 SHA 成功、匹配标记快速返回、旧标记错配、运行版本错配回滚及状态接口不可用回滚，全部通过；Shell 语法检查通过。因当前 Windows 环境没有可用 Python 3，隔离回归用 Node 替身模拟更新器现有 Python JSON I/O，尚需在生产等价 Linux/Python 环境复跑；未部署生产。
+
 - 2026-10-31 经 PowerShell 无凭据只读 GET 复核：`https://d2s.site/api/status`、`https://d2s.site/api/v1/license/keys`、`https://d2s.site/device` 均返回 200，公开公钥 `kid` 为 `d2s-es256-2026-09`；旧域名 `https://100393.com/api/status` 返回 404。该检查只确认公网路由响应，不验证容器内部健康、完整设备码闭环或支付回调。
 
 - 2026-10-31 补充复核：同一授权范围内的无凭据 GET 再次确认 status、公钥、设备页为 200，旧域名 API 为 404；当前工作树 `go vet -p 1 ./...` 与 `go build -p 1 ./...` 均以退出码 0 完成。公网检查不验证生产内部健康，构建与静态分析不替代部署演练。

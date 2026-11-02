@@ -14,6 +14,7 @@ DOWNLOAD_TIMEOUT_SECONDS="${D2S_DOWNLOAD_TIMEOUT_SECONDS:-1800}"
 SHA="${1:-}"
 STATUS_FILE="${D2S_UPDATE_STATUS_FILE:-$APP_ROOT/update-requests/status.json}"
 SOURCE_FILE="${D2S_UPDATE_SOURCE_FILE:-$APP_ROOT/update-requests/source}"
+STATUS_URL="${D2S_DOCKER_STATUS_URL:-http://127.0.0.1:3000/api/status}"
 CURRENT_PHASE="starting"
 DOWNLOAD_BYTES=""
 DOWNLOAD_TOTAL_BYTES=""
@@ -64,6 +65,27 @@ PY
   mv -f -- "$temporary" "$STATUS_FILE"
 }
 
+read_runtime_version() {
+  local response
+  response="$(curl --fail --silent --show-error --max-time 5 "$STATUS_URL")" || return 1
+  printf '%s' "$response" | python3 -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except (json.JSONDecodeError, UnicodeDecodeError):
+    sys.exit(1)
+if not isinstance(payload, dict) or payload.get("success") is not True:
+    sys.exit(1)
+data = payload.get("data")
+version = data.get("version") if isinstance(data, dict) else None
+if not isinstance(version, str) or not version:
+    sys.exit(1)
+sys.stdout.write(version)
+'
+}
+
 handle_error() {
   local exit_code=$?
   set +e
@@ -85,7 +107,7 @@ if [[ ! -x "$BACKUP_SCRIPT" ]]; then
   echo "database backup script is missing: $BACKUP_SCRIPT" >&2
   exit 3
 fi
-for command_name in awk cmp curl docker stat tar timeout; do
+for command_name in awk cmp curl docker python3 stat tar timeout; do
   command -v "$command_name" >/dev/null || { echo "required command is missing: $command_name" >&2; exit 4; }
 done
 if [[ ! "$BUILD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
@@ -110,9 +132,12 @@ trap cleanup EXIT
 RELEASE="$RELEASE_ROOT/$SHA"
 RELEASE_MARKER="$RELEASE/.update-complete"
 if [[ -f "$RELEASE_MARKER" ]]; then
-	write_status "succeeded" "completed" "该版本已部署，无需重复更新"
-  echo "release already prepared: $RELEASE"
-  exit 0
+  if running_version="$(read_runtime_version 2>/dev/null)" && [[ "$running_version" == "$SHA" ]]; then
+    write_status "succeeded" "completed" "该版本已部署，无需重复更新"
+    echo "release already prepared and running: $RELEASE"
+    exit 0
+  fi
+  echo "release marker exists but the running version does not match; rebuilding: $RELEASE"
 fi
 if [[ -e "$RELEASE" ]]; then
   echo "removing incomplete release: $RELEASE"
@@ -191,36 +216,51 @@ write_status "running" "$CURRENT_PHASE" "正在重启应用容器"
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" up -d --no-deps new-api
 
 CURRENT_PHASE="health"
-write_status "running" "$CURRENT_PHASE" "正在执行健康检查"
+write_status "running" "$CURRENT_PHASE" "正在执行健康检查和运行版本校验"
+HEALTHY_CONTAINER_SEEN=0
+VERSION_CHECK_FAILURE="API status did not confirm target commit $SHA"
 for _ in $(seq 1 30); do
   status="$(docker inspect -f '{{.State.Health.Status}}' new-api 2>/dev/null || true)"
   if [[ "$status" == "healthy" ]]; then
-    if [[ -f "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
-	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"
-	  if ! cmp -s "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"; then
-	    echo "installed Docker update script does not match release" >&2
-	    exit 9
-	  fi
-	fi
-	if [[ -f "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" ]]; then
-	  install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" "$BACKUP_SCRIPT"
-	  if ! cmp -s "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" "$BACKUP_SCRIPT"; then
-	    echo "installed database backup script does not match release" >&2
-	    exit 9
-	  fi
-	fi
-	touch "$RELEASE_MARKER"
-	write_status "succeeded" "completed" "更新完成，应用健康检查通过"
-    echo "Docker update succeeded: $SHA"
-    exit 0
+    HEALTHY_CONTAINER_SEEN=1
+    running_version="$(read_runtime_version 2>/dev/null || true)"
+    if [[ "$running_version" == "$SHA" ]]; then
+      if [[ -f "$RELEASE/deploy/desktop2stereo-docker-update.sh" ]]; then
+        install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"
+        if ! cmp -s "$RELEASE/deploy/desktop2stereo-docker-update.sh" "$UPDATE_SCRIPT_PATH"; then
+          echo "installed Docker update script does not match release" >&2
+          exit 9
+        fi
+      fi
+      if [[ -f "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" ]]; then
+        install -o root -g root -m 0750 "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" "$BACKUP_SCRIPT"
+        if ! cmp -s "$RELEASE/deploy/desktop2stereo-db-backup-docker.sh" "$BACKUP_SCRIPT"; then
+          echo "installed database backup script does not match release" >&2
+          exit 9
+        fi
+      fi
+      touch "$RELEASE_MARKER"
+      write_status "succeeded" "completed" "更新完成，运行版本 SHA 与目标提交一致"
+      echo "Docker update succeeded: $SHA"
+      exit 0
+    fi
   fi
   sleep 2
 done
 
-echo "health check failed; restoring previous image" >&2
 CURRENT_PHASE="rollback"
-write_status "running" "$CURRENT_PHASE" "健康检查失败，正在恢复旧版本"
+if [[ "$HEALTHY_CONTAINER_SEEN" == "1" ]]; then
+  echo "runtime version check failed; restoring previous image" >&2
+  write_status "running" "$CURRENT_PHASE" "运行版本 SHA 校验失败，正在恢复旧版本" "$VERSION_CHECK_FAILURE"
+else
+  echo "health check failed; restoring previous image" >&2
+  write_status "running" "$CURRENT_PHASE" "健康检查失败，正在恢复旧版本" "新版本健康检查未通过"
+fi
 docker tag "new-api-desktop2stereo-site:pre-$SHA" new-api-desktop2stereo-site:local
 docker compose --env-file "$APP_ROOT/.env" -p desktop2stereo-site -f "$RELEASE/docker-compose.yml" up -d --no-deps new-api || true
-write_status "failed" "rollback" "健康检查失败，已尝试恢复旧版本" "新版本健康检查未通过"
+if [[ "$HEALTHY_CONTAINER_SEEN" == "1" ]]; then
+  write_status "failed" "rollback" "运行版本 SHA 校验失败，已尝试恢复旧版本" "$VERSION_CHECK_FAILURE"
+else
+  write_status "failed" "rollback" "健康检查失败，已尝试恢复旧版本" "新版本健康检查未通过"
+fi
 exit 8

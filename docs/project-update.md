@@ -20,7 +20,8 @@ New API“运维 → 系统维护”中的更新功能只更新本项目：
   `deploy/desktop2stereo-docker-update.sh`，后续发布不会继续使用旧更新器。
 - `.env`、数据库、上传文件、日志和备份不会被 Git checkout 覆盖。
 - 数据库备份脚本不存在或不可执行时，更新会在构建前停止。
-- 构建失败、服务启动失败或健康检查失败时回滚到旧版本。
+- Docker 容器通过健康检查后，更新器还会读取 `D2S_DOCKER_STATUS_URL`（默认 `http://127.0.0.1:3000/api/status`），要求响应成功且 `data.version` 与目标 40 位提交 SHA 完全一致；接口不可用、响应无效或版本不符时回滚并记录失败，不写入 `.update-complete`。已有 `.update-complete` 标记也必须重新核对正在运行的版本，避免旧标记误报成功。
+- 构建失败、服务启动失败、健康检查失败或运行版本 SHA 校验失败时回滚到旧版本。
 
 ## 服务器初始化
 
@@ -93,8 +94,17 @@ D2S_DOCKER_UPDATE_SCRIPT=/usr/local/sbin/desktop2stereo-docker-update
 D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
 ```
 
+宿主机 Docker 更新器默认通过 `http://127.0.0.1:3000/api/status` 核对运行版本。
+如需覆盖 `D2S_DOCKER_STATUS_URL`，应配置在宿主机 systemd 服务环境中，不要写入应用 `.env`。
+
 非 Docker 模式使用 `D2S_UPDATE_SCRIPT`、`D2S_UPDATE_ROOT` 和
 `D2S_UPDATE_HEALTH_URL`；不要把这些旧模式变量与 Docker 请求文件模式混用。
+
+更新器的 SHA 门禁隔离回归可在 Linux/Git Bash 环境执行：
+
+```bash
+bash deploy/test-desktop2stereo-docker-update.sh
+```
 
 ## 页面操作流程
 
@@ -117,11 +127,12 @@ D2S_UPDATE_BACKUP_SCRIPT=/usr/local/sbin/desktop2stereo-db-backup
    `D2S_DOWNLOAD_TIMEOUT_SECONDS` 调整；下载较慢时不会因原先的 300 秒上限反复从头重试。
    下载阶段每 2 秒写入已下载字节、当前速度和服务器返回的归档总大小；维护页面在可获取
    总大小时显示百分比和进度条，否则显示“总大小未知”。
-   只有健康检查通过后，发布目录才会写入 `.update-complete` 标记；中途失败或被终止留下的
-   不完整目录会在同一 SHA 重试时清理并重新构建，不会被误判为“已部署”。
+   只有容器健康且 `/api/status` 返回的运行 SHA 与目标提交完全一致后，发布目录才会写入
+   `.update-complete` 标记；中途失败或被终止留下的不完整目录会在同一 SHA 重试时清理并重新构建。
+   即使已有该标记，更新器仍会核对当前运行版本；若版本不符，则重新构建并部署，不会直接报告成功。
 8. 原子切换 `current` 软链接。
-9. 重启服务并请求健康接口。
-10. 健康检查失败时恢复旧软链接并重启旧版本。
+9. 重启服务并请求健康接口，再核对运行 SHA 与目标提交一致。
+10. 健康检查失败或版本 SHA 不符时恢复旧版本并记录失败状态。
 
 禁止在服务器更新时执行以下操作：
 
