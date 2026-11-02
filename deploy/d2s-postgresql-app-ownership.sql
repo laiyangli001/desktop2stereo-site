@@ -9,6 +9,16 @@ BEGIN
         JOIN pg_namespace AS n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public'
           AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+          AND NOT (
+              c.relkind = 'S'
+              AND EXISTS (
+                  SELECT 1 FROM pg_depend AS sequence_dependency
+                  WHERE sequence_dependency.classid = 'pg_class'::regclass
+                    AND sequence_dependency.objid = c.oid
+                    AND sequence_dependency.refclassid = 'pg_class'::regclass
+                    AND sequence_dependency.deptype IN ('a', 'i')
+              )
+          )
           AND c.relname NOT IN (
               'd2s_user_action_logs',
               'd2s_registration_records',
