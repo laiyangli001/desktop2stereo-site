@@ -189,6 +189,7 @@ GORM 维护以下表：
 - CI 中保留真实 MySQL/PostgreSQL 服务测试。
 - 2026-11-02 扩展隔离数据库矩阵，实测 MySQL 8.4.13 与 PostgreSQL 17.11 上单账户紧急锁定/解除、服务端登录/购买限制读取及对应 `EMERGENCY_LOCK`/`EMERGENCY_UNLOCK` 审计落库；矩阵测试通过，`go test -p 1 ./model -count=1`、`go vet -p 1 ./model`、`go build -p 1 ./model` 通过。两套数据库测试实例随后停止；此证据不替代生产账号权限与生产环境验收。
 - 2026-11-03 当前分支数据库复验：以隔离 `d2s_test` 账号连接本机 PostgreSQL 15.14（5433）与 MySQL 8.4.9（3307），固定路径 `model` 全包测试通过，实际执行 `TestD2SSchemaConfiguredDatabases` 和 `TestD2SConcurrentCriticalPaths` 两种数据库子项。覆盖迁移重复执行、用户紧急锁定/解除与审计、授权绑定、工单创建/处理与审计、区域/提现/解绑审核、支付对账及并发路径。`controller`、`service`、`router` 固定路径全包测试随后也通过。数据库 DSN 只在本次子进程环境中注入并清除；本地 PostgreSQL/MySQL 实例已停止。此次使用的是隔离持久测试库，不据此声称本轮测试数据库为空库。
+- 2026-11-03 当前工作树再次运行 `scripts/d2s-fixed-go-test.ps1 -Package @('./model','./controller','./service','./router')`，四个包全部通过（退出码 0）。`model` 测试以隔离 `d2s_test` 账号连接 PostgreSQL 15.14（127.0.0.1:5433）与 MySQL 8.4.9（127.0.0.1:3307），配置数据库迁移/并发矩阵子测试实际运行并通过；其余三个包随后通过。测试账号 DSN 只注入本次 PowerShell 子进程，结束后清除；本机 PostgreSQL/MySQL 服务已确认停止。测试使用既有隔离测试库，不代表空库或发布版本升级矩阵在本轮重跑。
 - 2026-09-09 已将本地与 GitHub Actions 的 Go、Vitest 缓存及临时目录固定到工作区路径；扫描确认 D2S 测试不再调用 `t.TempDir`、`os.MkdirTemp` 或 `os.CreateTemp`，Actions `34278684231` 已通过固定目录回归。
 - 2026-09-09 已将登录/注册验证码从拖动拼图切换为自托管点击验证码：后端使用 `go-captcha/v2/click` 生成主图和提示图，服务端保存目标区域并一次性校验坐标数组；登录、注册、前端组件测试和 `controller` 回归均已覆盖。
 
