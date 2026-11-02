@@ -246,13 +246,24 @@ jobs:
             success = $true
             data = [pscustomobject]@{ keys = @($configuredPublicKey) }
           }
+          $global:d2sSupportResponse = [pscustomobject]@{
+            success = $true
+            data = [pscustomobject]@{ enterprise_wechat_url = 'https://work.weixin.qq.com/ca/cawcde40faa1d08998' }
+          }
+          $global:d2sPrivacyResponse = [pscustomobject]@{
+            success = $true
+            data = 'Configured privacy policy for readiness smoke test.'
+          }
           function global:Invoke-WebRequest {
             param([string]$Uri, [switch]$UseBasicParsing)
             [pscustomobject]@{ StatusCode = 200 }
           }
           function global:Invoke-RestMethod {
             param([string]$Uri, [string]$Method)
-            $global:d2sReadinessResponse
+            if ($Uri -like '*/api/v1/license/keys') { return $global:d2sReadinessResponse }
+            if ($Uri -like '*/api/v1/support/config') { return $global:d2sSupportResponse }
+            if ($Uri -like '*/api/privacy-policy') { return $global:d2sPrivacyResponse }
+            throw "Unexpected readiness endpoint: $Uri"
           }
           ./scripts/d2s-production-readiness.ps1 -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
 
