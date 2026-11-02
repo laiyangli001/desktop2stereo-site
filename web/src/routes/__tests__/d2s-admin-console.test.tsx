@@ -463,6 +463,12 @@ describe('D2SAdminConsole login', () => {
     expect(await screen.findByText(/状态：PENDING/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '刷新审批状态' }))
     expect(await screen.findByText(/状态：APPROVED/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '刷新审批状态' })).toHaveClass(
+      'focus-visible:ring-2'
+    )
+    expect(screen.getByRole('button', { name: '下载已批准 CSV' })).toHaveClass(
+      'focus-visible:ring-2'
+    )
     await user.click(screen.getByRole('button', { name: '下载已批准 CSV' }))
 
     await waitFor(() => expect(downloadBlob).toHaveBeenCalledOnce())
@@ -788,6 +794,31 @@ describe('D2SAdminConsole login', () => {
           }),
         } as Response
       }
+      if (
+        path.endsWith(
+          '/api/v1/admin/audit/export-approvals?page=1&page_size=50'
+        )
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              items: [
+                {
+                  id: 'approval-1',
+                  requested_by_email: 'requester@example.com',
+                  export_type: 'USER_ACTION_LOGS',
+                  request_reason: 'Incident review',
+                  filter_snapshot: '{}',
+                  status: 'PENDING',
+                },
+              ],
+            },
+          }),
+        } as Response
+      }
       return {
         ok: true,
         status: 200,
@@ -812,6 +843,17 @@ describe('D2SAdminConsole login', () => {
     const queryButton = screen.getByRole('button', { name: '查询' })
     expect(queryButton).toHaveClass('hover:bg-muted/70')
     expect(queryButton).toHaveClass('focus-visible:ring-2')
+
+    const pendingRefreshButton = screen.getByRole('button', {
+      name: '刷新待审批',
+    })
+    expect(pendingRefreshButton).toHaveClass('focus-visible:ring-2')
+    await user.click(pendingRefreshButton)
+    for (const name of ['批准', '拒绝']) {
+      expect(screen.getByRole('button', { name })).toHaveClass(
+        'focus-visible:ring-2'
+      )
+    }
 
     await user.click(screen.getByRole('button', { name: '购买记录' }))
     await user.click(screen.getByRole('button', { name: '刷新' }))

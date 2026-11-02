@@ -211,6 +211,8 @@ GORM 维护以下表：
 
 状态：`in_progress`。
 
+- 2026-11-03 按 Web Interface Guidelines 复核管理员导出审批队列，发现审批状态刷新、获批 CSV 下载、刷新待审批、批准和拒绝五个按钮缺少可见键盘焦点样式。已统一加入 `focus-visible` 焦点环，并扩展后台回归验证五个按钮；后台控制台测试 12/12、全量 Vitest 77 文件/478 项、`tsgo -b`、Rsbuild 生产构建、目标文件 oxlint/oxfmt 检查及 `git diff --check` 通过。真实屏幕阅读器验收仍待完成。
+
 - 2026-11-03 隐私政策事实盘点发现提现路径会收集 `AlipayAccount` 和 `RealName`，并以明文字段保存在 `d2s_withdrawal_requests`；这不等同证件核验，但说明“网站只有邮箱”不准确。新增内部数据清单，区分 366 天安全审计、授权/交易/工单留存和未知的生产服务商配置；SEC-001 与管理规格同步区分订单付款标识的 HMAC/脱敏和提现资料明文。生产提现是否启用、必要性、访问权限、安全方式与期限仍待核，未据此自动改变业务或声称政策已完成。
 - 2026-11-03 补齐超级管理员财务/授权后台审计：订单、支付事件、余额、提现、授权、解绑申请和签名公钥查看写入带筛选范围及数量的 `VIEW_*` 审计；提现审核、人工解绑审核、账户区域修改和签名密钥退役的成功审计与业务变更同事务提交，失败尝试单独审计。controller 回归覆盖四类业务变更在审计表不可用时回滚及各成功路径；`scripts/d2s-fixed-go-test.ps1` 将测试二进制写入固定工作区路径后，controller、model、service、router 四个包测试全部通过；`go vet -p 1 ./controller ./model ./service` 和 `go build -p 1 ./controller ./model ./service` 通过。常规临时路径运行 service 测试曾被 Windows 拒绝启动，固定路径运行已通过。MySQL/PostgreSQL 测试 DSN 和本地服务均不可用，因此跨数据库矩阵未验证。改动尚未部署生产。
 - 2026-11-03 后续 fail-closed 复核发现提现和人工解绑列表在审计表不可用时虽拒绝返回结果，错误体仍经过通用错误处理；现统一返回 `AUDIT_WRITE_FAILED`。新增回归覆盖提现、解绑、订单、支付事件、余额、授权和签名公钥七类敏感列表，审计表不可用时验证不返回相应私密数据；测试代码已格式化且 `go vet -p 1 ./controller` 通过。该扩展回归尚未执行，360 相关测试二进制启动阻断见 [Windows 误报与签名处理说明](windows-360-false-positive-and-signing.md)。
