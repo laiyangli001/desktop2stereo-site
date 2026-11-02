@@ -33,6 +33,8 @@ func d2sError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, model.ErrD2SEmailVerificationRequired):
 		status, code = http.StatusForbidden, "email_verification_required"
+	case errors.Is(err, model.ErrD2SAccountLoginBlocked):
+		status, code = http.StatusLocked, "account_login_blocked"
 	case errors.Is(err, model.ErrD2SLicenseNotFound), errors.Is(err, gorm.ErrRecordNotFound):
 		status, code = http.StatusNotFound, "license_not_found"
 	case errors.Is(err, model.ErrD2SLicenseUnavailable):
@@ -73,6 +75,8 @@ func d2sError(c *gin.Context, err error) {
 		status, code = http.StatusServiceUnavailable, "price_not_configured"
 	case errors.Is(err, model.ErrD2SOrderInvalid):
 		status, code = http.StatusBadRequest, "order_invalid"
+	case errors.Is(err, model.ErrD2SQuoteChanged):
+		status, code = http.StatusConflict, "quote_changed"
 	case errors.Is(err, model.ErrD2SOrderNotFound):
 		status, code = http.StatusNotFound, "order_not_found"
 	case errors.Is(err, model.ErrD2SOrderState):

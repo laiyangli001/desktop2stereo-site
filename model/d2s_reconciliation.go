@@ -1,6 +1,7 @@
 package model
 
 import (
+	"database/sql"
 	"errors"
 	"time"
 
@@ -31,8 +32,19 @@ func ReconcileD2SPayments(startAt, endAt int64) (*D2SReconciliationReport, error
 	if startAt <= 0 || endAt <= startAt {
 		return nil, errors.New("invalid reconciliation window")
 	}
+	var report *D2SReconciliationReport
+	// Read related ledgers from one snapshot so concurrent settlements cannot create mixed-state reports.
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var err error
+		report, err = reconcileD2SPaymentsSnapshot(tx, startAt, endAt)
+		return err
+	}, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	return report, err
+}
+
+func reconcileD2SPaymentsSnapshot(queryDB *gorm.DB, startAt, endAt int64) (*D2SReconciliationReport, error) {
 	var orders []D2SOrder
-	if err := DB.Where("created_at >= ? AND created_at < ?", startAt, endAt).Find(&orders).Error; err != nil {
+	if err := queryDB.Where("created_at >= ? AND created_at < ?", startAt, endAt).Find(&orders).Error; err != nil {
 		return nil, err
 	}
 	report := &D2SReconciliationReport{StartAt: startAt, EndAt: endAt, Orders: len(orders), Mismatches: make([]D2SReconciliationMismatch, 0)}
@@ -47,14 +59,21 @@ func ReconcileD2SPayments(startAt, endAt int64) (*D2SReconciliationReport, error
 		case D2SOrderChargeback:
 			report.ChargebackOrders++
 		}
-		if order.Status == D2SOrderPending && order.ExpiresAt > 0 && order.ExpiresAt < endAt {
-			report.PendingExpired++
-			report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, Kind: "pending_expired"})
-		}
+	}
+
+	// Keep reporting stale pending orders until an operator or provider resolves them,
+	// even when the order was created outside this reconciliation window.
+	var expiredPendingOrders []D2SOrder
+	if err := queryDB.Where("status = ? AND expires_at > 0 AND expires_at < ?", D2SOrderPending, endAt).Find(&expiredPendingOrders).Error; err != nil {
+		return nil, err
+	}
+	for _, order := range expiredPendingOrders {
+		report.PendingExpired++
+		report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, Kind: "pending_expired"})
 	}
 
 	var events []D2SPaymentEvent
-	if err := DB.Where("processed_at >= ? AND processed_at < ?", startAt, endAt).Find(&events).Error; err != nil {
+	if err := queryDB.Where("processed_at >= ? AND processed_at < ?", startAt, endAt).Find(&events).Error; err != nil {
 		return nil, err
 	}
 	report.PaymentEvents = len(events)
@@ -63,7 +82,7 @@ func ReconcileD2SPayments(startAt, endAt int64) (*D2SReconciliationReport, error
 		order, ok := orderByID[event.OrderID]
 		if !ok {
 			var found D2SOrder
-			if err := DB.Where("id = ?", event.OrderID).First(&found).Error; err != nil {
+			if err := queryDB.Where("id = ?", event.OrderID).First(&found).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					report.Mismatches = append(report.Mismatches, D2SReconciliationMismatch{OrderID: event.OrderID, ProviderEventID: event.ProviderEventID, Kind: "orphan_payment_event"})
 					continue

@@ -94,6 +94,7 @@ export default defineConfig(({ envMode }) => {
             // Dev: avoid per-route async chunks (reduces white flash on navigation + faster HMR feedback).
             // Prod: keep route-based code splitting.
             autoCodeSplitting: isProd,
+            routeFileIgnorePattern: '__tests__|\\.test\\.',
           }),
         ],
       },

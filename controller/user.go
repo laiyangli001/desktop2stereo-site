@@ -107,7 +107,6 @@ func Login(c *gin.Context) {
 		}
 		return
 	}
-
 	// 检查是否启用2FA
 	twoFAEnabled, err := model.IsTwoFAEnabled(user.Id)
 	if err != nil {
@@ -133,6 +132,10 @@ func Login(c *gin.Context) {
 			return
 		}
 
+		userID := user.Id
+		if !recordD2SLoginEventOrRespond(c, &userID, user.Email, model.D2SActionResultBlocked) {
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"message": i18n.T(c, i18n.MsgUserRequire2FA),
 			"success": true,
@@ -191,14 +194,52 @@ func setupLogin(user *model.User, c *gin.Context) {
 	setupLoginAtAuthVersion(user, 0, c)
 }
 
+func recordD2SLoginEventOrRespond(c *gin.Context, userID *int, email, result string) bool {
+	if err := recordD2SUserAction(c, userID, email, model.D2SActionLogin, result); err != nil {
+		common.SysLog("failed to record D2S login event: " + err.Error())
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "code": "LOGIN_AUDIT_UNAVAILABLE"})
+		return false
+	}
+	c.Set("d2s_login_event_recorded", true)
+	return true
+}
+
 func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin.Context) {
 	if user == nil || user.Id <= 0 || user.Status != common.UserStatusEnabled {
+		if user != nil && user.Id > 0 {
+			id := user.Id
+			if !recordD2SLoginEventOrRespond(c, &id, user.Email, model.D2SActionResultBlocked) {
+				return
+			}
+		}
 		common.ApiErrorI18n(c, i18n.MsgAuthUserBanned)
 		return
 	}
 	currentUser, err := model.GetUserById(user.Id, false)
 	if err != nil {
+		common.SysLog(fmt.Sprintf("Failed to load user %d during login: %v", user.Id, err))
 		common.ApiError(c, err)
+		return
+	}
+	if currentUser.EmailVerifiedAt <= 0 {
+		id := user.Id
+		if !recordD2SLoginEventOrRespond(c, &id, currentUser.Email, model.D2SActionResultBlocked) {
+			return
+		}
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "code": "EMAIL_VERIFICATION_REQUIRED"})
+		return
+	}
+	loginBlocked, controlErr := model.IsD2SUserLoginBlocked(user.Id)
+	if controlErr != nil {
+		common.ApiError(c, controlErr)
+		return
+	}
+	if loginBlocked {
+		id := user.Id
+		if !recordD2SLoginEventOrRespond(c, &id, currentUser.Email, model.D2SActionResultBlocked) {
+			return
+		}
+		c.JSON(http.StatusLocked, gin.H{"success": false, "code": "ACCOUNT_LOGIN_BLOCKED"})
 		return
 	}
 	var bundle *service.AuthBundle
@@ -226,6 +267,15 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 	service.WriteRefreshCookie(c, bundle.RefreshToken)
 	setAuthNoStore(c)
 	recordLoginAudit(user, c)
+	id := user.Id
+	if err := recordD2SUserAction(c, &id, currentUser.Email, model.D2SActionLogin, model.D2SActionResultSuccess); err != nil {
+		_, _ = model.RevokeUserSession(user.Id, bundle.Session.SID, "audit_write_failed")
+		service.ClearRefreshCookie(c)
+		common.SysLog(fmt.Sprintf("Failed to record successful login event for user %d: %v", user.Id, err))
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "LOGIN_AUDIT_WRITE_FAILED"})
+		return
+	}
+	c.Set("d2s_login_event_recorded", true)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
@@ -274,28 +324,23 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
-	if common.EmailVerificationEnabled {
-		if user.Email == "" || user.VerificationCode == "" {
-			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
-			return
-		}
-		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
-			common.ApiErrorI18n(c, i18n.MsgUserVerificationCodeError)
-			return
-		}
-		if err := model.EnsureEmailAvailable(user.Email, 0); err != nil {
-			if errors.Is(err, model.ErrEmailAlreadyTaken) {
-				common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
-				return
-			}
-			common.ApiErrorI18n(c, i18n.MsgDatabaseError)
-			return
-		}
+	if user.Email == "" || user.VerificationCode == "" {
+		common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
+		return
 	}
-	emailForExistCheck := ""
-	if common.EmailVerificationEnabled {
-		emailForExistCheck = user.Email
+	if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
+		common.ApiErrorI18n(c, i18n.MsgUserVerificationCodeError)
+		return
 	}
+	if err := model.EnsureEmailAvailable(user.Email, 0); err != nil {
+		if errors.Is(err, model.ErrEmailAlreadyTaken) {
+			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
+			return
+		}
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		return
+	}
+	emailForExistCheck := user.Email
 	exist, err := model.CheckUserExistOrDeleted(user.Username, emailForExistCheck)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
@@ -315,25 +360,25 @@ func Register(c *gin.Context) {
 		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 	}
-	if common.EmailVerificationEnabled {
-		cleanUser.Email = user.Email
-		cleanUser.EmailVerifiedAt = time.Now().Unix()
+	cleanUser.Email = user.Email
+	registrationVerifiedAt := time.Now().UTC().Unix()
+	registrationSnapshot := &model.D2SRegistrationRecord{
+		Email: cleanUser.Email, RegisterIP: c.ClientIP(), RegisterUserAgent: c.Request.UserAgent(),
+		EmailVerified: true, EmailVerifiedAt: registrationVerifiedAt,
 	}
-	if err := cleanUser.Insert(inviterId); err != nil {
+	registrationAction := d2SUserActionLogInput(c, nil, cleanUser.Email, model.D2SActionRegister, model.D2SActionResultSuccess)
+	if err := cleanUser.InsertWithD2SRegistrationRecord(inviterId, registrationSnapshot, &registrationAction); err != nil {
 		if errors.Is(err, model.ErrEmailAlreadyTaken) {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailAlreadyTaken)
 			return
 		}
-		common.ApiError(c, err)
+		common.SysLog(fmt.Sprintf("Failed to atomically register verified account %q: %v", cleanUser.Email, err))
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
 		return
 	}
 
-	// 获取插入后的用户ID
-	var insertedUser model.User
-	if err := model.DB.Where("username = ?", cleanUser.Username).First(&insertedUser).Error; err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
-		return
-	}
+	insertedUser := cleanUser
+	c.Set("d2s_user_action_recorded", true)
 	// 生成默认令牌
 	if constant.GenerateDefaultToken {
 		key, err := common.GenerateKey()

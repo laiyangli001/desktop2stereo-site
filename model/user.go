@@ -644,11 +644,9 @@ func (user *User) Insert(inviterId int) error {
 			user.Quota = common.QuotaForNewUser
 			user.AffCode = common.GetRandomString(4)
 
-			// 初始化用户设置，包括默认的边栏配置
+			// Initialize the user's default settings.
 			if user.Setting == "" {
-				defaultSetting := dto.UserSetting{}
-				// 这里暂时不设置SidebarModules，因为需要在用户创建后根据角色设置
-				user.SetSetting(defaultSetting)
+				user.SetSetting(dto.UserSetting{})
 			}
 
 			return tx.Create(user).Error
@@ -658,6 +656,53 @@ func (user *User) Insert(inviterId int) error {
 	}
 
 	user.finishInsert(inviterId)
+	return nil
+}
+
+// InsertWithD2SRegistrationRecord atomically activates a verified account and stores its immutable registration snapshot.
+func (user *User) InsertWithD2SRegistrationRecord(inviterID int, snapshot *D2SRegistrationRecord, actionLog *D2SActionLogInput) error {
+	if snapshot == nil || !snapshot.EmailVerified || snapshot.EmailVerifiedAt <= 0 {
+		return errors.New("verified registration snapshot is required")
+	}
+	if NormalizeEmail(snapshot.Email) != NormalizeEmail(user.Email) {
+		return errors.New("registration snapshot email does not match user")
+	}
+	if actionLog == nil || actionLog.ActionType != D2SActionRegister || actionLog.ResultStatus != D2SActionResultSuccess {
+		return errors.New("successful registration audit event is required")
+	}
+
+	if err := DB.Transaction(func(tx *gorm.DB) error {
+		return withNormalizedEmailLock(tx, user.Email, func(tx *gorm.DB) error {
+			if err := user.prepareForInsert(tx); err != nil {
+				return err
+			}
+			user.Quota = common.QuotaForNewUser
+			user.AffCode = common.GetRandomString(4)
+			user.EmailVerifiedAt = snapshot.EmailVerifiedAt
+
+			if user.Setting == "" {
+				user.SetSetting(dto.UserSetting{})
+			}
+			if err := tx.Create(user).Error; err != nil {
+				return err
+			}
+
+			snapshot.UserID = user.Id
+			snapshot.Email = user.Email
+			snapshot.RegisterTime = user.CreatedAt
+			if err := recordD2SRegistrationRecord(tx, snapshot); err != nil {
+				return err
+			}
+
+			actionLog.UserID = &user.Id
+			actionLog.Email = user.Email
+			return recordD2SUserAction(tx, *actionLog)
+		})
+	}); err != nil {
+		return err
+	}
+
+	user.finishInsert(inviterID)
 	return nil
 }
 

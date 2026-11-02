@@ -237,6 +237,15 @@ func TestD2SAdminPaymentEventsSupportsOperationalFilters(t *testing.T) {
 }
 
 func TestD2SAdminReconciliationRejectsInvalidWindow(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_admin_reconciliation_audit_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	model.DB, model.LOG_DB = db, db
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+	})
+	require.NoError(t, db.AutoMigrate(&model.D2SAdminOperationAudit{}))
+
 	for _, query := range []string{
 		"?start_at=200&end_at=200",
 		"?start_at=0&end_at=200",
@@ -245,6 +254,8 @@ func TestD2SAdminReconciliationRejectsInvalidWindow(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		context, _ := gin.CreateTestContext(recorder)
 		context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/reconciliation"+query, nil)
+		context.Set("d2s_admin_id", 0)
+		context.Set("d2s_admin_email", "system:test-reconciliation")
 		D2SAdminReconciliation(context)
 
 		assert.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -258,6 +269,31 @@ func TestD2SAdminReconciliationRejectsInvalidWindow(t *testing.T) {
 		assert.False(t, response.Success)
 		assert.Equal(t, "invalid_input", response.Error.Code)
 	}
+	var auditCount int64
+	require.NoError(t, db.Model(&model.D2SAdminOperationAudit{}).Count(&auditCount).Error)
+	assert.EqualValues(t, 3, auditCount)
+}
+
+func TestD2SAdminReconciliationReturnsSingleErrorWhenAuditStorageFails(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:d2s_admin_reconciliation_audit_failure_test?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	previousDB, previousLogDB := model.DB, model.LOG_DB
+	model.DB, model.LOG_DB = db, db
+	t.Cleanup(func() {
+		model.DB, model.LOG_DB = previousDB, previousLogDB
+	})
+
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/reconciliation", nil)
+	context.Set("d2s_admin_id", 0)
+	context.Set("d2s_admin_email", "system:test-reconciliation")
+	D2SAdminReconciliation(context)
+
+	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.Equal(t, false, response["success"])
 }
 
 func TestD2SInviteRecordsLimitResults(t *testing.T) {

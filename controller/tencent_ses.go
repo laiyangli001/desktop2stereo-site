@@ -112,7 +112,7 @@ func fillTencentSESTestData(scene string, data map[string]string) map[string]str
 	case "email_verification":
 		setDefault("token", "123456")
 		setDefault("code", "123456")
-		setDefault("expire_minutes", fmt.Sprintf("%d", common.VerificationValidMinutes))
+		setDefault("expire_minutes", fmt.Sprintf("%d", common.EffectiveVerificationValidMinutes()))
 		setDefault("system_name", common.SystemName)
 	case "password_reset":
 		baseURL := strings.TrimRight(system_setting.ServerAddress, "/")
@@ -122,7 +122,7 @@ func fillTencentSESTestData(scene string, data map[string]string) map[string]str
 		setDefault("email", "test%40example.com")
 		setDefault("token", "test-token")
 		setDefault("reset_url", baseURL+"/user/reset?email="+filled["email"]+"&token="+filled["token"])
-		setDefault("expire_minutes", fmt.Sprintf("%d", common.VerificationValidMinutes))
+		setDefault("expire_minutes", fmt.Sprintf("%d", common.EffectiveVerificationValidMinutes()))
 		setDefault("system_name", common.SystemName)
 	case "system_notification":
 		setDefault("title", "测试通知")

@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+umask 077
 
 APP_ROOT="${D2S_RECONCILIATION_ROOT:-/opt/desktop2stereo-site}"
 REPORT_ROOT="${D2S_RECONCILIATION_REPORT_ROOT:-$APP_ROOT/reconciliation-reports}"
-BASE_URL="${D2S_RECONCILIATION_BASE_URL:-https://100393.com}"
-ADMIN_TOKEN="${D2S_ADMIN_TOKEN:-}"
+BASE_URL="${D2S_RECONCILIATION_BASE_URL:-https://d2s.site}"
+RECONCILIATION_TOKEN="${D2S_RECONCILIATION_TOKEN:-}"
 REPORT_DATE="$(date -u +%Y%m%d)"
 REPORT_PATH="$REPORT_ROOT/reconciliation-$REPORT_DATE.json"
 RESPONSE_PATH="$REPORT_ROOT/.reconciliation-$REPORT_DATE.response.json"
 REPORT_TMP_PATH="$REPORT_PATH.tmp"
 LOCK_PATH="$REPORT_ROOT/.reconciliation.lock"
 
-if [[ -z "$ADMIN_TOKEN" ]]; then
-  echo "D2S_ADMIN_TOKEN is required" >&2
+if [[ -z "$RECONCILIATION_TOKEN" ]]; then
+  echo "D2S_RECONCILIATION_TOKEN is required" >&2
   exit 2
 fi
 if [[ "$BASE_URL" != https://* ]]; then
@@ -62,7 +63,7 @@ PY
 fi
 
 if ! curl --fail --silent --show-error --connect-timeout 10 --max-time 60 \
-  --header "Authorization: Bearer $ADMIN_TOKEN" \
+  --header "Authorization: Bearer $RECONCILIATION_TOKEN" \
   --output "$RESPONSE_PATH" \
   "$BASE_URL/api/v1/admin/reconciliation"; then
   echo "reconciliation endpoint request failed" >&2

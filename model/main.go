@@ -67,6 +67,8 @@ var DB *gorm.DB
 
 var LOG_DB *gorm.DB
 
+var D2SAuditCleanupDB *gorm.DB
+
 func createRootAccountIfNeed() error {
 	var user User
 	//if user.Status != common.UserStatusEnabled {
@@ -268,6 +270,68 @@ func InitLogDB() (err error) {
 	return err
 }
 
+func InitD2SAuditCleanupDB() error {
+	dsn := strings.TrimSpace(os.Getenv("D2S_AUDIT_CLEANUP_DSN"))
+	if dsn == "" {
+		D2SAuditCleanupDB = nil
+		if common.MainDatabaseType() == common.DatabaseTypeSQLite {
+			D2SAuditCleanupDB = DB
+		}
+		return nil
+	}
+
+	db, dbType, err := chooseDB("D2S_AUDIT_CLEANUP_DSN", false)
+	if err != nil {
+		return err
+	}
+	if dbType != common.MainDatabaseType() || (dbType != common.DatabaseTypeMySQL && dbType != common.DatabaseTypePostgreSQL) {
+		_ = closeDB(db)
+		return fmt.Errorf("D2S_AUDIT_CLEANUP_DSN must use the primary MySQL or PostgreSQL database type")
+	}
+	scopeQuery := "SELECT DATABASE()"
+	if dbType == common.DatabaseTypePostgreSQL {
+		scopeQuery = "SELECT current_database() || '.' || current_schema()"
+	}
+	var primaryScope, cleanupScope string
+	if err := DB.Raw(scopeQuery).Scan(&primaryScope).Error; err != nil {
+		_ = closeDB(db)
+		return fmt.Errorf("failed to inspect primary audit database scope: %w", err)
+	}
+	if err := db.Raw(scopeQuery).Scan(&cleanupScope).Error; err != nil {
+		_ = closeDB(db)
+		return fmt.Errorf("failed to inspect cleanup database scope: %w", err)
+	}
+	if strings.TrimSpace(primaryScope) == "" || primaryScope != cleanupScope {
+		_ = closeDB(db)
+		return fmt.Errorf("D2S_AUDIT_CLEANUP_DSN must target the primary database and schema")
+	}
+	for _, table := range []any{
+		&D2SUserActionLog{}, &D2SRegistrationRecord{}, &D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
+	} {
+		if !db.Migrator().HasTable(table) {
+			_ = closeDB(db)
+			return fmt.Errorf("D2S_AUDIT_CLEANUP_DSN cannot access the required audit tables")
+		}
+	}
+	if !db.Migrator().HasColumn(&D2SAuditRetentionRun{}, "result") {
+		_ = closeDB(db)
+		return fmt.Errorf("D2S_AUDIT_CLEANUP_DSN audit schema is outdated; run go run ./cmd/d2s-audit-migrate")
+	}
+	if common.DebugEnabled {
+		db = db.Debug()
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		_ = closeDB(db)
+		return err
+	}
+	sqlDB.SetMaxIdleConns(2)
+	sqlDB.SetMaxOpenConns(4)
+	sqlDB.SetConnMaxLifetime(time.Second * time.Duration(common.GetEnvOrDefault("SQL_MAX_LIFETIME", 60)))
+	D2SAuditCleanupDB = db
+	return nil
+}
+
 var userQuotaColumns = []string{"quota", "used_quota", "aff_quota", "aff_history"}
 
 // ensureUserQuotaColumns rejects a legacy 32-bit wallet schema before any
@@ -382,8 +446,28 @@ func migrateDB() error {
 		&D2SInviteReward{},
 		&D2SWithdrawalRequest{},
 		&D2SSigningKey{},
+		&D2SAdminAccount{},
+		&D2SAdminSession{},
+		&D2SUserSecurityControl{},
+		&D2SIdentityVerification{},
+		&D2SAdminBatchPreview{},
 	)
 	if err != nil {
+		return err
+	}
+	auditModels := []any{&D2SUserActionLog{}, &D2SRegistrationRecord{}, &D2SAdminOperationAudit{}, &D2SAuditRetentionRun{}}
+	if DB.Dialector.Name() == "sqlite" {
+		if err := DB.AutoMigrate(auditModels...); err != nil {
+			return err
+		}
+	} else {
+		for _, table := range auditModels {
+			if !DB.Migrator().HasTable(table) {
+				return fmt.Errorf("required D2S audit tables are missing; run go run ./cmd/d2s-audit-migrate with a dedicated migration DSN")
+			}
+		}
+	}
+	if err := DB.Model(&D2SOrder{}).Where("purchase_time = 0").Update("purchase_time", gorm.Expr("created_at")).Error; err != nil {
 		return err
 	}
 	if err := InitializeUserAuthVersions(); err != nil {
@@ -707,9 +791,13 @@ func closeDB(db *gorm.DB) error {
 }
 
 func CloseDB() error {
+	if D2SAuditCleanupDB != nil && D2SAuditCleanupDB != DB && D2SAuditCleanupDB != LOG_DB {
+		if err := closeDB(D2SAuditCleanupDB); err != nil {
+			return err
+		}
+	}
 	if LOG_DB != DB {
-		err := closeDB(LOG_DB)
-		if err != nil {
+		if err := closeDB(LOG_DB); err != nil {
 			return err
 		}
 	}

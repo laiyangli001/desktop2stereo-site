@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import i18n from 'i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { D2SWalletSection } from '..'
@@ -42,8 +49,14 @@ function renderWorkspace() {
 }
 
 describe('D2S wallet purchase flow', () => {
-  afterEach(() => {
+  const initialLanguage = i18n.language
+
+  afterEach(async () => {
+    await i18n.changeLanguage(initialLanguage)
     vi.restoreAllMocks()
+    document
+      .querySelector('form[action="https://payments.example/checkout"]')
+      ?.remove()
   })
 
   beforeEach(() => {
@@ -99,6 +112,11 @@ describe('D2S wallet purchase flow', () => {
     })
     fireEvent.click(payButton)
 
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('USD 29.90')).toBeInTheDocument()
+    expect(apiMocks.createD2SOrder).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
     await waitFor(() => {
       expect(apiMocks.previewD2SOrder).toHaveBeenCalledWith({
         product: 'license',
@@ -111,10 +129,23 @@ describe('D2S wallet purchase flow', () => {
           license_id: undefined,
           provider: 'stripe',
           balance_minor: 0,
+          expected_amount_minor: 2990,
+          expected_currency: 'USD',
+          expected_region: 'INTL',
         })
       )
     })
     expect(apiMocks.createD2SOrderCheckout).toHaveBeenCalledWith('order-1')
+  })
+
+  it('formats the purchase quote with the zhCN interface locale', async () => {
+    await i18n.changeLanguage('zhCN')
+    renderWorkspace()
+
+    fireEvent.click(await screen.findByRole('button', { name: /Stripe/ }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/USD 29[.,]90/)).toBeInTheDocument()
   })
 
   it('previews a balance order and submits the quoted amount without checkout redirect', async () => {
@@ -148,6 +179,11 @@ describe('D2S wallet purchase flow', () => {
       await screen.findByRole('button', { name: 'Buy with balance' })
     )
 
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('CNY 99.00')).toBeInTheDocument()
+    expect(apiMocks.createD2SOrder).not.toHaveBeenCalled()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
     await waitFor(() => {
       expect(apiMocks.previewD2SOrder).toHaveBeenCalledWith({
         product: 'license',
@@ -159,10 +195,47 @@ describe('D2S wallet purchase flow', () => {
           product: 'license',
           provider: 'balance',
           balance_minor: 9900,
+          expected_amount_minor: 9900,
+          expected_currency: 'CNY',
+          expected_region: 'CN',
         })
       )
     })
     expect(apiMocks.createD2SOrderCheckout).not.toHaveBeenCalled()
+  })
+
+  it('does not create a balance order when the quoted purchase is canceled', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ providers: ['balance'] })
+    )
+    apiMocks.getD2SBalance.mockResolvedValue(
+      response({
+        accounts: [
+          { id: 'balance-cny', currency: 'CNY', available_minor: 10000 },
+        ],
+      })
+    )
+    apiMocks.previewD2SOrder.mockResolvedValue(
+      response({
+        product: 'license',
+        provider: 'balance',
+        region: 'CN',
+        currency: 'CNY',
+        amount_minor: 9900,
+      })
+    )
+
+    renderWorkspace()
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Buy with balance' })
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    )
+    expect(apiMocks.createD2SOrder).not.toHaveBeenCalled()
   })
 
   it('passes the selected license when starting a paid revoke order', async () => {
@@ -208,6 +281,10 @@ describe('D2S wallet purchase flow', () => {
       await screen.findByRole('button', { name: 'Pay with Creem' })
     )
 
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('D2S-REVOKE-1')).toBeInTheDocument()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
     await waitFor(() => {
       expect(apiMocks.previewD2SOrder).toHaveBeenCalledWith({
         product: 'paid_revoke',
@@ -219,6 +296,9 @@ describe('D2S wallet purchase flow', () => {
           product: 'paid_revoke',
           license_id: 'license-revoke',
           provider: 'creem',
+          expected_amount_minor: 299,
+          expected_currency: 'USD',
+          expected_region: 'INTL',
         })
       )
     })
@@ -307,6 +387,9 @@ describe('D2S wallet purchase flow', () => {
       await screen.findByRole('button', { name: 'Pay with Stripe' })
     )
 
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
     await waitFor(() => expect(submit).toHaveBeenCalledOnce())
     const form = document.querySelector(
       'form[action="https://payments.example/checkout"]'
@@ -323,20 +406,54 @@ describe('D2S wallet purchase flow', () => {
   })
 
   it('marks the purchase controls busy and disables competing checkouts while pending', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ providers: ['balance', 'stripe'] })
+    )
     renderWorkspace()
 
+    const balanceButton = await screen.findByRole('button', {
+      name: 'Buy with balance',
+    })
     fireEvent.click(
       await screen.findByRole('button', { name: 'Pay with Stripe' })
     )
 
-    const pendingButton = await screen.findByRole('button', {
-      name: 'Creating checkout…',
-    })
-    expect(pendingButton).toBeDisabled()
-    expect(pendingButton.closest('[aria-busy="true"]')).not.toBeNull()
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(apiMocks.createD2SOrderCheckout).toHaveBeenCalledWith('order-1')
+    )
+    expect(
+      within(dialog).getByRole('button', { name: 'Confirm' })
+    ).toBeDisabled()
+    expect(balanceButton).toBeDisabled()
+    expect(
+      screen.getByRole('combobox', { name: 'Purchase type', hidden: true })
+    ).toBeDisabled()
+    expect(balanceButton.closest('[aria-busy="true"]')).not.toBeNull()
   })
 
-  it('restores checkout controls when checkout creation fails', async () => {
+  it('disables external checkout while a balance order is being priced', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ providers: ['balance', 'stripe'] })
+    )
+    apiMocks.previewD2SOrder.mockReturnValue(new Promise(() => {}))
+    renderWorkspace()
+
+    const stripeButton = await screen.findByRole('button', {
+      name: 'Pay with Stripe',
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Buy with balance' }))
+
+    await waitFor(() => expect(apiMocks.previewD2SOrder).toHaveBeenCalledOnce())
+    expect(stripeButton).toBeDisabled()
+    expect(
+      screen.getByRole('combobox', { name: 'Purchase type' })
+    ).toBeDisabled()
+  })
+
+  it('allows checkout retry with the same order key when checkout creation fails', async () => {
     apiMocks.createD2SOrderCheckout.mockRejectedValue(
       new Error('checkout unavailable')
     )
@@ -347,16 +464,22 @@ describe('D2S wallet purchase flow', () => {
       await screen.findByRole('button', { name: 'Pay with Stripe' })
     )
 
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
     await waitFor(() => {
       expect(apiMocks.createD2SOrderCheckout).toHaveBeenCalledWith('order-1')
       expect(
-        screen.getByRole('button', { name: 'Pay with Stripe' })
+        within(dialog).getByRole('button', { name: 'Confirm' })
       ).toBeEnabled()
     })
-    expect(
-      screen
-        .getByRole('button', { name: 'Pay with Stripe' })
-        .closest('[aria-busy="true"]')
-    ).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(apiMocks.createD2SOrder).toHaveBeenCalledTimes(2)
+    )
+    const firstKey = apiMocks.createD2SOrder.mock.calls[0][0].idempotency_key
+    const retryKey = apiMocks.createD2SOrder.mock.calls[1][0].idempotency_key
+    expect(firstKey).toBe(retryKey)
   })
 })

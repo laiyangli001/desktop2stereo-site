@@ -236,6 +236,13 @@ func RefreshLoginSession(rawRefreshToken, expectedSID, ip, userAgent string) (*A
 		_, _ = model.RevokeUserSession(session.UserID, session.SID, "user_security_changed")
 		return nil, nil, ErrLoginSessionRevoked
 	}
+	loginBlocked, err := model.IsD2SUserLoginBlocked(session.UserID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if loginBlocked {
+		return nil, nil, model.ErrD2SAccountLoginBlocked
+	}
 	nextSecret := deriveNextRefreshSecret(sid, secret)
 	rotated, err := model.RotateUserSessionRefresh(session.UserID, sid, hashRefreshSecret(secret), hashRefreshSecret(nextSecret), time.Now().Unix(), RefreshReplayWindow)
 	if err != nil {
@@ -439,6 +446,8 @@ func truncateAuthMetadata(value string, max int) string {
 
 func authSessionErrorCode(err error) (int, string) {
 	switch {
+	case errors.Is(err, model.ErrD2SAccountLoginBlocked):
+		return http.StatusLocked, "ACCOUNT_LOGIN_BLOCKED"
 	case errors.Is(err, model.ErrUserSessionLimit):
 		return http.StatusConflict, "AUTH_SESSION_LIMIT"
 	case errors.Is(err, model.ErrUserSessionIssuanceLimit):

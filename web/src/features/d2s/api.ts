@@ -15,11 +15,23 @@ import type {
   D2SReconciliationReport,
 } from './types'
 
+export type D2SDownloadTarget = 'release' | 'quark' | 'baidu'
+
 export type D2SModeRequest = {
   license_id: string
   device_hash: string
   mode: 'online' | 'offline'
   offline_period_days: number
+}
+
+export async function trackD2SDownload(target: D2SDownloadTarget) {
+  const response = await api.post(
+    `/api/v1/downloads/${encodeURIComponent(target)}/track`
+  )
+  return response.data as D2SResponse<{
+    target: D2SDownloadTarget
+    logged: boolean
+  }>
 }
 
 export async function getD2SAdminOrders(filters?: {
@@ -137,11 +149,21 @@ export type D2SOrderRequest = {
   license_id?: string
   provider: string
   balance_minor: number
+  expected_amount_minor: number
+  expected_currency: string
+  expected_region: string
   idempotency_key?: string
 }
 
 export async function previewD2SOrder(
-  request: Omit<D2SOrderRequest, 'balance_minor' | 'idempotency_key'>
+  request: Omit<
+    D2SOrderRequest,
+    | 'balance_minor'
+    | 'idempotency_key'
+    | 'expected_amount_minor'
+    | 'expected_currency'
+    | 'expected_region'
+  >
 ) {
   const response = await api.post('/api/v1/orders/preview', request)
   return response.data as D2SResponse<{

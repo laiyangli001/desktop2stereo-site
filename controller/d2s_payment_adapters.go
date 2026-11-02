@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/gin-gonic/gin"
 	"github.com/shopspring/decimal"
 	"github.com/stripe/stripe-go/v81"
 	"github.com/waffo-com/waffo-go/core"
@@ -27,11 +28,24 @@ func d2sWebhookPayloadInfo(payload []byte) string {
 	return fmt.Sprintf("payload_bytes=%d payload_sha256=%s", len(payload), hex.EncodeToString(digest[:]))
 }
 
+func d2SRequestLogPath(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	if routePath := c.FullPath(); routePath != "" {
+		return routePath
+	}
+	if c.Request.URL != nil {
+		return c.Request.URL.Path
+	}
+	return ""
+}
+
 // processVerifiedD2SPayment dispatches a provider event only when the
 // provider webhook has already passed its native signature verification.
 // Non-D2S order IDs return handled=false so existing new-api billing keeps its
 // current path.
-func processVerifiedD2SPayment(provider, eventID, orderID, eventType string, amountMinor int64, currency string, payload []byte) (bool, error) {
+func processVerifiedD2SPayment(provider, eventID, orderID, eventType string, amountMinor int64, currency string, payload []byte, paymentAccountIdentifierHash ...string) (bool, error) {
 	orderID = strings.TrimSpace(orderID)
 	if orderID == "" {
 		return false, nil
@@ -55,6 +69,7 @@ func processVerifiedD2SPayment(provider, eventID, orderID, eventType string, amo
 		currency,
 		hex.EncodeToString(digest[:]),
 		time.Now().Unix(),
+		paymentAccountIdentifierHash...,
 	)
 	return true, err
 }
@@ -116,6 +131,65 @@ func stripeD2SOrderID(event stripe.Event) string {
 	return ""
 }
 
+func d2sPaymentAccountIdentifierHash(provider, kind, identifier string) string {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	identifier = strings.TrimSpace(identifier)
+	if provider == "" || identifier == "" || (kind != "customer" && kind != "email") {
+		return ""
+	}
+	if kind == "email" {
+		identifier = strings.ToLower(identifier)
+	}
+	return common.GenerateHMACWithKey(
+		[]byte("d2s-payment-account-v1:"+common.SessionSecret),
+		provider+"|"+kind+"|"+identifier,
+	)
+}
+
+func stripeD2SPaymentAccountIdentifierHash(event stripe.Event) string {
+	var object struct {
+		Customer        string `json:"customer"`
+		CustomerEmail   string `json:"customer_email"`
+		CustomerDetails struct {
+			Email string `json:"email"`
+		} `json:"customer_details"`
+	}
+	if err := common.Unmarshal(event.Data.Raw, &object); err != nil {
+		return ""
+	}
+
+	// Stripe Checkout may include a customer ID or payer email; retain only a keyed HMAC digest.
+	identifier := strings.TrimSpace(object.Customer)
+	kind := "customer"
+	if identifier == "" {
+		kind, identifier = "email", strings.TrimSpace(object.CustomerDetails.Email)
+	}
+	if identifier == "" {
+		kind, identifier = "email", strings.TrimSpace(object.CustomerEmail)
+	}
+	return d2sPaymentAccountIdentifierHash("stripe", kind, identifier)
+}
+
+func creemD2SPaymentAccountIdentifierHash(event *CreemWebhookEvent) string {
+	if event == nil {
+		return ""
+	}
+	identifier := strings.TrimSpace(event.Object.Customer.Id)
+	kind := "customer"
+	if identifier == "" {
+		kind, identifier = "email", strings.TrimSpace(event.Object.Customer.Email)
+	}
+	return d2sPaymentAccountIdentifierHash("creem", kind, identifier)
+}
+
+func waffoPancakeD2SPaymentAccountIdentifierHash(event *service.WaffoPancakeWebhookEvent) string {
+	if event == nil {
+		return ""
+	}
+	return d2sPaymentAccountIdentifierHash("waffo_pancake", "email", event.Data.BuyerEmail)
+}
+
 func processStripeD2SPayment(event stripe.Event, payload []byte) (bool, error) {
 	eventType, ok := stripeD2SPaymentEvent(event)
 	if !ok {
@@ -138,7 +212,10 @@ func processStripeD2SPayment(event stripe.Event, payload []byte) (bool, error) {
 		return true, fmt.Errorf("invalid Stripe D2S amount_total %q: %w", rawAmount, model.ErrD2SPaymentMismatch)
 	}
 	currency := strings.ToUpper(strings.TrimSpace(event.GetObjectValue("currency")))
-	return processVerifiedD2SPayment("stripe", event.ID, orderID, eventType, amountMinor, currency, payload)
+	return processVerifiedD2SPayment(
+		"stripe", event.ID, orderID, eventType, amountMinor, currency, payload,
+		stripeD2SPaymentAccountIdentifierHash(event),
+	)
 }
 
 func logD2SProviderError(ctx context.Context, provider string, err error) {
@@ -326,6 +403,7 @@ func processWaffoPancakeD2SPayment(event *service.WaffoPancakeWebhookEvent, payl
 	return processVerifiedD2SPayment(
 		"waffo_pancake", eventID, orderID, "paid", minorValue,
 		strings.ToUpper(strings.TrimSpace(event.Data.Currency)), payload,
+		waffoPancakeD2SPaymentAccountIdentifierHash(event),
 	)
 }
 

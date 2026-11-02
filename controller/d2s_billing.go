@@ -21,14 +21,20 @@ import (
 )
 
 type d2sOrderRequest struct {
-	Product        string `json:"product"`
-	LicenseID      string `json:"license_id"`
-	Provider       string `json:"provider"`
-	BalanceMinor   int64  `json:"balance_minor"`
-	IdempotencyKey string `json:"idempotency_key"`
+	Product             string `json:"product"`
+	LicenseID           string `json:"license_id"`
+	Provider            string `json:"provider"`
+	BalanceMinor        int64  `json:"balance_minor"`
+	IdempotencyKey      string `json:"idempotency_key"`
+	ExpectedAmountMinor *int64 `json:"expected_amount_minor"`
+	ExpectedCurrency    string `json:"expected_currency"`
+	ExpectedRegion      string `json:"expected_region"`
 }
 
 func D2SOrderPreview(c *gin.Context) {
+	if d2sRejectBlockedPurchase(c, "preview") {
+		return
+	}
 	var request d2sOrderRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
 		d2sInvalidInput(c, "invalid JSON body")
@@ -42,7 +48,34 @@ func D2SOrderPreview(c *gin.Context) {
 	d2sSuccess(c, http.StatusOK, quote)
 }
 
+func replayD2SOrder(c *gin.Context, userID int, request d2sOrderRequest) bool {
+	order, err := model.GetD2SOrderByIdempotencyKey(userID, request.IdempotencyKey)
+	if err != nil {
+		d2sError(c, err)
+		return true
+	}
+	if order == nil {
+		return false
+	}
+	if request.ExpectedAmountMinor == nil ||
+		order.Product != request.Product ||
+		order.LicenseID != request.LicenseID ||
+		order.Provider != strings.ToLower(strings.TrimSpace(request.Provider)) ||
+		order.AmountMinor != *request.ExpectedAmountMinor ||
+		order.Currency != request.ExpectedCurrency ||
+		order.Region != request.ExpectedRegion ||
+		order.BalanceMinor != request.BalanceMinor {
+		d2sError(c, model.ErrD2SOrderInvalid)
+		return true
+	}
+	d2sSuccess(c, http.StatusOK, order)
+	return true
+}
+
 func createD2SOrder(c *gin.Context, requiredProduct string) {
+	if d2sRejectBlockedPurchase(c, "create") {
+		return
+	}
 	var request d2sOrderRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || strings.TrimSpace(request.IdempotencyKey) == "" {
 		d2sInvalidInput(c, "product, provider and idempotency_key are required")
@@ -52,17 +85,45 @@ func createD2SOrder(c *gin.Context, requiredProduct string) {
 		d2sInvalidInput(c, "product must be "+requiredProduct)
 		return
 	}
+	if request.ExpectedAmountMinor == nil {
+		d2sError(c, model.ErrD2SQuoteChanged)
+		return
+	}
+	userID := c.GetInt("id")
+	if replayD2SOrder(c, userID, request) {
+		return
+	}
 	now := time.Now().Unix()
-	quote, err := model.QuoteD2SOrder(c.GetInt("id"), request.Product, request.LicenseID, request.Provider, now)
+	quote, err := model.QuoteD2SOrder(userID, request.Product, request.LicenseID, request.Provider, now)
 	if err != nil {
+		if replayD2SOrder(c, userID, request) {
+			return
+		}
 		d2sError(c, err)
 		return
 	}
-	order, err := model.CreateD2SOrder(c.GetInt("id"), quote, request.BalanceMinor, request.IdempotencyKey, now)
+	if *request.ExpectedAmountMinor != quote.AmountMinor || request.ExpectedCurrency != quote.Currency || request.ExpectedRegion != quote.Region {
+		if replayD2SOrder(c, userID, request) {
+			return
+		}
+		d2sError(c, model.ErrD2SQuoteChanged)
+		return
+	}
+	user, userErr := model.GetUserById(userID, false)
+	if userErr != nil || user == nil {
+		d2sError(c, model.ErrD2SOrderInvalid)
+		return
+	}
+	purchaseAudit := d2SUserActionLogInput(c, &userID, user.Email, model.D2SActionPurchase, model.D2SActionResultSuccess)
+	order, err := model.CreateD2SOrderWithMetadataAndAudit(userID, quote, request.BalanceMinor, request.IdempotencyKey, user.Email, c.ClientIP(), now, &purchaseAudit)
 	if err != nil {
+		if replayD2SOrder(c, userID, request) {
+			return
+		}
 		d2sError(c, err)
 		return
 	}
+	c.Set("d2s_user_action_recorded", true)
 	d2sSuccess(c, http.StatusCreated, order)
 }
 
@@ -404,12 +465,24 @@ func D2SAdminSigningKeyReview(c *gin.Context) {
 	D2SAdminSigningKeys(c)
 }
 
+func auditD2SReconciliation(c *gin.Context, startAt, endAt int64, result string, details map[string]any) bool {
+	details["start_at"] = startAt
+	details["end_at"] = endAt
+	if err := writeD2SAdminAudit(c, "RUN_RECONCILIATION", "d2s_payment_reconciliation", result, details); err != nil {
+		d2sError(c, err)
+		return false
+	}
+	return true
+}
+
 func D2SAdminReconciliation(c *gin.Context) {
 	startAt, endAt := model.D2SPreviousUTCWindow(time.Now())
 	if value := strings.TrimSpace(c.Query("start_at")); value != "" {
 		parsed, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
-			d2sInvalidInput(c, "start_at must be a Unix timestamp")
+			if auditD2SReconciliation(c, startAt, endAt, "FAILURE", map[string]any{"reason": "invalid_start_at"}) {
+				d2sInvalidInput(c, "start_at must be a Unix timestamp")
+			}
 			return
 		}
 		startAt = parsed
@@ -417,18 +490,28 @@ func D2SAdminReconciliation(c *gin.Context) {
 	if value := strings.TrimSpace(c.Query("end_at")); value != "" {
 		parsed, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
-			d2sInvalidInput(c, "end_at must be a Unix timestamp")
+			if auditD2SReconciliation(c, startAt, endAt, "FAILURE", map[string]any{"reason": "invalid_end_at"}) {
+				d2sInvalidInput(c, "end_at must be a Unix timestamp")
+			}
 			return
 		}
 		endAt = parsed
 	}
 	if startAt <= 0 || endAt <= startAt {
-		d2sInvalidInput(c, "end_at must be greater than start_at")
+		if auditD2SReconciliation(c, startAt, endAt, "FAILURE", map[string]any{"reason": "invalid_window"}) {
+			d2sInvalidInput(c, "end_at must be greater than start_at")
+		}
 		return
 	}
 	report, err := model.ReconcileD2SPayments(startAt, endAt)
 	if err != nil {
+		if !auditD2SReconciliation(c, startAt, endAt, "FAILURE", map[string]any{"reason": "reconciliation_error"}) {
+			return
+		}
 		d2sError(c, err)
+		return
+	}
+	if !auditD2SReconciliation(c, startAt, endAt, "SUCCESS", map[string]any{"mismatch_count": len(report.Mismatches)}) {
 		return
 	}
 	d2sSuccess(c, http.StatusOK, report)

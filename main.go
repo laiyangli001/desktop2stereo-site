@@ -314,6 +314,10 @@ func InitResources() error {
 		common.FatalLog("failed to initialize database: " + err.Error())
 		return err
 	}
+	if err = model.BootstrapD2SAdminFromEnvironment(); err != nil {
+		common.FatalLog("failed to bootstrap D2S admin account: " + err.Error())
+		return err
+	}
 	if err = authz.Init(model.DB); err != nil {
 		common.FatalLog("failed to initialize authorization: " + err.Error())
 		return err
@@ -341,6 +345,10 @@ func InitResources() error {
 	// Initialize SQL Database
 	err = model.InitLogDB()
 	if err != nil {
+		return err
+	}
+	if err = model.InitD2SAuditCleanupDB(); err != nil {
+		common.FatalLog("failed to initialize D2S audit cleanup database: " + err.Error())
 		return err
 	}
 

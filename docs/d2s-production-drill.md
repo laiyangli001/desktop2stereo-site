@@ -15,15 +15,16 @@
 先在应用节点执行：
 
 ```powershell
-.\scripts\d2s-production-readiness.ps1 -BaseUrl https://100393.com -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
+.\scripts\d2s-production-readiness.ps1 -BaseUrl https://d2s.site -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
 ```
 
 `-RequireSecrets` additionally enforces `SESSION_COOKIE_SECURE=true`, HTTPS
 `SESSION_COOKIE_TRUSTED_URL` and `D2S_DEVICE_VERIFICATION_URI`, and a non-empty
 `TRUSTED_PROXIES` configuration before the HTTP checks are considered sufficient.
 It also validates positive integer offline-extension prices and Base64 private-key
-material, requires 32-character session and payment-bridge secrets, and rejects
-wildcard or whole-address-space trusted-proxy entries.
+material, requires 32-character session and payment-bridge secrets, rejects
+wildcard or whole-address-space trusted-proxy entries, and requires the device and
+cookie trust URLs to use the BaseUrl host or a subdomain on the same port.
 Pass the channels enabled in the deployment to `-RequiredPaymentProviders`; each
 listed channel must have its own 32-character `D2S_PAYMENT_BRIDGE_SECRET_{PROVIDER}`
 value. The parameter does not require secrets for disabled channels.
@@ -59,18 +60,20 @@ When HTTP checks are enabled, the script also rejects an `http://` `-BaseUrl`.
 易支付 V1 的 `TRADE_REFUND` 回调可能表示部分或全部退款；服务端将其送入统一金额校验，
 只有金额等于原支付金额时才会完成冲正，部分退款保留订单状态并进入人工对账。
 
+易支付还需独立验证发起侧重试契约：对同一 `out_trade_no` 重复提交同一签名表单，检查网关是否返回同一订单、超时后的重试行为，以及按商户订单号查单；保存沙箱事件/订单标识和网关响应。当前实现稳定复用 D2S 订单 ID，但网关是否幂等未知，不能将本地确定性表单视为网关幂等。
+
 日终调用管理员对账接口，并与渠道结算文件逐笔比对：
 
 ```bash
-curl -H 'Authorization: Bearer <admin-token>' \
-  'https://100393.com/api/v1/admin/reconciliation'
+curl -H 'Authorization: Bearer <D2S_RECONCILIATION_TOKEN>' \
+  'https://d2s.site/api/v1/admin/reconciliation'
 ```
 
 也可以用仓库脚本保存不可变的 JSON 报告；脚本不会打印或写入管理员令牌，也不会修改订单或
 账本：
 
 ```powershell
-.\scripts\d2s-reconciliation.ps1 -AdminToken $env:D2S_ADMIN_TOKEN
+.\scripts\d2s-reconciliation.ps1 -ReconciliationToken $env:D2S_RECONCILIATION_TOKEN
 ```
 
 如需重跑指定 UTC 窗口，同时传入 `-StartAt`、`-EndAt` 和唯一的 `-OutputPath`；脚本拒绝覆盖
@@ -112,7 +115,24 @@ deploy/desktop2stereo-db-restore-verify-docker.sh \
 仓库、备份文件或日志。该脚本只证明备份可在隔离库恢复，仍需记录真实 COS 跨故障域复制和
 恢复库数据核对结果。
 
-## 5. 监控和告警
+## 5. Windows/Linux/macOS 授权端到端验收
+
+在生产等价环境中使用每个平台独立的发布包和预置隔离账号/许可证；记录客户端发布 SHA、API
+版本、操作系统版本、时间和验收人。不要在真实用户许可证上测试永久绑定或人工解绑。
+
+| 平台 | 目标环境 | 必验流程 | 必存证据 |
+| --- | --- | --- | --- |
+| Windows x86_64 | Windows 发布包，HTTPS API，证书校验开启 | 邮箱验证/登录、设备码授权、授权列表与设备绑定、online/offline 模式切换、online 租约心跳、并发第二实例拒绝、退出释放租约、offline 7/14/30 天凭证签发与断网启动 | 客户端 SHA、Windows 版本、请求 ID、脱敏启动/租约日志、关键状态截图 |
+| Linux x86_64 | Linux 发布包，HTTPS API，证书校验开启 | 邮箱验证/登录、设备码授权、授权列表与设备绑定、online/offline 模式切换、online 租约心跳、并发第二实例拒绝、退出释放租约、offline 7/14/30 天凭证签发与断网启动 | 客户端 SHA、发行版/内核版本、请求 ID、脱敏启动/租约日志、关键状态截图 |
+| macOS arm64 | macOS 发布包，HTTPS API，证书校验开启 | 邮箱验证/登录、设备码授权、授权列表与设备绑定、online/offline 模式切换、online 租约心跳、并发第二实例拒绝、退出释放租约、offline 7/14/30 天凭证签发与断网启动 | 客户端 SHA、macOS 版本、请求 ID、脱敏启动/租约日志、关键状态截图 |
+
+每个平台还要验证另一设备不能复用该许可证、篡改/过期/错设备的离线凭证 fail-closed；online
+模式在 API 不可达或租约失效时必须拒绝受保护运行，offline 模式仅在有效凭证期限内允许断网启动。
+永久绑定确认和人工解绑审批只能使用一次性隔离账号及许可证；若该额度被批准，验收记录必须
+证明同一账号第二次申请或审批被拒绝。不得保存密码、访问令牌、刷新令牌、设备原始标识、私钥或支付 Secret。
+三个平台的证据齐全前，S5 保持 `in_progress`。
+
+## 6. 监控和告警
 
 演练中人为触发一次签名失败、金额不符、租约冲突、拒付和负余额，确认告警包含订单/事件
 标识但不包含 Secret、令牌、原始设备标识或完整支付资料。没有保存完整证据前，S5 不能标记

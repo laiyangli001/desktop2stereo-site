@@ -24,9 +24,13 @@ access token。
 或坐标误差超过服务端容差时返回
 `BEHAVIOR_CAPTCHA_REQUIRED`，不会创建会话或账号。发送邮箱验证码和请求密码重置继续复用
 `/api/verification`、`/api/reset_password`，其现有 Turnstile 防护保持不变。
+邮箱验证码和密码重置码有效期最多 15 分钟，成功核验后立即失效。多实例部署必须让所有节点共享 Redis 和相同的
+`SESSION_SECRET`；验证码收件标识与验证码均以 HMAC-SHA-256 摘要存储，Redis 故障时发送操作失败关闭。
+未配置 Redis 时仅支持单实例内存存储，不应在多实例模式下关闭 Redis。
 这些账号接口保持 new-api 契约，不承诺 D2S `version/request_id/error` 外层结构。桌面启动器
 没有浏览器 Cookie 时，刷新和登出接口也接受 JSON `refresh_token`；登录成功的 `server_time` 位于
 响应 `data` 中，刷新令牌仍优先通过 HttpOnly Cookie 返回。
+账号被管理员禁止登录时，`POST /api/v1/auth/refresh` 返回 HTTP 423 和 `ACCOUNT_LOGIN_BLOCKED`，不会轮换刷新令牌，并清除浏览器 refresh cookie；JSON token 客户端收到同一错误。该限制阻止续期，但不撤销已有会话，强制下线由独立管理操作执行。
 
 ## 设备码
 
@@ -34,7 +38,8 @@ access token。
   `platform`，返回设备码、用户码、验证地址、600 秒有效期和 5 秒轮询间隔。
 - `POST /api/v1/device/approve`：网页登录后提交 `user_code`。
 - `POST /api/v1/device/token`：启动器提交 `device_code`；待批准返回 HTTP 202 和
-  `authorization_pending`，批准后返回 access/refresh token，且只能兑换一次。
+  `authorization_pending`，批准后返回 access/refresh token，且只能兑换一次。若账号被管理员禁止登录，返回 HTTP 423 和
+  `account_login_blocked`，并消费本次已批准设备码，不能在之后解锁时复用旧码。
 - `POST /api/v1/device/cancel`：取消尚未批准的设备码。
 
 ## 授权
@@ -71,7 +76,7 @@ access token。
 ## 订单、邀请和余额
 
 - `POST /api/v1/orders/preview`：服务器报价。
-- `POST /api/v1/orders/create`：再次报价并使用 `idempotency_key` 创建订单。
+- `POST /api/v1/orders/create`：再次报价并使用 `idempotency_key` 创建订单。必须回传预览响应中的 `amount_minor`、`currency`、`region`，字段名分别为 `expected_amount_minor`、`expected_currency`、`expected_region`；任一值与创建时服务器报价不一致时返回 `409 quote_changed`，不会创建或扣款。若该账号已有同一幂等键的订单，只有商品、授权、支付渠道、余额金额和确认报价快照均一致时才返回原订单；请求不一致返回 `400 order_invalid`。
 - `GET /api/v1/orders`：返回当前账号最近 100 笔订单。
 - `GET /api/v1/orders/providers`：返回当前已配置并满足合规开关的 Checkout 渠道；前端不得展示未返回的渠道。
 - `GET /api/v1/orders/:id`
@@ -129,3 +134,5 @@ PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 退款/拒付时也会被纳入。报告会标记 `paid_order_without_payment_event`、
 `paid_order_not_settled`、`cancel_event_not_settled`、`reversal_not_settled`、
 `orphan_payment_event`、`payment_order_mismatch` 和 `pending_expired`，仅报告异常，不自动改账。
+
+后台独立认证、用户行为日志、注册快照、CSV 导出、哈希校验、购买留痕、账户紧急限制、批量处置、独立管理员审计与受控留存的 API 和字段契约，统一见 [`d2s-admin-management-spec.md`](d2s-admin-management-spec.md)。本 API 文档中列出的管理端点均须由该规格定义的独立后台身份和角色授权保护。

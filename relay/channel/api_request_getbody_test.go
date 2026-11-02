@@ -334,6 +334,22 @@ func writeH2TestResponse(framer *http2.Framer, streamID uint32) error {
 	return framer.WriteData(streamID, true, []byte(`{}`))
 }
 
+func waitH2TestPingAck(framer *http2.Framer, pingData [8]byte) error {
+	if err := framer.WritePing(false, pingData); err != nil {
+		return err
+	}
+	for {
+		frame, err := framer.ReadFrame()
+		if err != nil {
+			return err
+		}
+		ping, ok := frame.(*http2.PingFrame)
+		if ok && ping.IsAck() && ping.Data == pingData {
+			return nil
+		}
+	}
+}
+
 func awaitH2ServerResult(t *testing.T, resultCh <-chan h2ServerResult) h2ServerResult {
 	t.Helper()
 	select {
@@ -380,6 +396,11 @@ func runResetOnFirstStreamServer(ln net.Listener, expectRetry bool) <-chan h2Ser
 					return
 				}
 				if !expectRetry {
+					pingData := [8]byte{'d', '2', 's', '-', 'r', 's', 't', '!'}
+					if err := waitH2TestPingAck(framer, pingData); err != nil {
+						res.err = err
+						return
+					}
 					break attempts
 				}
 				continue
@@ -387,7 +408,10 @@ func runResetOnFirstStreamServer(ln net.Listener, expectRetry bool) <-chan h2Ser
 
 			if err := writeH2TestResponse(framer, streamID); err != nil {
 				res.err = err
+				return
 			}
+			pingData := [8]byte{'d', '2', 's', '-', 'o', 'k', '!'}
+			res.err = waitH2TestPingAck(framer, pingData)
 			return
 		}
 	}()
@@ -416,16 +440,26 @@ func runGoAwayAfterFirstRequestServer(ln net.Listener) <-chan h2ServerResult {
 			res.attemptBodies = append(res.attemptBodies, body)
 
 			if attempt == 0 {
-				err = framer.WriteGoAway(0, http2.ErrCodeNo, nil)
-				conn.Close()
-				if err != nil {
+				if err := framer.WriteGoAway(0, http2.ErrCodeNo, nil); err != nil {
+					conn.Close()
 					res.err = err
 					return
 				}
+
+				// Give the client time to acknowledge GOAWAY, then accept its retry
+				// even if it closes the old connection before sending the PING ACK.
+				_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+				pingData := [8]byte{'d', '2', 's', '-', 'g', 'o', '!'}
+				_ = waitH2TestPingAck(framer, pingData)
+				conn.Close()
 				continue
 			}
 
 			err = writeH2TestResponse(framer, streamID)
+			if err == nil {
+				pingData := [8]byte{'d', '2', 's', '-', 'o', 'k', '!'}
+				err = waitH2TestPingAck(framer, pingData)
+			}
 			conn.Close()
 			if err != nil {
 				res.err = err

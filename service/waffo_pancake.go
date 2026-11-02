@@ -26,6 +26,7 @@ type WaffoPancakeCreateSessionParams struct {
 	BuyerEmail              string
 	ExpiresInSeconds        *int
 	OrderMerchantExternalID string
+	IdempotencyKey          string
 }
 
 // WaffoPancakeCheckoutSession is the response of CreateWaffoPancakeCheckoutSession.
@@ -123,13 +124,13 @@ func CreateWaffoPancakeCheckoutSession(ctx context.Context, params *WaffoPancake
 		BuyerIdentity: params.BuyerIdentity,
 	}
 	if params.PriceSnapshot != nil {
-		sdkParams.PriceSnapshot = &pancake.PriceInfo{
+		sdkParams.PriceSnapshot = &pancake.PriceSnapshot{
 			Amount:      params.PriceSnapshot.Amount,
 			TaxCategory: pancake.TaxCategory(params.PriceSnapshot.TaxCategory),
 		}
 	}
 
-	session, err := client.Checkout.Authenticated.Create(ctx, sdkParams)
+	session, err := createWaffoPancakeCheckoutSessionWithClient(ctx, client, params, sdkParams)
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +144,19 @@ func CreateWaffoPancakeCheckoutSession(ctx context.Context, params *WaffoPancake
 		Token:          session.Token,
 		TokenExpiresAt: session.TokenExpiresAt,
 	}, nil
+}
+
+func createWaffoPancakeCheckoutSessionWithClient(
+	ctx context.Context,
+	client *pancake.Client,
+	params *WaffoPancakeCreateSessionParams,
+	sdkParams pancake.AuthenticatedCheckoutParams,
+) (*pancake.AuthenticatedCheckoutResult, error) {
+	idempotencyKey := strings.TrimSpace(params.IdempotencyKey)
+	if idempotencyKey == "" {
+		return client.Checkout.Authenticated.Create(ctx, sdkParams)
+	}
+	return client.Checkout.Authenticated.Create(ctx, sdkParams, pancake.WithIdempotencyKey(idempotencyKey))
 }
 
 func optionalString(s string) *string {

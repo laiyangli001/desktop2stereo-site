@@ -1,9 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import axios from 'axios'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
 import { SectionPageLayout } from '@/components/layout'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -13,6 +24,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { toIntlLocale } from '@/i18n/languages'
 
 import {
   getD2SBalance,
@@ -56,16 +68,67 @@ function submitD2SCheckout(checkout: {
   window.location.assign(checkout.checkout_url)
 }
 
-function formatMoney(amount: number, currency: string): string {
-  return `${currency} ${(amount / 100).toFixed(2)}`
+function formatMoney(
+  amountMinor: number,
+  currency: string,
+  locale?: string
+): string {
+  const parts = new Intl.NumberFormat(toIntlLocale(locale), {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'code',
+  }).formatToParts(amountMinor / 100)
+  return parts
+    .map((part) => (part.type === 'literal' ? ' ' : part.value))
+    .join('')
 }
 
-function formatDate(timestamp: number): string {
+function formatDate(timestamp: number, locale?: string): string {
   if (!timestamp) return '—'
-  return new Date(timestamp * 1000).toLocaleString()
+  return new Intl.DateTimeFormat(toIntlLocale(locale), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(timestamp * 1000))
 }
 
 type D2SPurchaseProduct = 'license' | 'paid_revoke' | 'offline_extension'
+type D2SPurchaseProvider =
+  | 'balance'
+  | 'stripe'
+  | 'creem'
+  | 'waffo_pancake'
+  | 'waffo'
+  | 'paymentfm'
+  | 'alipay'
+  | 'wechat'
+
+type D2SQuotedPurchase = {
+  product: D2SPurchaseProduct
+  provider: D2SPurchaseProvider
+  licenseID?: string
+  amountMinor: number
+  currency: string
+  region: string
+  idempotencyKey: string
+}
+
+function isD2SQuoteChanged(error: unknown): boolean {
+  return (
+    axios.isAxiosError<{ error?: { code?: string } }>(error) &&
+    error.response?.data?.error?.code === 'quote_changed'
+  )
+}
+
+const D2S_PROVIDER_NAMES: Record<D2SPurchaseProvider, string> = {
+  balance: 'Balance',
+  alipay: 'Alipay',
+  paymentfm: 'Payment FM',
+  wechat: 'WeChat',
+  waffo: 'Waffo',
+  waffo_pancake: 'Waffo Pancake',
+  stripe: 'Stripe',
+  creem: 'Creem',
+}
 
 const EMPTY_D2S_ORDERS: D2SOrder[] = []
 
@@ -89,7 +152,8 @@ export function LicenseCard(props: {
   onManualUnbind: (reason: string) => void
   manualUnbindStatus?: string
 }) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = i18n.resolvedLanguage || i18n.language
   const configuredDays = props.license.offline_period_days
   const [offlineDays, setOfflineDays] = useState<7 | 14 | 30>(
     configuredDays === 14 || configuredDays === 30 ? configuredDays : 7
@@ -120,11 +184,11 @@ export function LicenseCard(props: {
           </span>
         </div>
         <div>
-          {t('Expires')}: {formatDate(props.license.expires_at)}
+          {t('Expires')}: {formatDate(props.license.expires_at, locale)}
         </div>
         <div>
           {t('Offline access until')}:{' '}
-          {formatDate(props.license.offline_valid_until)}
+          {formatDate(props.license.offline_valid_until, locale)}
         </div>
         {props.license.status === 'active' &&
           props.license.device_hash &&
@@ -174,7 +238,9 @@ export function LicenseCard(props: {
                   aria-label={`${t('Offline period')} ${
                     props.license.license_code
                   }`}
+                  autoComplete='off'
                   className='h-8 rounded-lg border bg-transparent px-2 text-sm'
+                  name={`offline_period_days_${props.license.id}`}
                   disabled={props.actionPending}
                   value={offlineDays}
                   onChange={(event) =>
@@ -214,7 +280,10 @@ export function LicenseCard(props: {
                   aria-label={`${t('Manual unbind reason')} ${
                     props.license.license_code
                   }`}
+                  autoComplete='off'
                   className='h-9 rounded-lg border bg-transparent px-3'
+                  name={`manual_unbind_reason_${props.license.id}`}
+                  spellCheck={false}
                   value={manualReason}
                   onChange={(event) => setManualReason(event.target.value)}
                   placeholder={t('Manual unbind reason')}
@@ -245,6 +314,8 @@ export function LicenseCard(props: {
 }
 
 function OrderRow(props: { order: D2SOrder }) {
+  const { i18n } = useTranslation()
+  const locale = i18n.resolvedLanguage || i18n.language
   return (
     <div className='grid gap-2 border-b py-3 text-sm last:border-0 sm:grid-cols-[1.4fr_0.8fr_0.8fr_1.2fr] sm:items-center'>
       <div className='font-mono text-xs'>{props.order.id}</div>
@@ -253,9 +324,9 @@ function OrderRow(props: { order: D2SOrder }) {
         <StatusBadge value={props.order.status} />
       </div>
       <div className='sm:text-right'>
-        {formatMoney(props.order.amount_minor, props.order.currency)}
+        {formatMoney(props.order.amount_minor, props.order.currency, locale)}
         <div className='text-muted-foreground text-xs'>
-          {formatDate(props.order.created_at)}
+          {formatDate(props.order.created_at, locale)}
         </div>
       </div>
     </div>
@@ -269,13 +340,16 @@ export function D2SWorkspace(
     onWalletSummaryChange?: (summary: D2SWalletSummary) => void
   } = {}
 ) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = i18n.resolvedLanguage || i18n.language
   const view = props.view ?? 'authorization'
   const onWalletSummaryChange = props.onWalletSummaryChange
   const queryClient = useQueryClient()
   const [purchaseProduct, setPurchaseProduct] =
     useState<D2SPurchaseProduct>('license')
   const [purchaseLicenseID, setPurchaseLicenseID] = useState('')
+  const [pendingPurchase, setPendingPurchase] =
+    useState<D2SQuotedPurchase | null>(null)
   const licenses = useQuery({
     queryKey: ['d2s', 'licenses'],
     queryFn: getD2SLicenses,
@@ -400,75 +474,101 @@ export function D2SWorkspace(
     onWalletSummaryChange({
       orders: orderRows,
     })
-  }, [
-    orderRows,
-    onWalletSummaryChange,
-    view,
-  ])
+  }, [orderRows, onWalletSummaryChange, view])
   const enabledCheckoutProviders = checkoutProviders.data?.data?.providers ?? []
-  const balancePurchaseMutation = useMutation({
-    mutationFn: async () => {
+  const quoteMutation = useMutation({
+    mutationFn: async (request: {
+      provider: D2SPurchaseProvider
+      product: D2SPurchaseProduct
+      licenseID?: string
+    }): Promise<D2SQuotedPurchase> => {
       const preview = await previewD2SOrder({
-        product: purchaseProduct,
-        license_id:
-          purchaseProduct === 'license' ? undefined : purchaseLicenseID,
-        provider: 'balance',
+        product: request.product,
+        license_id: request.licenseID,
+        provider: request.provider,
       })
-      if (!preview.success || !preview.data) {
-        throw new Error(preview.error?.message || 'preview failed')
+      if (
+        !preview.success ||
+        !preview.data ||
+        preview.data.product !== request.product ||
+        preview.data.provider !== request.provider ||
+        !Number.isSafeInteger(preview.data.amount_minor) ||
+        preview.data.amount_minor <= 0
+      ) {
+        throw new Error('quote unavailable')
       }
-      const account = accountRows.find(
-        (row) => row.currency === preview.data?.currency
-      )
-      if (!account || account.available_minor < preview.data.amount_minor) {
-        throw new Error('insufficient balance')
+      if (request.provider === 'balance') {
+        const account = accountRows.find(
+          (row) => row.currency === preview.data?.currency
+        )
+        if (!account || account.available_minor < preview.data.amount_minor) {
+          throw new Error('insufficient balance')
+        }
       }
-      return createD2SOrder({
-        product: purchaseProduct,
-        license_id:
-          purchaseProduct === 'license' ? undefined : purchaseLicenseID,
-        provider: 'balance',
-        balance_minor: preview.data.amount_minor,
-        idempotency_key: `d2s-balance-${globalThis.crypto.randomUUID()}`,
-      })
+      return {
+        ...request,
+        amountMinor: preview.data.amount_minor,
+        currency: preview.data.currency,
+        region: preview.data.region,
+        idempotencyKey: `d2s-${globalThis.crypto.randomUUID()}`,
+      }
     },
+    onSuccess: setPendingPurchase,
+    onError: (error, request) => {
+      let message: string
+      if (error.message === 'insufficient balance') {
+        message = t('Insufficient balance')
+      } else if (request.provider === 'balance') {
+        message = t('Unable to purchase license')
+      } else {
+        message = t('Unable to start checkout')
+      }
+      toast.error(message)
+    },
+  })
+  const balancePurchaseMutation = useMutation({
+    mutationFn: (quote: D2SQuotedPurchase) =>
+      createD2SOrder({
+        product: quote.product,
+        license_id: quote.licenseID,
+        provider: 'balance',
+        balance_minor: quote.amountMinor,
+        expected_amount_minor: quote.amountMinor,
+        expected_currency: quote.currency,
+        expected_region: quote.region,
+        idempotency_key: quote.idempotencyKey,
+      }),
     onSuccess: (result) => {
       if (!result.success) {
         toast.error(result.error?.message || t('Unable to purchase license'))
         return
       }
+      setPendingPurchase(null)
       void queryClient.invalidateQueries({ queryKey: ['d2s'] })
       toast.success(t('License purchased'))
     },
-    onError: () => toast.error(t('Unable to purchase license')),
+    onError: (error) => {
+      if (isD2SQuoteChanged(error)) {
+        setPendingPurchase(null)
+        toast.error(
+          t('Price changed; review the latest quote before purchasing.')
+        )
+        return
+      }
+      toast.error(t('Unable to purchase license'))
+    },
   })
   const externalPurchaseMutation = useMutation({
-    mutationFn: async (request: {
-      provider:
-        | 'stripe'
-        | 'creem'
-        | 'waffo_pancake'
-        | 'waffo'
-        | 'paymentfm'
-        | 'alipay'
-        | 'wechat'
-      product: D2SPurchaseProduct
-      licenseID?: string
-    }) => {
-      const preview = await previewD2SOrder({
-        product: request.product,
-        license_id: request.licenseID,
-        provider: request.provider,
-      })
-      if (!preview.success || !preview.data) {
-        throw new Error(preview.error?.message || 'preview failed')
-      }
+    mutationFn: async (request: D2SQuotedPurchase) => {
       const created = await createD2SOrder({
         product: request.product,
         license_id: request.licenseID,
         provider: request.provider,
         balance_minor: 0,
-        idempotency_key: `d2s-${request.product}-${request.provider}-${globalThis.crypto.randomUUID()}`,
+        expected_amount_minor: request.amountMinor,
+        expected_currency: request.currency,
+        expected_region: request.region,
+        idempotency_key: request.idempotencyKey,
       })
       if (!created.success || !created.data) {
         throw new Error(created.error?.message || 'order creation failed')
@@ -481,9 +581,38 @@ export function D2SWorkspace(
         return
       }
       submitD2SCheckout(result.data)
+      setPendingPurchase(null)
     },
-    onError: () => toast.error(t('Unable to start checkout')),
+    onError: (error) => {
+      if (isD2SQuoteChanged(error)) {
+        setPendingPurchase(null)
+        toast.error(
+          t('Price changed; review the latest quote before purchasing.')
+        )
+        return
+      }
+      toast.error(t('Unable to start checkout'))
+    },
   })
+  const purchasePending =
+    quoteMutation.isPending ||
+    balancePurchaseMutation.isPending ||
+    externalPurchaseMutation.isPending
+  let purchaseProductLabel = ''
+  if (pendingPurchase?.product === 'license') {
+    purchaseProductLabel = t('New license')
+  } else if (pendingPurchase?.product === 'paid_revoke') {
+    purchaseProductLabel = t('Paid revoke')
+  } else if (pendingPurchase?.product === 'offline_extension') {
+    purchaseProductLabel = t('Offline extension')
+  }
+  const requestPurchaseQuote = (provider: D2SPurchaseProvider) => {
+    quoteMutation.mutate({
+      provider,
+      product: purchaseProduct,
+      licenseID: purchaseProduct === 'license' ? undefined : purchaseLicenseID,
+    })
+  }
 
   const content = (
     <div className='mx-auto flex w-full max-w-7xl flex-col gap-4 sm:gap-5'>
@@ -499,214 +628,241 @@ export function D2SWorkspace(
       )}
       {view === 'wallet' && (
         <Card>
-            <CardHeader>
-              <CardTitle>{t('Purchase a license')}</CardTitle>
-              <CardDescription>
-                {t('Use your locked-region balance for a full payment.')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent
-              className='flex flex-wrap items-center gap-3'
-              aria-busy={
-                balancePurchaseMutation.isPending ||
-                externalPurchaseMutation.isPending
-              }
-            >
+          <CardHeader>
+            <CardTitle>{t('Purchase a license')}</CardTitle>
+            <CardDescription>
+              {t('Use your locked-region balance for a full payment.')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent
+            className='flex flex-wrap items-center gap-3'
+            aria-busy={purchasePending}
+          >
+            <label className='flex items-center gap-2 text-sm'>
+              <span>{t('Purchase type')}</span>
+              <select
+                aria-label={t('Purchase type')}
+                autoComplete='off'
+                className='h-8 rounded-lg border bg-transparent px-2 text-sm'
+                name='purchase_type'
+                disabled={purchasePending}
+                value={purchaseProduct}
+                onChange={(event) =>
+                  setPurchaseProduct(event.target.value as D2SPurchaseProduct)
+                }
+              >
+                <option value='license'>{t('New license')}</option>
+                <option value='paid_revoke'>{t('Paid revoke')}</option>
+                <option value='offline_extension'>
+                  {t('Offline extension')}
+                </option>
+              </select>
+            </label>
+            {purchaseProduct !== 'license' && (
               <label className='flex items-center gap-2 text-sm'>
-                <span>{t('Purchase type')}</span>
+                <span>{t('License')}</span>
                 <select
-                  aria-label={t('Purchase type')}
-                  className='h-8 rounded-lg border bg-transparent px-2 text-sm'
-                  value={purchaseProduct}
-                  onChange={(event) =>
-                    setPurchaseProduct(event.target.value as D2SPurchaseProduct)
-                  }
+                  aria-label={t('License')}
+                  autoComplete='off'
+                  className='h-8 max-w-56 rounded-lg border bg-transparent px-2 text-sm'
+                  name='license_id'
+                  disabled={purchasePending}
+                  value={purchaseLicenseID}
+                  onChange={(event) => setPurchaseLicenseID(event.target.value)}
                 >
-                  <option value='license'>{t('New license')}</option>
-                  <option value='paid_revoke'>{t('Paid revoke')}</option>
-                  <option value='offline_extension'>
-                    {t('Offline extension')}
-                  </option>
+                  <option value=''>{t('Select a license')}</option>
+                  {purchasableLicenses.map((license) => (
+                    <option key={license.id} value={license.id}>
+                      {license.license_code}
+                    </option>
+                  ))}
                 </select>
               </label>
-              {purchaseProduct !== 'license' && (
-                <label className='flex items-center gap-2 text-sm'>
-                  <span>{t('License')}</span>
-                  <select
-                    aria-label={t('License')}
-                    className='h-8 max-w-56 rounded-lg border bg-transparent px-2 text-sm'
-                    value={purchaseLicenseID}
-                    onChange={(event) =>
-                      setPurchaseLicenseID(event.target.value)
-                    }
-                  >
-                    <option value=''>{t('Select a license')}</option>
-                    {purchasableLicenses.map((license) => (
-                      <option key={license.id} value={license.id}>
-                        {license.license_code}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {enabledCheckoutProviders.includes('balance') && (
-                <Button
-                  type='button'
-                  disabled={
-                    balancePurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() => balancePurchaseMutation.mutate()}
-                >
-                  {balancePurchaseMutation.isPending
-                    ? t('Creating order…')
-                    : t('Buy with balance')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('alipay') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'alipay',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with Alipay')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('paymentfm') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'paymentfm',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with Payment FM')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('wechat') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'wechat',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with WeChat')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('waffo') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'waffo',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with Waffo')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('waffo_pancake') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'waffo_pancake',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with Waffo Pancake')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('stripe') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'stripe',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with Stripe')}
-                </Button>
-              )}
-              {enabledCheckoutProviders.includes('creem') && (
-                <Button
-                  type='button'
-                  variant='outline'
-                  disabled={
-                    externalPurchaseMutation.isPending || purchaseTargetMissing
-                  }
-                  onClick={() =>
-                    externalPurchaseMutation.mutate({
-                      provider: 'creem',
-                      product: purchaseProduct,
-                      licenseID: purchaseLicenseID || undefined,
-                    })
-                  }
-                >
-                  {externalPurchaseMutation.isPending
-                    ? t('Creating checkout…')
-                    : t('Pay with Creem')}
-                </Button>
-              )}
-              <span className='text-muted-foreground text-sm'>
-                {t('The server will quote the price and verify your currency.')}
-              </span>
-            </CardContent>
+            )}
+            {enabledCheckoutProviders.includes('balance') && (
+              <Button
+                type='button'
+                disabled={
+                  purchasePending ||
+                  purchaseTargetMissing ||
+                  balance.isPending ||
+                  balance.isError
+                }
+                onClick={() => requestPurchaseQuote('balance')}
+              >
+                {balancePurchaseMutation.isPending
+                  ? t('Creating order…')
+                  : t('Buy with balance')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('alipay') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('alipay')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with Alipay')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('paymentfm') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('paymentfm')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with Payment FM')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('wechat') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('wechat')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with WeChat')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('waffo') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('waffo')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with Waffo')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('waffo_pancake') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('waffo_pancake')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with Waffo Pancake')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('stripe') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('stripe')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with Stripe')}
+              </Button>
+            )}
+            {enabledCheckoutProviders.includes('creem') && (
+              <Button
+                type='button'
+                variant='outline'
+                disabled={purchasePending || purchaseTargetMissing}
+                onClick={() => requestPurchaseQuote('creem')}
+              >
+                {externalPurchaseMutation.isPending
+                  ? t('Creating checkout…')
+                  : t('Pay with Creem')}
+              </Button>
+            )}
+            <span className='text-muted-foreground text-sm'>
+              {t('The server will quote the price and verify your currency.')}
+            </span>
+            {quoteMutation.isPending && (
+              <p role='status' aria-live='polite' className='text-sm'>
+                {t('Getting price quote…')}
+              </p>
+            )}
+          </CardContent>
         </Card>
+      )}
+      {view === 'wallet' && (
+        <AlertDialog
+          open={pendingPurchase !== null}
+          onOpenChange={(open) => {
+            if (!open && !purchasePending) setPendingPurchase(null)
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t('Confirm Payment')}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {t('Amount to pay:')}{' '}
+                <strong className='text-foreground'>
+                  {pendingPurchase &&
+                    formatMoney(
+                      pendingPurchase.amountMinor,
+                      pendingPurchase.currency,
+                      locale
+                    )}
+                </strong>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            {pendingPurchase && (
+              <dl className='grid gap-2 text-sm'>
+                <div className='flex justify-between gap-4'>
+                  <dt>{t('Purchase type')}</dt>
+                  <dd>{purchaseProductLabel}</dd>
+                </div>
+                {pendingPurchase.licenseID && (
+                  <div className='flex justify-between gap-4'>
+                    <dt>{t('License')}</dt>
+                    <dd>
+                      {licenses.data?.data?.licenses?.find(
+                        (license) => license.id === pendingPurchase.licenseID
+                      )?.license_code ?? pendingPurchase.licenseID}
+                    </dd>
+                  </div>
+                )}
+                <div className='flex justify-between gap-4'>
+                  <dt>{t('Payment')}</dt>
+                  <dd>
+                    {pendingPurchase.provider === 'balance'
+                      ? t('Balance')
+                      : D2S_PROVIDER_NAMES[pendingPurchase.provider]}
+                  </dd>
+                </div>
+                <div className='flex justify-between gap-4'>
+                  <dt>{t('Region')}</dt>
+                  <dd>{pendingPurchase.region}</dd>
+                </div>
+              </dl>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={purchasePending}>
+                {t('Cancel')}
+              </AlertDialogCancel>
+              <AlertDialogAction
+                type='button'
+                disabled={purchasePending}
+                onClick={() => {
+                  if (!pendingPurchase) return
+                  if (pendingPurchase.provider === 'balance') {
+                    balancePurchaseMutation.mutate(pendingPurchase)
+                  } else {
+                    externalPurchaseMutation.mutate(pendingPurchase)
+                  }
+                }}
+              >
+                {t('Confirm')}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       )}
 
       <div className='grid gap-4 xl:grid-cols-2'>
@@ -774,7 +930,13 @@ export function D2SWorkspace(
             ))}
             {!licenses.isLoading &&
               (licenses.data?.data?.licenses?.length ?? 0) === 0 && (
-                <p className='text-muted-foreground'>{t('No licenses')}</p>
+                <p
+                  aria-live='polite'
+                  className='text-muted-foreground'
+                  role='status'
+                >
+                  {t('No licenses')}
+                </p>
               )}
           </section>
         )}
@@ -790,7 +952,13 @@ export function D2SWorkspace(
               </CardHeader>
               <CardContent>
                 {orderRows.length === 0 ? (
-                  <p className='text-muted-foreground'>{t('No orders')}</p>
+                  <p
+                    aria-live='polite'
+                    className='text-muted-foreground'
+                    role='status'
+                  >
+                    {t('No orders')}
+                  </p>
                 ) : (
                   orderRows.map((order) => (
                     <OrderRow key={order.id} order={order} />
@@ -822,7 +990,13 @@ export function D2SWorkspace(
               />
               <div>
                 {withdrawalRows.length === 0 ? (
-                  <p className='text-muted-foreground'>{t('No withdrawals')}</p>
+                  <p
+                    aria-live='polite'
+                    className='text-muted-foreground'
+                    role='status'
+                  >
+                    {t('No withdrawals')}
+                  </p>
                 ) : (
                   withdrawalRows.map((withdrawal) => (
                     <div
@@ -832,13 +1006,14 @@ export function D2SWorkspace(
                       <span>
                         {formatMoney(
                           withdrawal.amount_minor,
-                          withdrawal.currency
+                          withdrawal.currency,
+                          locale
                         )}
                       </span>
                       <span>
                         <StatusBadge value={withdrawal.status} />{' '}
                         <span className='text-muted-foreground text-xs'>
-                          {formatDate(withdrawal.created_at)}
+                          {formatDate(withdrawal.created_at, locale)}
                         </span>
                       </span>
                     </div>

@@ -57,14 +57,15 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 				&D2SDeviceCode{}, &D2SOfflineEntitlement{}, &D2SOnlineLease{}, &D2SFreeRevokeCooldown{},
 				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
 				&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
-				&D2SSigningKey{},
+				&D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
+				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
 			}
 			require.NoError(t, db.AutoMigrate(models...))
 			require.NoError(t, db.AutoMigrate(models...), "migration must be idempotent")
 
 			suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
 			shortSuffix := suffix[len(suffix)-10:]
-			user := User{Username: "m-" + test.name + "-" + shortSuffix, Password: "unused-hash", Email: "matrix-" + test.name + "-" + suffix + "@example.com", AffCode: "m-" + test.name + "-" + shortSuffix, Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			user := User{Username: "m-" + test.name + "-" + shortSuffix, Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "matrix-" + test.name + "-" + suffix + "@example.com", AffCode: "m-" + test.name + "-" + shortSuffix, Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 			require.NoError(t, db.Create(&user).Error)
 			licenses, err := ListD2SLicenses(user.Id, 2_000_700_000)
 			require.NoError(t, err)
@@ -72,6 +73,18 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 			bound, err := BindD2SLicense(user.Id, licenses[0].ID, fmt.Sprintf("%064x", uint64(time.Now().UnixNano())), 1, 2_000_700_001)
 			require.NoError(t, err)
 			assert.Equal(t, D2SLicenseModeOnline, bound.Mode)
+
+			reconcileNow := time.Now().UTC().Unix()
+			order := D2SOrder{
+				ID: "matrix-reconciliation-" + suffix, UserID: user.Id, Product: D2SOrderProductLicense,
+				Provider: "stripe", Region: D2SRegionINTL, Currency: "USD", AmountMinor: 2990,
+				GatewayMinor: 2990, Status: D2SOrderPending, IdempotencyKey: "matrix-reconciliation-" + suffix,
+				CreatedAt: reconcileNow, ExpiresAt: reconcileNow + 20,
+			}
+			require.NoError(t, db.Create(&order).Error)
+			reconciliation, err := ReconcileD2SPayments(reconcileNow-1, reconcileNow+30)
+			require.NoError(t, err)
+			assert.Contains(t, reconciliation.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, Kind: "pending_expired"})
 		})
 	}
 }
@@ -115,11 +128,12 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 				&D2SDeviceCode{}, &D2SOfflineEntitlement{}, &D2SOnlineLease{}, &D2SFreeRevokeCooldown{},
 				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
 				&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
-				&D2SSigningKey{},
+				&D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
+				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
 			}
 			require.NoError(t, db.AutoMigrate(models...))
 			suffix := time.Now().UnixNano()
-			user := User{Username: "concurrent-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", Email: "concurrent-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "concurrent-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			user := User{Username: "concurrent-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "concurrent-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "concurrent-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 			require.NoError(t, db.Create(&user).Error)
 			const now = int64(2_000_800_000)
 
@@ -232,7 +246,7 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 			require.NoError(t, db.Model(&D2SPaymentEvent{}).Where("provider = ? AND provider_event_id = ?", "stripe", eventID).Count(&paymentEventCount).Error)
 			assert.EqualValues(t, 1, paymentEventCount)
 
-			regionUser := User{Username: "region-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", Email: "region-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "region-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			regionUser := User{Username: "region-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "region-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "region-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 			require.NoError(t, db.Create(&regionUser).Error)
 			cnQuote, err := QuoteD2SOrder(regionUser.Id, D2SOrderProductLicense, "", "epay", now+7)
 			require.NoError(t, err)
@@ -270,7 +284,7 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 			assert.Equal(t, 1, regionSuccesses)
 			assert.Equal(t, 1, regionMismatches)
 
-			balanceUser := User{Username: "balance-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", Email: "balance-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "balance-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			balanceUser := User{Username: "balance-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "balance-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "balance-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 			require.NoError(t, db.Create(&balanceUser).Error)
 			balanceProfile, err := EnsureD2SProfileAndTrial(balanceUser.Id, now+9)
 			require.NoError(t, err)
@@ -296,6 +310,10 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 				}
 			}
 			assert.Equal(t, 1, withdrawalSuccesses)
+
+			unbindUser := User{Username: "unbind-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "unbind-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "unbind-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+			require.NoError(t, db.Create(&unbindUser).Error)
+			assertOnlyOneConcurrentManualUnbindApproval(t, unbindUser.Id)
 		})
 	}
 }

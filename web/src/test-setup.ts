@@ -46,45 +46,12 @@ function createMemoryStorage(): Storage {
   }
 }
 
-function hasStorageMethods(value: unknown): value is Storage {
-  if (!value || typeof value !== 'object') return false
-  const storage = value as Partial<Storage>
-  return (
-    typeof storage.getItem === 'function' &&
-    typeof storage.setItem === 'function' &&
-    typeof storage.removeItem === 'function' &&
-    typeof storage.clear === 'function' &&
-    typeof storage.key === 'function'
-  )
-}
-
-function isUsableStorage(storage: Storage): boolean {
-  const probeKey = '__vitest_storage_probe__'
-  try {
-    storage.setItem(probeKey, '1')
-    const isStored = storage.getItem(probeKey) === '1'
-    storage.removeItem(probeKey)
-    return isStored
-  } catch {
-    return false
-  }
-}
-
 function installTestStorage(name: 'localStorage' | 'sessionStorage'): void {
   const globalOwner = globalThis as unknown as Record<string, unknown>
   const windowOwner = window as unknown as Record<string, unknown>
-  let storage: Storage | undefined
+  // Keep test storage isolated and avoid Node's experimental persistent-storage getter.
+  const storage = createMemoryStorage()
 
-  try {
-    const candidate = windowOwner[name]
-    if (hasStorageMethods(candidate) && isUsableStorage(candidate)) {
-      storage = candidate
-    }
-  } catch {
-    storage = undefined
-  }
-
-  storage ??= createMemoryStorage()
   Object.defineProperty(globalOwner, name, {
     configurable: true,
     value: storage,

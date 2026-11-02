@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/QuantumNous/new-api/common"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -38,6 +37,7 @@ const (
 
 var (
 	ErrD2SEmailVerificationRequired = errors.New("verified email is required")
+	ErrD2SAccountLoginBlocked       = errors.New("account login is blocked")
 	ErrD2SLicenseNotFound           = errors.New("license not found")
 	ErrD2SLicenseUnavailable        = errors.New("license is unavailable")
 	ErrD2SDeviceMismatch            = errors.New("device does not match the license binding")
@@ -227,23 +227,31 @@ type D2SManualUnbindRequest struct {
 func (D2SManualUnbindRequest) TableName() string { return "d2s_manual_unbind_requests" }
 
 type D2SOrder struct {
-	ID             string  `json:"id" gorm:"type:varchar(64);primaryKey"`
-	UserID         int     `json:"user_id" gorm:"not null;index;uniqueIndex:idx_d2s_order_user_idempotency,priority:1"`
-	Product        string  `json:"product" gorm:"type:varchar(32);not null;index"`
-	LicenseID      string  `json:"license_id,omitempty" gorm:"type:varchar(64);index"`
-	Provider       string  `json:"provider" gorm:"type:varchar(32);not null;index"`
-	Region         string  `json:"region" gorm:"type:varchar(8);not null"`
-	Currency       string  `json:"currency" gorm:"type:char(3);not null"`
-	AmountMinor    int64   `json:"amount_minor" gorm:"type:bigint;not null"`
-	BalanceMinor   int64   `json:"balance_minor" gorm:"type:bigint;not null"`
-	GatewayMinor   int64   `json:"gateway_minor" gorm:"type:bigint;not null"`
-	RevokeNumber   int     `json:"revoke_number,omitempty" gorm:"not null"`
-	Status         string  `json:"status" gorm:"type:varchar(16);not null;index"`
-	IdempotencyKey string  `json:"-" gorm:"type:varchar(128);not null;uniqueIndex:idx_d2s_order_user_idempotency,priority:2"`
-	PendingKey     *string `json:"-" gorm:"type:varchar(64);uniqueIndex:idx_d2s_order_pending_key"`
-	CreatedAt      int64   `json:"created_at" gorm:"type:bigint;not null"`
-	ExpiresAt      int64   `json:"expires_at" gorm:"type:bigint;not null;index"`
-	CompletedAt    int64   `json:"completed_at" gorm:"type:bigint;not null"`
+	ID            string `json:"id" gorm:"type:varchar(64);primaryKey"`
+	UserID        int    `json:"user_id" gorm:"not null;index;uniqueIndex:idx_d2s_order_user_idempotency,priority:1"`
+	EmailSnapshot string `json:"email" gorm:"type:varchar(254);not null;default:''"`
+	Product       string `json:"product" gorm:"type:varchar(32);not null;index"`
+	ProductID     string `json:"product_id" gorm:"type:varchar(32);not null;default:''"`
+	LicenseID     string `json:"license_id,omitempty" gorm:"type:varchar(64);index"`
+	Provider      string `json:"provider" gorm:"type:varchar(32);not null;index"`
+	PaymentMethod string `json:"payment_method" gorm:"type:varchar(32);not null;default:''"`
+	// Payment providers do not consistently expose payer identifiers; keep this nil when unavailable.
+	PaymentAccountIdentifierHash *string `json:"payment_account_identifier_hash" gorm:"type:char(64)"`
+	SourceIP                     string  `json:"source_ip" gorm:"type:varchar(64);not null;default:''"`
+	Region                       string  `json:"region" gorm:"type:varchar(8);not null"`
+	Currency                     string  `json:"currency" gorm:"type:char(3);not null"`
+	AmountMinor                  int64   `json:"amount_minor" gorm:"type:bigint;not null"`
+	BalanceMinor                 int64   `json:"balance_minor" gorm:"type:bigint;not null"`
+	GatewayMinor                 int64   `json:"gateway_minor" gorm:"type:bigint;not null"`
+	RevokeNumber                 int     `json:"revoke_number,omitempty" gorm:"not null"`
+	Status                       string  `json:"status" gorm:"type:varchar(16);not null;index"`
+	ResultStatus                 string  `json:"result_status" gorm:"type:varchar(16);not null;default:'SUCCESS'"`
+	IdempotencyKey               string  `json:"-" gorm:"type:varchar(128);not null;uniqueIndex:idx_d2s_order_user_idempotency,priority:2"`
+	PendingKey                   *string `json:"-" gorm:"type:varchar(64);uniqueIndex:idx_d2s_order_pending_key"`
+	PurchaseTime                 int64   `json:"purchase_time" gorm:"type:bigint;not null;default:0;index"`
+	CreatedAt                    int64   `json:"created_at" gorm:"type:bigint;not null"`
+	ExpiresAt                    int64   `json:"expires_at" gorm:"type:bigint;not null;index"`
+	CompletedAt                  int64   `json:"completed_at" gorm:"type:bigint;not null"`
 }
 
 func (D2SOrder) TableName() string { return "d2s_orders" }
@@ -362,14 +370,14 @@ func EnsureD2SProfileAndTrial(userID int, now int64) (*D2SUserProfile, error) {
 		if err := tx.Select("id", "email", "email_verified_at").First(&user, userID).Error; err != nil {
 			return err
 		}
-		if strings.TrimSpace(user.Email) == "" || (common.EmailVerificationEnabled && user.EmailVerifiedAt <= 0) {
+		if strings.TrimSpace(user.Email) == "" || user.EmailVerifiedAt <= 0 {
 			return ErrD2SEmailVerificationRequired
 		}
 		if err := lockForUpdate(tx).Where("user_id = ?", userID).First(&result).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
-			candidate := D2SUserProfile{UserID: userID, EmailVerified: !common.EmailVerificationEnabled || user.EmailVerifiedAt > 0, CreatedAt: now, UpdatedAt: now}
+			candidate := D2SUserProfile{UserID: userID, EmailVerified: user.EmailVerifiedAt > 0, CreatedAt: now, UpdatedAt: now}
 			if err := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "user_id"}},
 				DoNothing: true,
@@ -380,7 +388,7 @@ func EnsureD2SProfileAndTrial(userID int, now int64) (*D2SUserProfile, error) {
 				return err
 			}
 		}
-		expectedEmailVerified := !common.EmailVerificationEnabled || user.EmailVerifiedAt > 0
+		expectedEmailVerified := user.EmailVerifiedAt > 0
 		if result.EmailVerified != expectedEmailVerified {
 			if err := tx.Model(&D2SUserProfile{}).Where("user_id = ?", userID).Update("email_verified", expectedEmailVerified).Error; err != nil {
 				return err
@@ -541,6 +549,10 @@ func CreateD2SManualUnbind(userID int, licenseID, reason, proofRef string, now i
 	}
 	var result D2SManualUnbindRequest
 	err := d2STransaction(func(tx *gorm.DB) error {
+		var profile D2SUserProfile
+		if err := lockForUpdate(tx).Where("user_id = ?", userID).First(&profile).Error; err != nil {
+			return err
+		}
 		license, err := GetD2SLicense(userID, licenseID, lockForUpdate(tx))
 		if err != nil {
 			return err
@@ -814,6 +826,22 @@ func ApproveD2SDeviceCode(userID int, userCode string, now int64) (*D2SDeviceCod
 		}).Error
 	})
 	return &row, err
+}
+
+func FindD2SDeviceCodeForAudit(deviceSecret string) (*D2SDeviceCode, error) {
+	deviceSecret = strings.TrimSpace(deviceSecret)
+	if deviceSecret == "" || len(deviceSecret) > 128 {
+		return nil, nil
+	}
+	var row D2SDeviceCode
+	err := DB.Where("device_code_hash = ?", hashD2SSecret(deviceSecret)).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func ClaimD2SDeviceCode(deviceSecret string, now int64) (*D2SDeviceCode, error) {

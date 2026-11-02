@@ -63,13 +63,32 @@ GORM 维护以下表：
 所有金额使用整数最小货币单位，时间使用 UTC Unix 秒。只保存设备摘要、令牌哈希和 JWS
 摘要，不保存原始设备标识、刷新令牌明文、支付 Secret 或签名私钥。
 
+### 4.1 账户审计与后台治理
+
+后台治理模块复用用户、订单和支付业务实体，不复用前台用户凭据作为后台登录凭据；管理员账号、会话及角色独立存储。新增用户行为日志、注册快照、后台操作审计、账户紧急控制和可选身份核验记录。购买留痕扩展现有订单快照，记录邮箱、来源 IP、渠道及脱敏支付标识，不重复建立可分叉的交易账本。
+
+用户行为日志为追加写入，保存完整网络与请求字段并为关键字段计算 SHA-256；来源端口仅在 TCP 对端与解析出的客户端 IP 一致、且 TCP 对端不属于 `TRUSTED_PROXIES` 时记录；经反向代理转发或无法确认时留空，不能把代理连接端口当作客户端端口。查询分页、CSV 导出、单条哈希校验和注册导出仅开放给具备对应后台角色的管理员。后台写操作、日志查看/导出、证件核验、紧急限制和生命周期清理均留审计记录。前台用户或管理员 API 不提供日志更新、删除或清空操作。
+
+邮箱验证码验证为注册和登录/购买的硬性前置条件，验证码有效期不超过 15 分钟，成功核验后一次性失效，并按邮箱和来源 IP 限速；成功注册时，用户激活状态、注册快照和成功 `REGISTER` 行为日志在同一数据库事务中提交。登录成功、失败及临时锁定事件均写入用户行为日志。账户紧急限制在服务端检查，支持禁登录、禁购买、会话撤销及分批处理，批量执行要求预览、二次确认并审计筛选条件与影响数量。
+
+用户行为、注册快照和后台审计默认不自动清理，保留策略不得低于 180 天；若启用受控清理，最低天数以代码常量固定为 180。成功清理在同一事务写入范围和数量审计并删除到期记录；清理事务失败后先回滚，再用新事务追加失败阶段、实际删除数和候选记录统计，数据库故障时由后台操作审计路径再次尝试留痕。应用运行时日志数据库凭据仅具备 INSERT/SELECT。SQLite 的文件级权限不能提供表级授权，部署说明必须清楚区分数据库约束与应用层追加约束。
+
+字段、路由、角色、索引、哈希编码、错误码及导出语义见 [`d2s-admin-management-spec.md`](d2s-admin-management-spec.md)。
+
+当前实施状态：`in_progress`。已落地独立后台账号/会话、一次性首位超级管理员环境变量引导、行为与注册/管理员审计表、日志追加钩子和 SHA-256 校验、查询与 CSV 导出、管理员角色中间件、邮箱验证登录门禁、单账户/批量紧急限制、订单购买快照及 180 天受控清理入口。身份核验号码改用带算法版本标记和域分离的 HMAC-SHA-256；写入必须配置独立 `D2S_ID_DOCUMENT_HMAC_KEY`，缺失时失败关闭。实际路由以规格书的 API 表为准。
+
+未完成或未验证：已新增独立管理路由 `/d2s-admin-console`，提供后台登录、日志/注册/购买查看与导出、账户紧急操作、批量处置、身份核验及受控清理界面；前端 `tsgo -b` 与 Rsbuild 生产构建已通过。PostgreSQL/MySQL 审计表已从主服务自动迁移路径分离，新增独立迁移命令；生产运行账号 INSERT/SELECT 授权、清理凭据及迁移命令的生产执行尚未完成。审计治理已通过 SQLite 重复迁移、GORM 更新/删除拒绝、180 天最低保留期限和清理边界测试；本地 MySQL 8.4.9 与 PostgreSQL 15.14 的独立审计迁移命令、审计模型迁移及业务授权逻辑/并发关键路径测试均已通过。2026-10-30 在隔离库 `d2s_perm_probe_20261030` 应用 MySQL/PostgreSQL 权限脚本后，运行账号对四张审计表的 16 次 UPDATE/DELETE 尝试均被数据库拒绝；完整 `go test ./...` 通过。以上仅为本地验证，生产账号权限、生产迁移及后台端到端操作仍待验收。已在登录态首页 GitHub、夸克和百度下载入口接入服务端白名单点击记录；服务端检查登录状态、邮箱验证和登录限制，并在跳转前写入 `DOWNLOAD/SUCCESS` 日志。匿名公开下载仍不关联账户；日志仅证明下载链接点击已记录，不证明外部文件传输完成。该流程的生产环境端到端验收尚未完成。未完成这些部署与验收门槛前不得标记生产就绪。
+
+- 2026-10-30 修正两类 CSV 导出的审计时序：发送前追加 `STARTED`，成功 flush 后追加 `SUCCESS`，流错误追加 `FAILURE`；若开始审计失败则不发送 CSV。新增成功、流失败和审计表不可用三项回归；`go test -p 1 ./...` 通过。
+- 2026-10-30 登录和通用用户行为审计中间件改为缓冲响应，在行为记录追加成功后才返回原响应；追加失败时返回 `503` 且不释放成功响应或登录 Cookie。登录审计失败会撤销新建会话，待完成 2FA 的请求记为 `BLOCKED`；注册成功快照、账号和 `REGISTER` 记录保持同事务提交。新增审计成功/失败及大于 64 KiB 请求体完整透传回归，`go test ./middleware -run 'TestD2S(LoginActionLog|UserActionLog)' -count=1` 与 `go test ./controller ./middleware` 均通过。初次完整 `go test -p 1 ./...` 除 `relay/channel/ollama` 外其余包通过；该包运行临时 `ollama.test.exe` 连续返回 Windows `Access is denied`，单独重跑仍复现。2026-10-30 将 GOCACHE 与 GOTMPDIR 固定到工作区后，重新运行完整 `go test -p 1 ./...` 通过（退出码 0）。订单创建、余额预留和即时履约现在在同一个数据库事务中写入 PURCHASE/SUCCESS 行为审计，失败即回滚；SQLite 审计插入故障触发器测试验证回滚、成功提交和幂等重试，model/controller/router/middleware 测试通过。Stripe Checkout 和 Waffo Pancake Checkout 均发送订单作用域固定 Idempotency-Key；Waffo Pancake SDK 升级至 v0.14.0，并新增回归验证该键只发送到 create-session 请求。Creem request_id 与 Waffo paymentRequestId 均使用本地订单 ID，供应商文档将其定义为去重标识；易支付目前仅传递稳定 ServiceTradeNo，尚未核实适用于当前商户接口的重复下单契约，仍需沙箱确认。第三方 Checkout 外部会话不能由本地数据库事务回滚；真实渠道沙箱异常矩阵和日终对账仍待完成。供应商契约：[Creem](https://docs.creem.io/skills/creem-api/REFERENCE)、[Waffo](https://waffo.com/en/checkout)、[Waffo Pancake SDK](https://pkg.go.dev/github.com/waffo-com/waffo-pancake-sdk-go)。
+
 ## 5. 授权状态机
 
 - 授权状态：`active`、`suspended`、`revoked`。
 - 授权模式：`unbound`、`online`、`offline`、`permanent`。
 - 已验证邮箱账号首次访问时原子创建未启动的试用授权；客户端首次成功绑定设备时才开始计算 30 天试用期，重试和并发请求不能重复创建或重复起算。
 - 离线档位为 7/14/30 天，对应免费撤销冷却；模式切换不能清除冷却。
-- +30 天延长包叠加当前离线截止时间；价格由 CN/INTL 环境变量配置。
+- +30 天延长包叠加当前离线截止时间；当前首发价为 CN ¥19.90（1990 分）、INTL $2.99（299 美分），由环境变量配置，价格调整需同步更新部署配置。
 - 在线运行租约 TTL 为 2 小时（不低于 1 小时，推荐 2～4 小时），服务端当前返回 15 分钟默认心跳；
   部署调优时心跳推荐保持在 15～30 分钟，客户端应加入 ±10% 随机抖动，同授权第二个运行实例被拒绝。
   该 TTL 只表示断网后的在线运行宽限，
@@ -86,7 +105,7 @@ GORM 维护以下表：
 - 支付宝、微信、易支付、支付 FM、Waffo 属 CN；Stripe、Creem、Waffo Pancake 属 INTL。
   PayPal/Paddle 在完成官方适配器和沙箱验收前不属于首发渠道，也不得出现在首发页面。
 - 第一次成功的外部支付原子锁定区域；余额全额支付不能建立区域来源。
-- 订单预览和创建均由服务器重新报价；余额先预留，成功后消耗，失败/取消后释放。
+- 订单预览和新订单创建均由服务器重新报价；创建请求必须回传用户确认的金额、币种和区域快照，服务器报价变化时返回 `409 quote_changed`，不创建订单也不扣款。已有幂等键仅在完整请求和确认快照与原订单一致时返回原订单，否则返回 `order_invalid`；余额先预留，成功后消耗，失败/取消后释放。
 - 支付事件按 `(provider,event_id)` 幂等，渠道、订单、金额、币种或负载摘要冲突时拒绝。
 - 邀请人必须同区域且有有效正式授权；受邀账号首次正式授权成功后仅奖励一次：CN 1000 分、
   INTL 140 美分。
@@ -103,6 +122,7 @@ GORM 维护以下表：
   免费/付费撤销、在线心跳/退出、永久确认和人工解绑接口。
 - 商业：订单预览/创建/查询、邀请、余额、流水、提现。
 - 支付：`POST /webhooks/:provider`，只接收渠道验签后的内部规范事件。
+- 下载：`POST /downloads/:target/track` 仅接受白名单目标；验证登录、邮箱和账户登录限制后追加 `DOWNLOAD` 事件，再由客户端打开公开下载链接。
 - 管理：授权列表、人工解绑、提现、用户区域调整。
 - 账号：`/api/v1/auth/*` 兼容入口及 new-api 原生账号接口。
 
@@ -121,11 +141,22 @@ GORM 维护以下表：
 
 ### S1：基线与授权核心
 
-状态：`implemented`，SQLite 测试已通过。
+状态：`verified`；D2S 定向测试、完整 `go test -p 1 ./...`、`go vet ./...`、`go build ./...`、固定路径扫描和敏感信息扫描均已通过。
 
 - 导入 new-api、保留上游和 AGPL-3.0 信息。
 - 增加 D2S 模型、迁移、路由、授权状态机、设备码、ES256 和在线租约。
 - 增加订单、区域、余额、邀请、拒付、提现和管理员 API。
+- 2026-10-30 首次完整 Go 测试发现登录会话、订单和离线签名测试夹具未跟上邮箱验证/账户安全控制；仅更新测试数据库表和邮箱验证字段后，完整 Go 套件通过。
+- 2026-10-30 默认并行度的 `go test ./...` 曾因 Windows 分页文件不足导致编译进程内存分配失败；以 `go test -p 1 ./...` 重跑全部包通过。`go vet ./...`、`go build ./...`、固定路径扫描（254 个 Go 测试文件）均通过。
+- 2026-10-30 `d2s-sensitive-scan.ps1` 已扩展为扫描 Git 跟踪及未忽略的未跟踪工作树文件，2,326 个文件（2,298 跟踪、28 未跟踪）扫描通过。
+- 2026-10-31 当前工作树重新运行 `scripts/d2s-sensitive-scan.ps1` 通过：3,633 个文件（2,298 跟踪、1,335 未跟踪）。
+- 2026-10-31 修正工作树扫描：`.ci-fixed/` 与 `.tmp/` 本地构建缓存和浏览器临时数据加入 `.gitignore`；敏感扫描器改为先检查二进制标记并按 UTF-8 流式逐行读取，避免加载 Go 缓存导致高内存占用；固定路径扫描现覆盖已跟踪与未跟踪测试。复跑敏感扫描 2,340 个文件（2,298 跟踪、42 未跟踪）、固定路径扫描 266 个 Go 测试文件通过；两个 PowerShell 脚本 AST 解析与 `git diff --check` 通过。
+- 2026-10-31 邮箱验证共享存储与一次性消费修复后，Redis 双客户端并发消费用例连续 50 次通过；完整 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...`、`go build -p 1 ./...` 均退出码 0。此前某轮全量测试中 relay HTTP/2 GOAWAY 重试用例曾遇到 socket abort；定向连续 3 次及其后的完整套件均通过，未复现。
+- 2026-10-31 路由核对发现设备码批准与设备令牌换取两个登录入口未追加 `LOGIN` 日志；已将两路挂载统一登录日志中间件，记录可解析的 user_id/设备哈希，并在已批准设备码失败重试时只凭存储哈希关联账户。新增成功与失败登录关联回归，`go test ./middleware -run TestD2SLoginActionLogAssociatesDeviceTokenEvents -count=1` 通过；`gofmt`、`go vet -p 1 ./...` 与 `go build -p 1 ./...` 通过。
+- 2026-11-02 新增注册失败审计闭环回归：实际调用 `controller.Register` 提交缺少点击验证码的请求，确认追加规范化邮箱、来源 IP、User-Agent、路由和哈希，事件为 `REGISTER/FAILURE` 且未错误关联用户 ID；完整 `go test -p 1 ./middleware -count=1`、全量 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...` 和 `go build -p 1 ./...` 通过。
+- 2026-11-02 360 暂停期间复跑全量 `go test -p 1 ./... -count=1`，包含 controller 测试且退出码 0；本地 Vitest 直接运行通过 75 个文件、462 项测试。`pnpm test` 因 `es5-ext@0.10.64` 构建脚本未获批准而停止，未批准该脚本；改用 `node node_modules/vitest/vitest.mjs run --reporter=dot` 完成测试。敏感扫描（2,345 个工作树文件）和固定路径扫描（271 个 Go 测试文件）通过。
+- 2026-11-02 修复 relay/channel 的原始 HTTP/2 测试服务器过早关闭连接导致的 Windows Winsock reset：服务器通过 PING/ACK 同步控制帧及响应关闭，GOAWAY 旧连接在客户端断开或 1 秒确认窗口后释放。涉及的 GOAWAY、REFUSED_STREAM 用例连续 10 次通过，`go test -p 1 ./relay/channel` 通过。全量 `go test -p 1 ./... -count=1` 中 relay/channel 已通过，但 Windows 对临时目录里的 `router.test.exe`、`config.test.exe` 返回 `Access is denied`；将这两个包分别编译到固定工作区路径后运行均通过。全量命令仍未整体退出 0，故不记录为全量通过；`git diff --check` 通过。
+- 2026-11-02 将含测试的 39 个 Go 包逐包编译到工作区固定路径并运行，全部通过（含 controller、model、relay/channel、router、service 和 setting/config）。该验证绕过了 Windows 对临时目录测试可执行文件的启动限制；常规 `go test -p 1 ./... -count=1` 仍因临时 `router.test.exe`、`config.test.exe` 被系统拒绝而未整体通过，因此分别记录命令结果与固定路径全仓结果。随后 `go vet -p 1 ./...`、`go build -p 1 ./...` 均通过，敏感信息扫描检查 2,345 个工作树文件并通过。
 
 退出条件：D2S 单元测试、完整 Go 测试、`go vet`、根模块构建和敏感信息扫描通过。
 
@@ -134,7 +165,11 @@ GORM 维护以下表：
 状态：`verified`。
 
 - SQLite、MySQL、PostgreSQL 新建库连续执行两次迁移：`verified`。
-- 已在 SQLite、MySQL、PostgreSQL 验证并发试用、绑定、租约、订单、区域锁、余额和支付幂等。
+- 已在 SQLite、MySQL、PostgreSQL 验证并发试用、绑定、租约、订单、区域锁、余额和支付幂等；人工解绑的跨申请并发审批回归现已验证每账号最多一笔成功。
+- 2026-10-31 修复邮箱验证码仅保存在实例内存导致双实例请求被负载均衡到不同实例时无法验证的问题，并将成功核验改为一次性消费：启用 Redis 后，将收件标识与验证码分别使用共享 `SESSION_SECRET` 做 HMAC-SHA-256 摘要并按有效期设置 Redis TTL；Redis 以 Lua 原子比较并删除，避免多实例并发重复消费。Redis 写入失败时发码失败关闭，不回退到节点本地缓存；未启用 Redis 的单实例继续使用内存。发送邮件失败时清除验证码，普通邮件与腾讯 SES 模板显示值均与服务端最长 15 分钟有效期一致。miniredis 双客户端切换、并发原子消费、过期、无 Redis 回退、Redis 故障失败关闭及腾讯 SES 模板边界回归通过。
+- 2026-10-31 在 360 暂退后，将 SQLite 并发关键路径及永久解绑并发审批回归各重复 20 次，均通过。当前本机 `CGO_ENABLED=0` 且无 GCC，故未运行 Go race detector；本机未配置 MySQL/PostgreSQL DSN 且没有 Docker，未据此声称本轮完成三数据库验证。
+- 2026-10-30 在隔离本地 MySQL/PostgreSQL 数据库执行审计权限脚本，并以应用账号对四张审计表分别尝试 UPDATE/DELETE，共 16 次均被拒绝；此结果只适用于隔离验证库，生产账号仍待部署验收。
+- 2026-11-02 加强并实测 PostgreSQL 权限脚本：除表级 UPDATE/DELETE 外，脚本撤销并断言无列级 UPDATE、TRUNCATE、REFERENCES 和 TRIGGER；清理身份在三张留存表仅有 SELECT/DELETE，在留存审计表仅有 SELECT/INSERT。隔离 PostgreSQL 15.14 中临时授予应用账号单列 UPDATE 后，脚本撤销额外权限并通过有效权限断言。MySQL 8.4.9 与 PostgreSQL 15.14 上分别执行权限脚本；运行账号对四表 SELECT 成功，四表 INSERT 均在回滚事务中成功，24 次 UPDATE/DELETE/TRUNCATE 尝试全部被拒绝，未留下测试行。MySQL SHOW GRANTS 显示运行及清理账号仅有预期表级授权。仅证明隔离库配置，不替代生产权限与继承角色验收。
 - CI 中保留真实 MySQL/PostgreSQL 服务测试。
 - 2026-09-09 已将本地与 GitHub Actions 的 Go、Vitest 缓存及临时目录固定到工作区路径；扫描确认 D2S 测试不再调用 `t.TempDir`、`os.MkdirTemp` 或 `os.CreateTemp`，Actions `34278684231` 已通过固定目录回归。
 - 2026-09-09 已将登录/注册验证码从拖动拼图切换为自托管点击验证码：后端使用 `go-captcha/v2/click` 生成主图和提示图，服务端保存目标区域并一次性校验坐标数组；登录、注册、前端组件测试和 `controller` 回归均已覆盖。
@@ -143,47 +178,112 @@ GORM 维护以下表：
 
 状态：`in_progress`。
 
-- 把 Stripe、Creem、易支付、Waffo 的官方验签结果接入 D2S 规范事件桥。
+- 已将 Stripe、Creem、易支付（含支付宝、微信和支付 FM）、Waffo、Waffo Pancake 的渠道回调在各自验签成功后接入 D2S 规范结算处理；代码路径已实现，真实渠道沙箱异常矩阵和日终对账仍待执行。
 - PayPal/Paddle 在实现适配器前从首发页面和文档中移除。
+- 2026-10-30 复核首发渠道范围：PayPal/Paddle 在 `web/src`、controller/service/model/router 运行时代码中无入口，仅在拒绝它们的回归和文档中出现；购买页回归 11 项与 `TestD2SProviderRegionExcludesUnsupportedLaunchProviders` 均通过。该证据验证当前工作树实现，不代表生产配置已同步。
 - 已覆盖开放渠道的统一订单事务、幂等、金额/币种校验，以及 Stripe、Creem、易支付（含 `TRADE_REFUND`）、Waffo、Waffo Pancake 的冲正回归；真实渠道沙箱矩阵和日终对账仍待执行。
-- 已新增统一 `/webhooks/:provider` HTTP 桥的 8 渠道回归：每个开放渠道均验证专用密钥、订单金额/币种/区域、`paid` 状态变更、重复事件幂等和错误签名拒绝；真实第三方沙箱矩阵和日终对账仍待执行。
+- 2026-11-02 已从 Stripe、Creem 和 Waffo Pancake 的已验签支付成功回调提取可用付款方标识：Stripe/Creem 优先取客户 ID、缺失时取邮箱，Waffo Pancake 取 `buyerEmail`；邮箱规范化为小写。订单只保存带 `d2s-payment-account-v1` 域分离密钥的 HMAC-SHA-256 摘要，缺失时为 NULL。模型只接受这三类 provider 的 32 字节摘要；controller 的摘要、签名结算、冲正后留存和无明文回归及 model 拒绝不支持 provider 的回归均通过。Creem 与 Waffo Pancake 回调字段依据 [Creem Webhook 文档](https://docs.creem.io/skills/creem-api/WEBHOOKS) 和 [Waffo Pancake Go SDK](https://pkg.go.dev/github.com/waffo-com/waffo-pancake-sdk-go)。易支付及 Waffo 回调未确认稳定付款方字段，继续留空。
+- 2026-11-02 固定支付重试使用订单创建时的邮箱快照：Stripe、Creem 和 Waffo Pancake Checkout 使用订单邮箱快照；Creem 元数据中的用户标签基于 user ID 稳定生成。Stripe 回归验证邮箱快照和订单作用域幂等键在重试时保持一致；`go test -p 1 ./controller -run '^(TestStripeCheckoutUsesOrderScopedIdempotencyKey|TestD2SOrderCheckoutEmailUsesOrderSnapshot)$' -count=1`、`go vet -p 1 ./controller`、`go build -p 1 ./controller` 通过。
+- 2026-11-02 收敛 Creem Checkout 诊断日志：不再记录用户邮箱明文或完整支付链接，只记录邮箱/链接是否存在及订单、响应标识。隔离 HTTP transport 回归确认返回链接功能不变且日志不含邮箱、token 或完整链接；`TestCreemCheckoutLogsOmitEmailAndCheckoutURL` 通过。
+- 2026-11-02 支付渠道 Webhook 日志统一只记 Gin 路由模板或 URL path，不再记录完整 RequestURI 查询串；新增回归验证 `sign`、`param` 查询值不会进入日志路径。
+- 2026-11-02 Waffo `PaymentRequestID` 改为从内部订单 ID 稳定生成 32 位十六进制幂等键；标准 UUID 去除连字符，非 UUID 使用域分离 SHA-256 截断，完整内部订单 ID 继续作为 `MerchantOrderID` 关联回调。新增长度、稳定性和非 UUID 回退回归通过（[Waffo Go SDK](https://pkg.go.dev/github.com/waffo-com/waffo-go) 标注幂等 ID 最长 32 字符）。
+- 2026-10-30 核实易支付重试边界：当前 `go-epay` 的 `Purchase` 在本地生成签名表单，稳定使用 D2S `order.ID` 作为 `out_trade_no`；新增回归验证同一订单多次生成的 URL、签名参数、订单号和金额完全一致。易支付公开文档将 `out_trade_no` 定义为商户订单号并支持按该字段查单，但没有规定重复提交是否返回既有订单，因此不宣称网关幂等，仍需用实际商户沙箱验证重复表单提交、重试和查单行为（[SDK](https://github.com/Calcium-Ion/go-epay)、[易支付接口文档](https://pay.yzfpay.com/doc/v1_legacy_api.html)）。
+- 已新增统一 `/webhooks/:provider` HTTP 桥的 8 渠道回归：每个开放渠道均验证专用密钥、订单金额/币种/区域、`paid` 状态变更、重复事件幂等和错误签名拒绝；Stripe、Creem、易支付及 Waffo 原生 HTTP 签名回调与重复事件隔离 SQLite 回归已通过（Waffo 使用临时 RSA 密钥覆盖 SDK 验签、拒绝无效签名和重复结算）；`go test ./controller -count=1` 通过；真实渠道沙箱矩阵和日终对账仍待执行。
+- 2026-10-31 新增 Waffo Pancake 原生 HTTP 无效签名拒绝用例；首次执行时 Windows 对 Temp 和工作区固定临时目录中的 `controller.test.exe` 返回 `Access is denied`。360 暂时退出后重跑完整 `go test -p 1 ./... -count=1`，所有 Go 包通过；360 误报样本仍需由用户提交给厂商复核。
+- 2026-10-31 Go 验证：设备码登录新增回归 `go test ./middleware -run TestD2SLoginActionLogAssociatesDeviceTokenEvents -count=1` 通过；一次全仓串行测试中 controller 测试程序被 Windows 拒绝启动（`controller.test.exe: Access is denied`），另有两项 HTTP/2 测试出现 socket abort。360 暂时退出后，`go test -p 1 ./... -count=1` 完整重跑通过，因此前述问题未在本次复测中复现。
 - 对所有开放渠道执行完整沙箱异常矩阵和日终对账。
+- 2026-11-02 当前环境复核：Stripe、Creem、易支付、Waffo、Waffo Pancake、Payment FM 沙箱凭据变量均未设置，仓库根目录 `.env` 不存在；本次仅检查变量是否存在，未读取或输出密钥值，因此无法发起真实沙箱交易。后续须从各支付渠道的隔离沙箱环境注入凭据，不得以生产凭据替代。
 
 ### S4：用户与管理员网页
 
 状态：`in_progress`。
 
+- 2026-10-31 Edge 156 本地真实服务后台验收：用隔离 SQLite 与临时测试管理员登录独立 `super_admin` 后，后台会话、行为日志、注册记录、购买记录及两类 CSV 导出接口均返回 200；CSV 为 UTF-8 且包含要求的列和命名格式。注册、购买、紧急限制、身份核验、日志留存模块可打开，留存天数下限为 180。未执行账户限制或日志清理；本地服务与浏览器已停止，测试数据仅留在系统临时目录。此项不替代真实用户支付闭环、支付渠道或独立屏幕阅读器验收。
+- 2026-10-31 补充 Edge 156 本地浏览器验收：在新建临时 SQLite 和测试管理员上完成 new-api 初始化、独立后台登录、行为日志/注册/购买/紧急限制/身份核验/留存五个模块切换，并从无障碍树核对紧急限制表单控件名称；后台会话 Cookie 实际标记 `Secure`、`HttpOnly`、`SameSite=Strict`，退出后回到独立登录页。未提交账户限制、身份核验、CSV 导出或日志清理操作；该次验收不证明生产部署、支付闭环或独立屏幕阅读器验收。服务与浏览器已停止，监听端口已关闭；由于自动审批拒绝递归删除本轮临时测试目录和自签证书，它们仍保留在本机 `.tmp` 和当前用户证书库，后续清理待处理。
+- 2026-10-31 补齐账户购买紧急限制的控制器回归：启用 `purchase_blocked` 后，订单预览、建单、Checkout、付费解绑和离线续期五个付费入口均返回 `423 ACCOUNT_PURCHASE_BLOCKED`，并确认未创建订单；定向测试与完整 `go test -p 1 ./... -count=1` 通过。
+- 2026-10-31 修复设备码登录绕过账户禁登录限制：令牌兑换在签发会话前检查账号限制，被锁账号返回 `423 account_login_blocked` 并消费已批准设备码；隔离 SQLite 回归确认无会话生成、设备码不可重用；登录审计回归确认该请求关联账号与设备摘要并记为 `BLOCKED`。定向测试、完整 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...` 和 `go build -p 1 ./...` 通过。
+- 2026-10-31 修复 refresh token 绕过账户禁登录限制：刷新前检查账号锁定状态，锁定账号返回 HTTP 423 `ACCOUNT_LOGIN_BLOCKED`，不轮换刷新令牌并清除浏览器 refresh cookie；隔离 SQLite 控制器回归确认令牌摘要不变、会话仍有效（强制下线仍为独立操作）。service/controller 定向测试和全量 `go test -p 1 ./... -count=1` 通过；首轮全量测试遇到两个非相关偶发失败，各自定向复测及第二轮全量测试均通过。随后 `go vet -p 1 ./...`、`go build -p 1 ./...`、`git diff --check`、敏感信息扫描（2344 个工作树文件）和固定路径扫描（270 个 Go 测试文件）通过。API 行为已同步写入 `desktop2stereo-api.md`。
 - 用户页：授权、设备、模式、订单、邀请、余额和提现。
 - 管理页：授权、解绑、提现、拒付、负余额、区域和签名键。
 - 当前已提供用户工作台、管理员工作台和上一 UTC 日内部对账摘要；管理员审核写操作继续复用管理员审计中间件。
-- 已补充购买页组件回归：余额支付使用服务端报价、付费解绑传递所选许可证、所有开放渠道展示，以及价格预览失败后的控件恢复；管理员区域保存失败、提现批准和人工解绑拒绝也已回归验证。支付页完整可访问性和端到端浏览器验收仍待完成。
-- 管理员路由、侧栏入口和后端管理 API 已覆盖角色权限回归；沿用 new-api React/Semi UI/i18next，完整可访问性、组件和端到端支付页面测试仍待完成。
+- 已补充购买页报价确认：显示服务器返回的商品、授权、渠道、区域和金额；确认后创建订单并提交金额/币种/区域快照，服务器返回 `409 quote_changed` 时要求用户重新核对报价。余额支付、付费解绑目标、开放渠道、幂等重试和预览失败控件恢复均已有组件回归；管理员区域保存失败、提现批准和人工解绑拒绝也已回归验证。支付页真实屏幕阅读器、生产端到端浏览器和第三方支付闭环仍待完成。
+- 报价请求期间新增中英双语的屏幕阅读器状态提示；完整键盘/屏幕阅读器验收仍未完成。
+- 2026-11-02 按 Web Interface Guidelines 对购买页和独立后台页完成静态可访问性审查并修复：金额/日期改用 `Intl` 本地化格式；表单控件补充名称、自动填充与拼写检查语义；加载/空结果状态支持播报；后台各页面增加跳转到主内容入口；通用按钮改为限定属性过渡并尊重减少动态效果设置。购买页和后台页 18 项 Vitest 通过，`tsgo -b`、目标文件格式检查及 `git diff --check` 通过。该项属于代码层静态审查，真实屏幕阅读器和完整键盘端到端验收仍待完成。
+- 2026-11-02 补齐后台用户行为日志、注册记录和购买记录的完整前端分页：统一按服务端 `total` 翻页，注册/购买查询带 `page` 与 `page_size=50`，切换模块和修改筛选后清除旧分页结果并回到第一页。新增 51 条边界的三类列表分页组件回归；后台路由 8 项测试、`tsgo -b`、目标文件 oxlint/oxfmt 检查通过。
+- 2026-11-02 完成当前工作树前端全量回归，75 个测试文件、465 项通过；`tsgo -b` 通过，Rsbuild 生产构建成功（10.5 秒）。
+- 2026-11-02 使用 Playwright 启动本机 Edge，对独立后台和隔离模拟 API 完成浏览器交互验收：登录页按 Tab 可到达跳过链接、必填邮箱、密码和登录按钮，并可用 Enter 提交模拟登录；主内容跳转链接可聚焦并将焦点移至唯一 `main`；日志筛选返回 50 条、服务端分页可加载第 2 页余下 1 条，完整展示 14 个审计字段且 CSV 文件名符合约定；注册、购买、紧急限制模块切换正常，紧急处置输入控件可访问名称完整；390px 视口文档无横向溢出且没有页面脚本异常。API 全部由本地路由模拟，未触发限制、清理或生产请求。该验收不等同真实屏幕阅读器或生产后台验收。
+- 2026-11-02 Playwright 对钱包页及模拟 API 的购买报价流程进行补充验收时，发现 `Intl.NumberFormat('zhCN')` 在报价弹窗渲染中抛出 `RangeError` 并触发 500。修复为在购买金额与日期格式化前调用现有 `toIntlLocale`，将内部语言码转换为 BCP 47 标签；复测报价弹窗展示 USD 29.90、商品/支付/区域信息，Escape 关闭弹窗，唯一 `main` 保留，390px 视口无横向溢出且无脚本异常。补充 Playwright 模拟完整的报价→建单→Checkout 前端链路：建单请求含产品、渠道、2990 美分、USD、INTL 和幂等键，Checkout 返回仅本地使用的模拟地址；所有 API 均由浏览器路由桩响应，未连接应用数据库或真实支付渠道。新增 `zhCN` 报价格式回归后，完整 Vitest 75 个文件/465 项通过，`tsgo -b`、相关 oxlint/oxfmt 检查及 Rsbuild 生产构建（10.5 秒）通过；真实屏幕阅读器、生产购买与支付回调仍待验收。
+- 管理员路由、侧栏入口和后端管理 API 已覆盖角色权限回归；独立后台按角色打开首个授权模块，账户操作员紧急限制界面有确认取消与请求载荷组件回归。批量处置在筛选条件或操作参数变化、以及刷新预览失败时立即废弃旧预览，并在请求中禁用相关输入；组件回归覆盖旧预览失效与新预览请求失败。永久解绑申请创建与管理员批准现按账号授权资料行锁串行化，避免并发审批突破每账号终身一次限制；SQLite、MySQL、PostgreSQL 并发回归均通过。沿用 new-api React/Semi UI/i18next，完整可访问性、组件和端到端支付页面测试仍待完成。
+- 管理员行为日志 CSV 增加控制器回归：校验 14 列完整字段、时间/账号/邮箱/IP/行为筛选、公式注入防护，以及导出 `STARTED`/`SUCCESS` 审计记录；审计表不可用时拒绝导出且不泄露日志数据；501 条记录的导出跨过 500 条分页边界后无遗漏、无重复。对应定向 Go 测试通过。后台页面导出组件回归验证筛选参数、会话凭据、服务端文件名和下载调用；该路由新增 `audit_reader` 全部 14 个日志字段展示回归后共 7 项 Vitest，TypeScript 与格式检查通过。完整网页套件复跑为 75 个测试文件、462 项全部通过。
 - 已补充系统维护更新组件回归：更新期间按钮禁用、状态轮询、成功后的版本刷新，以及失败提示和按钮恢复；完整浏览器端到端验收仍待完成。
+- 2026-10-30 使用本地 Vitest 执行完整网页回归：73 个测试文件、454 项测试通过；Node 输出 `--localstorage-file` 路径警告。已完成部分本地 Edge 键盘与可访问性树验收；真实屏幕阅读器、完整浏览器端到端和支付渠道流程仍待完成。
+- 2026-10-30 已为后台批量筛选、身份核验和留存控件补充可见标签，为模块选择按钮暴露选择状态，并为分页与批量预览状态增加屏幕阅读器播报，为结果表增加可访问名称与列标题语义。`tsgo -b`、Rsbuild 生产构建和该路由 `oxfmt --check` 均通过；这些静态检查不替代浏览器键盘与屏幕阅读器验收。
+- 2026-10-30 修正管理员 CSV 下载的 blob URL 生命周期：将下载锚点挂入文档后触发下载，再延迟回收 URL。新增 Vitest 回归验证点击时锚点已挂载且 URL 延迟 1 秒回收；针对该用例的 Vitest、`tsgo -b` 和相关文件 `oxfmt --check` 均通过。Rsbuild 生产构建此前已通过；跨浏览器下载时序仍待真实浏览器验收。
+- 2026-10-30 修正管理员强制下线审计时序：操作开始记为 `STARTED`，只有会话撤销、认证版本提升和在线租约释放全部完成后追加 `SUCCESS`，失败则记录阶段和已撤销会话数量并追加 `FAILURE`。成功/失败控制器回归均通过。
+- 2026-10-30 将身份核验状态与 `REVIEW_IDENTITY/SUCCESS` 审计记录纳入同一事务，并新增证件号仅存 SHA-256 哈希及审计插入失败时事务回滚的控制器回归。
+- 2026-10-30 修复后台管理员失败登录锁定计数：加入 15 分钟失败窗口，窗口过期、锁定到期及登录成功时重置计数，并补窗口边界和锁定到期回归。
+- 2026-10-31 后台登录控制器对畸形 JSON、无效邮箱和缺失/超长密码请求也先追加 `LOGIN_ADMIN/FAILURE` 审计；密码不写入审计详情，若审计失败则返回 500。新增对应 controller 回归；定向回归与全量 `go test -p 1 ./... -count=1` 通过。
+- 2026-10-31 修复已登录但角色不足时权限中间件直接拒绝而不留审计的问题：追加 `ADMIN_PERMISSION_DENIED/FAILURE`，记录操作者、角色、所需角色、请求方法、来源 IP 和路由模板；审计写入失败或审计详情序列化失败时返回 500 且不进入受限处理器。审计详情使用项目 `common.Marshal` 封装。新增正常审计与审计库不可用两项中间件回归；全量 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...` 和 `go build -p 1 ./...` 均通过。本轮测试回归使用 SQLite；环境未配置 MySQL/PostgreSQL 测试 DSN 且无 Docker，故未对该中间件路径声称完成三数据库复测。
+- 2026-10-31 修复日志、注册、购买查询/导出及受控留存操作的参数拒绝或查询失败分支忽略审计写入错误的问题：追加失败审计不可用时统一返回 `AUDIT_WRITE_FAILED`；注册/购买/用户日志相关结果在失败审计写入前不返回。新增 5 类读取/导出缺失审计表回归、注册查询失败审计及低于 180 天留存拒绝审计回归。定向和完整 controller、全量 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...`、`go build -p 1 ./...` 通过；本轮使用 SQLite，当前环境无 MySQL/PostgreSQL DSN 或 Docker，未对这些控制器路径做三数据库复测。
+- 2026-10-31 加固批量紧急处置、证件审核与单账户紧急控制的审计失败路径：失败响应在失败审计成功写入前不返回；批量预览与成功审计改为同事务，审计写入失败即回滚预览；批量参数 JSON 使用项目 `common.Marshal/common.Unmarshal` 封装。CSV 开始发送后无法更改 HTTP 状态，因此保留先行 `STARTED` 审计，并在终态审计失败时写入服务端错误日志。新增缺失审计表时的 fail-closed 与批量预览事务回滚回归；D2S 管理器定向测试、全量 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...`、`go build -p 1 ./...` 均通过。该轮数据库回归为 SQLite，未进行 MySQL/PostgreSQL 控制器复测。
+- 2026-10-30 批量紧急处置在执行事务内重算筛选用户集合；集合相对预览发生变化时拒绝操作并保留失败审计，成功和变化拒绝控制器回归均通过。
+- 2026-10-30 本地 Edge 156 浏览器验收：后台独立登录页渲染正常，邮箱/密码字段在可访问性树中有名称，Tab 可到登录按钮；未登录访问 `/d2s` 正确跳转登录页。使用仅运行于本机的假 API 会话打开 `/wallet`，确认 D2S 购买页可渲染、报价弹窗显示金额/币种/区域并提供取消/确认按钮，Escape 能关闭弹窗。验收发现布局容器嵌套两个 `main` 且 Skip to Main 无目标；已将内层 `Main` 改为 `div`，并将唯一 `main` 设为 `id=content`、`tabIndex=-1`；浏览器验证 Tab 后 Enter 将焦点移至该主地标，页面仅保留一个 `main`。后台登录、用户授权页和钱包页的可访问性树与基础键盘路径已检查。该验收使用假 API，不验证真实后台操作/支付渠道；未运行独立屏幕阅读器，完整屏幕阅读器与端到端验收仍待完成。
+- 2026-10-30 新增 `Main` 布局无障碍回归，断言其嵌入认证壳层时不会创建嵌套 `main` 地标；针对测试通过 Vitest，`oxfmt --check` 与 `git diff --check` 通过。
+- 2026-10-30 使用本地 Edge 156.0.4314.50 CDP 补充验收：后台独立登录页的邮箱和密码输入在关联标签与可访问性树中均有名称；未登录访问 `/d2s` 跳转到 `/sign-in`。通过仅在本机生效的假 API 会话，`/d2s` 与 `/wallet` 页面均正常渲染且各只有一个 `main` 地标；钱包页展示购买类型、余额与 Stripe 控件，服务器报价弹窗显示 USD 29.90 和 INTL 区域，按 Escape 后关闭。该模拟不触达真实用户、后台或支付渠道；未运行独立屏幕阅读器。盲测技能文件不在当前技能目录，故按已授权范围改用本地浏览器 CDP。
+
+- 2026-10-30 修复独立后台登录表单的 Enter 提交：邮箱/密码字段处于原生必填表单中，按 Enter 提交登录；新增 user-event 键盘回归。该测试通过，完整网页测试为 75 个文件、456 项通过；`tsgo -b`、Rsbuild 生产构建、修改文件 `oxfmt --check` 均通过。仍未进行真实屏幕阅读器或生产端到端支付验收。
+- 2026-10-30 将后台会话初始检查提示标记为 `role=status` 与 `aria-live=polite`，保留 `main` 地标；新增异步状态播报回归。完整网页测试 75 个文件、457 项通过，`tsgo -b` 和 Rsbuild 生产构建通过；真实屏幕阅读器和生产端到端支付验收仍待完成。
+- 2026-10-31 当前工作树直接运行 Vitest 全套：75 个测试文件、462 项通过，退出码 0；Node worker 发出 `--localstorage-file` 未提供有效路径的告警，`vitest.config.ts`/`test-setup.ts` 未设置该参数，Node v25.2.1 且当前 `NODE_OPTIONS` 未设置；来源仍待定位。该结果不覆盖独立屏幕阅读器和生产端到端支付验收。
+- 2026-10-31 修复管理员页面测试 `fetch` mock 参数类型不完整导致的 TypeScript 错误；`tsgo -b` 通过，后台测试文件 7/7 通过，相关文件 oxlint 与 oxfmt 检查通过。随后完整网页套件再次通过：75 个文件、462 项测试；Node worker 的 `--localstorage-file` 无效路径告警仍出现。
+- 2026-10-31 360 暂退后复跑前端全套：直接调用 `web/node_modules/.bin/vitest.CMD`，75 个测试文件、462 项通过；`tsgo.CMD -b` 通过；`rsbuild.CMD build` 通过（81.4 秒）。pnpm 命令仍被 `es5-ext@0.10.64` 未批准构建脚本拦截，因此此次使用现有本地可执行文件；Vitest 的 `--localstorage-file` 无效路径告警仍存在。
+- 2026-10-31 定位并消除 Vitest 的 `--localstorage-file` 警告：Node 25 的全局持久化存储 getter 被 `src/test-setup.ts` 的存储探测触发。测试启动时改为直接注入独立内存 `localStorage`/`sessionStorage`，避免磁盘状态污染。带 `NODE_OPTIONS=--trace-warnings` 重跑全套后 75 个文件、462 项全部通过且无该警告；`tsgo -b`、修改文件 oxlint 与 oxfmt 检查通过。
+- 2026-10-31 当前工作树再次运行前端全套：Vitest 75 个文件、462 项通过，`tsgo -b` 和 Rsbuild 生产构建通过；受影响 4 个组件/路由测试共 20 项复测通过。本次涉及的 14 个应用文件及格式检查器共 15 个文件 oxlint 与 oxfmt 检查通过。全仓 oxlint 仍因其它页面/脚本问题退出 1；全仓格式检查列出 33 个其它未格式化文件，未批量改写无关文件。修复 Windows 格式检查器对 `oxfmt` 的启动方式，现可正确调用本地 `oxfmt.cmd` 并报告真实格式差异，而非静默因命令解析失败退出。
+- 2026-10-31 本地 Edge Headless 加载 `/d2s-admin-console`，确认后台登录页呈现一个 `main` 地标、邮箱/密码输入均为必填且在可访问性树中以关联标签命名。前端 API 代理目标 `localhost:3000` 当前无服务，日志显示 `ECONNREFUSED`，因此本轮未形成真实后台登录或操作的浏览器端到端证据；独立屏幕阅读器验收仍待完成。
+- 2026-11-02 修复受控审计清理保留天数上界未校验导致的秒数乘法溢出风险：服务端限制在 180 至 2,147,483,647 天，超界请求在任何数据库访问前拒绝；管理页同步设置整数步进和最大值，并禁用超界提交。模型回归确认低于下限和高于上限均拒绝且未删除记录；固定路径 `model` 全包测试、`go vet -p 1 ./model` 通过，后台页面测试 10/10、`tsgo -b`、Rsbuild 生产构建以及目标文件 oxlint/oxfmt 检查通过。
+
+- 2026-11-02 修复受控审计清理失败留痕：清理事务回滚后用新事务写入带 `FAILURE`、失败阶段、时间范围及统计数量的清理审计；新增触发器故障注入回归，确认审计删除回滚且失败审计保留。新增 `result` 字段须随独立审计迁移升级，启动时检查该字段避免旧 schema 执行清理。定向模型测试、全量 `go test -p 1 ./... -count=1`、`go vet -p 1 ./...` 和 `go build -p 1 ./...` 通过；生产清理仍待迁移与数据库权限验收。
 
 ### S5：部署与生产演练
 
 状态：`in_progress`。
 
+- 2026-10-31 经 PowerShell 无凭据只读 GET 复核：`https://d2s.site/api/status`、`https://d2s.site/api/v1/license/keys`、`https://d2s.site/device` 均返回 200，公开公钥 `kid` 为 `d2s-es256-2026-09`；旧域名 `https://100393.com/api/status` 返回 404。该检查只确认公网路由响应，不验证容器内部健康、完整设备码闭环或支付回调。
+
+- 2026-10-31 补充复核：同一授权范围内的无凭据 GET 再次确认 status、公钥、设备页为 200，旧域名 API 为 404；当前工作树 `go vet -p 1 ./...` 与 `go build -p 1 ./...` 均以退出码 0 完成。公网检查不验证生产内部健康，构建与静态分析不替代部署演练。
+- 2026-11-02 通过无凭据只读 GET 再核验生产公开端点：`/api/status` 返回 200，版本 `26f524d11424a2866a8608a4883a63dd1f7fe16d`；`/api/v1/license/keys` 返回 200 并公布 1 个 ES256/P-256 公钥（`kid=d2s-es256-2026-09`）；`/device` 返回 200。该结果仅说明三个公网路由可响应，不验证生产容器/数据库状态、密钥轮换、支付回调或交易闭环。
+- 2026-11-02 再次无凭据核验上述端点，均返回 200；公网 `/api/status` 版本与本地 Git `HEAD` 同为 `26f524d11424a2866a8608a4883a63dd1f7fe16d`。当前工作区仍有大量未提交和未跟踪的本地实现，因此版本相同只代表生产仍运行仓库基线提交，不能视为本轮改动已部署；本次未执行生产写操作。
+- 2026-10-31 交叉目标编译：当前工作树 `GOOS=linux GOARCH=amd64 go build -p 1 ./...` 与 `GOOS=darwin GOARCH=arm64 go build -p 1 ./...` 均退出码 0；仅证明对应平台编译通过，未在 Linux/macOS 主机运行或验收。
+- 2026-11-02 在当前工作树复跑 `GOOS=linux GOARCH=amd64 go build -p 1 ./...` 与 `GOOS=darwin GOARCH=arm64 go build -p 1 ./...`，均退出码 0；这仅验证交叉编译，不替代 Linux/macOS 实机运行、签名或平台端到端验收。
+- 2026-10-31 处理 360 报毒反馈：核对发布工作流后确认 `controller.test.exe` 不在任何用户发布清单中；服务端和 Electron Windows 发布目前都没有 Authenticode 签名步骤。新增 [Windows 误报与签名处理说明](windows-360-false-positive-and-signing.md)，记录 360 官方样本申诉步骤、同 SHA-256 复核和正式签名要求。具体误报文件、检测名、样本哈希及正式签名证书/托管签名服务尚未提供，因此正式发布签名与该具体样本的厂商复核仍待完成。
+- 2026-11-02 再核对 Windows 发布：`release.yml` 仅上传 `new-api-*.exe`，Electron 工作流仅从 `electron/dist/*.exe` 生成发布资产，Go 测试程序不会进入 Release。当前仓库级 `gh secret list` 未列出代码签名 Secrets，本机也没有带私钥的 Authenticode 代码签名证书；无法安全启用正式签名步骤。需要明确被拦截的是测试临时文件还是实际发布 EXE，并提供该文件的 SHA-256、360 检测名和截图；正式发布签名须先配置受控代码签名服务或 HSM。
+- 2026-10-31 修正订单及付费撤销/离线续期路由的中间件顺序，使未认证购买请求先写入 `PURCHASE/FAILURE` 行为日志，再返回认证错误；路由回归覆盖订单预览、创建、Checkout、付费解绑和离线续期五个入口。定向回归与完整 `go test -p 1 ./... -count=1` 均通过；`go build -p 1 ./router`、`go vet -p 1 ./router` 和 `git diff --check` 通过。
 - 按 [`d2s.site.md`](d2s.site.md) 部署腾讯云、Cloudflare、PostgreSQL、Redis 和回调 Worker。
 - 完成双实例压力、密钥轮换、备份恢复、灰度、回滚、监控和告警演练。
 - 与 Windows/Linux/macOS 客户端执行生产等价端到端验收。
-- 已建立 [`d2s-production-drill.md`](d2s-production-drill.md) 和无破坏性的生产就绪检查脚本；真实基础设施、渠道沙箱和三平台端到端证据仍待执行。
-- 已部署固定路径的日终对账脚本和 systemd 单元；服务器尚未配置 root-only 对账令牌，因此定时器和真实日终告警演练仍待执行。
+- 已建立 [`d2s-production-drill.md`](d2s-production-drill.md) 和无破坏性的生产就绪检查脚本；runbook §5 已列出 Windows/Linux/macOS 的账号登录、设备码、绑定、模式、租约、离线周期和证据要求，真实基础设施、渠道沙箱和三平台端到端证据仍待执行。
+- 2026-10-30 加强生产就绪检查：`-RequireSecrets` 现在实际解析配置私钥并校验 P-256 曲线；启用 HTTP 检查并传入 `-RequireSecrets` 时逐字比较 `/api/v1/license/keys` 中配置 `kid` 的 `x/y` 坐标，防止同 ID 错配密钥。隔离回归覆盖 PKCS#8 DER、Base64 PEM、SEC1 DER、损坏密钥、非 P-256/仅公钥密钥及公钥不匹配；本地 mock HTTP 验证通过，CI 冒烟步骤已同步生成隔离 P-256 密钥并覆盖错配、错误曲线、仅公钥材料及损坏密钥拒绝。此结果不证明生产 Secret 当前有效，也未替代生产密钥轮换演练。
+- 已部署固定路径的日终对账脚本和 systemd 单元；生产服务器 timer 当前为 disabled，root-only 对账环境文件不存在，令牌与定时器演练仍待完成。
+- 2026-10-30 修复对账认证契约：原 runner 使用 Bearer 令牌，但生产接口只接受 12 小时后台会话。代码现为对账接口单独支持 32 字节随机十六进制令牌（恒定时间比较），仍保留后台会话访问；其它后台 API 不接受该机器令牌。每次成功或失败的对账请求写入管理员审计，审计范围包含 UTC 时间窗和结果/差异数量。runner、Compose 环境变量、PowerShell 手动 runner 与部署说明已统一为 `D2S_RECONCILIATION_TOKEN`。middleware/controller 定向测试通过。此修复尚未部署生产，因此生产 timer 保持禁用。只读核验发现生产部署仓库 HEAD 与本地基线不同，且含有既有未提交及未跟踪内容；为避免覆盖或混入生产变更，本轮未部署代码、未写入生产令牌。待通过受控发布交付代码并核对审计表权限后，再配置令牌、验证端点并启用 timer。
+- 2026-10-30 修复对账审计存储失败时重复写 HTTP 响应的问题；新增 controller 回归验证响应仍为单一有效 JSON，`go test ./controller -run '^TestD2SAdminReconciliation' -count=1` 通过。
+- 2026-11-02 修复日终对账漏查旧订单及并发读取不一致：对账现在按 `status=pending`、有效到期时间早于报告截止时间扫描全体未结订单，并持续列为 `pending_expired`，直到订单进入终态；订单与支付事件从同一只读事务快照读取，MySQL/PostgreSQL 显式请求 `REPEATABLE READ`。定向对账测试、`go vet -p 1 ./...` 和 `go build -p 1 ./...` 通过；全量 Go 测试被 `relay/channel` 两项 Windows HTTP/2 socket reset 用例间歇性阻断。MySQL/PostgreSQL DSN 未配置，数据库矩阵本地跳过。该报告仅提示核查，不会自动更改订单状态。
+- 2026-10-30 加固日终对账报告落盘：Linux runner 设置 `umask 077`，systemd service 同样设置 `UMask=0077`，避免报告、响应暂存和临时文件被其他本机账号读取；PowerShell runner 将相对路径解析到 PowerShell 当前目录，并以 `FileMode.CreateNew` 排除并发覆盖，UTF-8 输出无 BOM。PowerShell AST 解析、Git Bash `bash -n`、本地模拟 API 导出验证（相对路径、有效 JSON、无 BOM、重复文件拒绝覆盖且内容不变）与 `git diff --check` 均通过；尚未在 Linux 生产主机验证 systemd unit、定时器或实际 ACL。
 - 2026-09-09 已通过固定 `/opt/desktop2stereo-site/update-requests/request` 更新流程将生产 Docker 实例更新到 `e57086b041fb9158cf42e0a71c68a5d66018ce3e`；状态文件为 `succeeded`，`/api/status` 返回同一版本且容器健康。该记录只证明一次更新链路成功，不替代完整灰度、回滚和告警演练。
 - 2026-09-09 已将 `d55293350ec204d35ce268764481a81d900e7d2a` 部署到生产；状态为 `succeeded`，应用容器 healthy，且宿主机更新器和数据库备份脚本均已通过 SHA 与该发布目录文件逐字一致校验。
+- 2026-11-02 身份核验号码从无密钥 SHA-256 改为域分离 HMAC-SHA-256；新增 `id_document_number_hash_version` 字段，读取到旧版 VERIFIED 摘要时，在同一事务审计后降为 PENDING 并清除旧摘要；密钥缺失/格式异常时返回 503 且不写入记录。生产就绪脚本校验 `D2S_ID_DOCUMENT_HMAC_KEY` 为 64 位十六进制；更新规格书、部署说明和 SEC-001 V1.3。`go test -p 1 ./controller -run '^TestD2SAdminIdentity' -count=1`、`go test -p 1 ./model -count=1`、`go vet -p 1 ./controller ./model`、`go build -p 1 ./controller ./model` 均通过；PowerShell AST 解析及密钥格式正反例通过。生产 Secret 注入与运行配置尚未验证。SEC-001 后续版本已更新订单邮箱快照/重试规则和 180 天内部留存基线的个人信息保存期限审查说明。
 - 2026-09-09 已使用该版本更新前生成的 PostgreSQL 备份，在固定恢复容器中完成隔离恢复验证，恢复出 17 张 D2S 表；关键表行数和 19 项关键关联完整性检查均通过（孤儿记录为 0），恢复容器已由脚本清理。该证据不替代 COS 跨故障域复制和业务语义完整性核对。
 - 2026-09-09 已将带 COS 上传能力的备份脚本同步到固定宿主机路径 `/usr/local/sbin/desktop2stereo-db-backup`，并现场生成带 SHA 校验的备份；服务器尚未配置 COSCLI 与 COS 上传 URI，因此 COS 跨故障域复制仍未宣称完成。
 - 2026-09-09 已将官方 COSCLI v1.0.9（Linux amd64，发布 SHA256 已核对）安装到固定 `/usr/local/bin/coscli`；COS 桶 URI 和最小权限认证仍待配置，配置前不执行真实上传。
-- 生产就绪检查已在隔离临时配置下实际运行通过；2026-09-09 已对真实生产地址执行 HTTPS `/api/status` 检查并返回 200，生产容器保持 healthy。真实 Secret 轮换、COS 跨故障域备份、灰度/回滚、监控告警和渠道沙箱证据仍待执行。
+- 生产就绪脚本现在校验 `SESSION_COOKIE_TRUSTED_URL` 与 `D2S_DEVICE_VERIFICATION_URI` 必须使用 BaseUrl 主机或其子域名、匹配端口，并拒绝含凭据的 URL；这项静态门禁不能替代生产环境变量核验。生产就绪检查已在隔离临时配置下实际运行通过；2026-09-09 已对真实生产地址执行 HTTPS `/api/status` 检查并返回 200，生产容器保持 healthy。2026-10-30 从公网读取 `/api/status` 返回 200，接口报告版本 `26f524d11424a2866a8608a4883a63dd1f7fe16d`；本次复核 `https://d2s.site/api/status` 返回 200，`https://d2s.site/api/v1/license/keys` 返回 200 并公布 1 个 ES256/P-256 公钥（kid `d2s-es256-2026-09`），而 `https://100393.com/api/status` 返回 404。上述公网请求只证明 API 当前可响应，不证明数据库、支付回调、容器内部健康或灰度/回滚状态。2026-10-30 经 SSH 将生产 `.env` 的 `SESSION_COOKIE_TRUSTED_URL` 更新为 `https://d2s.site`，将 `D2S_DEVICE_VERIFICATION_URI` 更新为 `https://d2s.site/device`；原子替换只改这两项并保留 `600 ubuntu:ubuntu` 权限，Compose 配置校验通过，仅重建 `new-api`，容器恢复 healthy。重启后公网 `/api/status`、`/api/v1/license/keys` 和 `/device` 均返回 200，公钥列表含 `d2s-es256-2026-09`；旧域名 `https://100393.com/api/status` 仍返回 404。该验证不等同于实测浏览器登录 Cookie 或完整设备码确认闭环。真实 Secret 轮换、COS 跨故障域备份、灰度/回滚、监控告警和渠道沙箱证据仍待执行。
 
 只有 S1-S5 全部达到 `verified` 才允许正式上线。
 
 ## 10. 当前待决策与风险
 
-- 离线 +30 天延长包的 CN/INTL 价格尚未确定。
+- 首发 +30 天离线延长包价格已确定：CN ¥19.90、INTL $2.99；生产环境变量仍需部署并验证。
 - PayPal、Paddle 没有当前基线的原生适配器，已移出首发范围；后续如实现官方适配器再单独评估接入。
-- 当前统一支付桥不是渠道官方 Webhook 验签的替代品，各渠道仍需完成适配。
-- 用户和管理员网页已有第一版，管理员权限回归已覆盖；完整可访问性、组件回归和端到端支付页面仍待完成。
+- 统一支付桥不是渠道官方 Webhook 验签的替代品；各开放渠道适配器已有统一入口回归，真实第三方沙箱异常矩阵和日终对账仍待完成。
+- 2026-10-31 检查当前本地进程环境中的 Stripe、Creem、易支付、Waffo、Waffo Pancake 与 Payment FM 沙箱凭据变量，均未配置；本机不能执行真实渠道沙箱矩阵。取得各开放渠道的隔离沙箱凭据后再进行真实发起、重试、退款和结算文件对账，不使用生产支付密钥代替沙箱验证。
+- 用户和管理员网页已有第一版，管理员权限及组件回归已覆盖；独立后台现在按角色打开首个授权模块，未知角色不展示受限模块，并有账户操作员权限边界回归。完整可访问性、真实屏幕阅读器和端到端支付流程仍待完成。
 - 如需保留旧 `desktop2stereo-server` 数据，必须另做迁移、校验和对账，不能直接复制。
 - 对外部署 AGPL-3.0 修改版服务时必须持续满足对应源代码提供义务。
 

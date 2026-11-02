@@ -52,9 +52,9 @@ func TestD2SOfflineEntitlementIsValidES256JWS(t *testing.T) {
 	t.Setenv("D2S_LICENSE_KEY_ID", "test-key")
 	t.Setenv("D2S_PARALLAX_CORE_SHA256", strings.Repeat("a", 64))
 	t.Setenv("D2S_PARALLAX_CORE_KEY_HEX", strings.Repeat("b", 64))
-	user := model.User{Username: "signing-user", Password: "unused-hash", Email: "signing@example.com", Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
-	require.NoError(t, db.Create(&user).Error)
 	const now = int64(2_000_600_000)
+	user := model.User{Username: "signing-user", Password: "unused-hash", Email: "signing@example.com", EmailVerifiedAt: now, Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+	require.NoError(t, db.Create(&user).Error)
 	licenses, err := model.ListD2SLicenses(user.Id, now)
 	require.NoError(t, err)
 	device := strings.Repeat("c", 64)

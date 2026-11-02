@@ -476,6 +476,17 @@ func ExchangeD2SDeviceCode(deviceSecret, ip, userAgent string, now int64) (*D2SD
 	if err != nil {
 		return nil, err
 	}
+	loginBlocked, err := model.IsD2SUserLoginBlocked(row.UserID)
+	if err != nil {
+		_ = model.FinishD2SDeviceCodeClaim(row.ID, false, now)
+		return nil, err
+	}
+	if loginBlocked {
+		if err := model.FinishD2SDeviceCodeClaim(row.ID, true, now); err != nil {
+			return nil, err
+		}
+		return nil, model.ErrD2SAccountLoginBlocked
+	}
 	bundle, err := CreateLoginSession(row.UserID, "desktop2stereo_device_code", ip, userAgent)
 	if err != nil {
 		_ = model.FinishD2SDeviceCodeClaim(row.ID, false, now)

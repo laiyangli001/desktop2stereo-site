@@ -23,8 +23,6 @@ require (
 	github.com/go-audio/wav v1.1.0
 	github.com/go-playground/validator/v10 v10.20.0
 	github.com/go-redis/redis/v8 v8.11.5
-	github.com/wenlng/go-captcha-assets v1.0.7
-	github.com/wenlng/go-captcha/v2 v2.0.5
 	github.com/go-webauthn/webauthn v0.14.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
@@ -50,6 +48,8 @@ require (
 	github.com/tidwall/sjson v1.2.5
 	github.com/tiktoken-go/tokenizer v0.6.2
 	github.com/waffo-com/waffo-go v1.3.2
+	github.com/wenlng/go-captcha-assets v1.0.7
+	github.com/wenlng/go-captcha/v2 v2.0.5
 	github.com/yapingcat/gomedia v0.0.0-20240906162731-17feea57090c
 	golang.org/x/crypto v0.52.0
 	golang.org/x/image v0.41.0
@@ -64,7 +64,7 @@ require (
 )
 
 require (
-	github.com/waffo-com/waffo-pancake-sdk-go v0.3.1
+	github.com/waffo-com/waffo-pancake-sdk-go v0.14.0
 	gorm.io/driver/clickhouse v0.6.0
 )
 

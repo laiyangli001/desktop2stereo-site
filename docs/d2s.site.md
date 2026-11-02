@@ -1,4 +1,4 @@
-# 100393.com 服务端部署与运维方案
+# d2s.site 服务端部署与运维方案
 
 ## 1. 文档定位
 
@@ -90,12 +90,12 @@ flowchart TD
 
 ## 3. 域名、网络与 TLS
 
-- 正式域名：`100393.com`，DNS 托管在 Cloudflare，并开启代理、WAF、DDoS 防护和限流。
+- 正式域名：`d2s.site`，DNS 托管在 Cloudflare，并开启代理、WAF、DDoS 防护和限流。
 - TLS：Cloudflare 使用“完全（严格）”，源站安装可信证书或 Cloudflare Origin Certificate。
 - 源站：优先用 Cloudflare Tunnel 隐藏公网入口；如使用 CLB/CVM 公网 IP，仅开放 80/443，
   且 80 只跳转 HTTPS。
 - 数据库 5432/3306 和 Redis 6379 只允许应用子网访问。
-- `www.100393.com` 作为正式域名别名时必须保持同等 TLS、WAF 和访问控制策略，不能绕过 WAF。
+- `www.d2s.site` 作为正式域名别名时必须保持同等 TLS、WAF 和访问控制策略，不能绕过 WAF。
 - Nginx 只信任实际负载均衡/代理地址传入的客户端 IP；`TRUSTED_PROXIES` 不得配置为全网。
 
 ## 4. 支付回调链路
@@ -103,7 +103,7 @@ flowchart TD
 支付渠道回调地址指向 Cloudflare Worker。Worker 或源站渠道适配器必须先按渠道官方规则验证
 签名、时间戳和重放条件，再把规范化事件转发到：
 
-`POST https://100393.com/api/v1/webhooks/{provider}`
+`POST https://d2s.site/api/v1/webhooks/{provider}`
 
 转发请求使用与渠道 Secret 分离的 `D2S_PAYMENT_BRIDGE_SECRET[_PROVIDER]` 生成
 `X-D2S-Signature`；例如 Stripe 使用 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`。服务端优先使用
@@ -126,13 +126,15 @@ PayPal/Paddle 在完成适配器前不开放。
 并创建 root-only 的 `/etc/desktop2stereo/reconciliation.env`：
 
 ```text
-D2S_RECONCILIATION_BASE_URL=https://100393.com
+D2S_RECONCILIATION_BASE_URL=https://d2s.site
 D2S_RECONCILIATION_ROOT=/opt/desktop2stereo-site
 D2S_RECONCILIATION_REPORT_ROOT=/opt/desktop2stereo-site/reconciliation-reports
-D2S_ADMIN_TOKEN=<admin-token>
+D2S_RECONCILIATION_TOKEN=<32-byte-hex-secret>
 ```
 
-环境文件必须使用 `root:root` 和 `0600` 权限，不能提交到 Git。再安装并启用：
+在应用 `.env` 中配置同一个 `D2S_RECONCILIATION_TOKEN`，通过 Compose 传给服务；应用 `.env` 使用 `0600` 权限且不得提交到 Git。令牌必须由 `openssl rand -hex 32` 生成，不能复用后台管理员密码。systemd 环境文件使用 `root:root` 和 `0600` 权限。只有新版服务已部署并通过人工调用验证后才启用 timer。
+
+再安装并启用：
 
 ```bash
 install -o root -g root -m 0750 deploy/desktop2stereo-reconciliation.sh \
@@ -159,12 +161,12 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 - `REDIS_CONN_STRING`：生产 Redis 连接串。
 - `SESSION_SECRET`：所有节点一致的高熵 Secret。
 - `SESSION_COOKIE_SECURE=true`。
-- `SESSION_COOKIE_TRUSTED_URL=https://100393.com`。
+- `SESSION_COOKIE_TRUSTED_URL=https://d2s.site`。
 - `TRUSTED_PROXIES`：实际 CLB、Nginx 或 Tunnel 网络范围。
 
 授权与商业配置：
 
-- `D2S_DEVICE_VERIFICATION_URI=https://100393.com/device`。
+- `D2S_DEVICE_VERIFICATION_URI=https://d2s.site/device`。
 - `D2S_LICENSE_KEY_ID`；未显式设置时默认为客户端当前内置公钥对应的
   `d2s-es256-2026-09`，生产环境必须确保该 ID 与配置的 P-256 私钥匹配。
 - `D2S_LICENSE_PRIVATE_KEY_B64`，内容为 P-256 PKCS#8 DER 私钥的 Base64；运行时也兼容
@@ -178,19 +180,31 @@ systemctl enable --now desktop2stereo-reconciliation.timer
   `ce18716f3dbd9728aab595812a2746367be667e76a0024bb117b03a2d1d2016a`；核心资源更新后必须同步轮换该环境变量。
 - `D2S_PARALLAX_CORE_KEY_HEX`：加密视差资源对应的 AES-256 密钥，只能通过生产部署 Secret 注入，
   不得写入公开仓库、客户端或后台网页表单。
+- `D2S_ID_DOCUMENT_HMAC_KEY`：身份核验号码摘要专用的 32 字节随机密钥，要求为恰好 64 位十六进制；
+  可用 `openssl rand -hex 32` 生成，必须与数据库分开保管，不得复用支付或会话密钥。缺失或格式错误时，身份核验写入返回 `503` 并失败关闭。
 - `D2S_PAYMENT_BRIDGE_SECRET`；推荐按渠道配置 `D2S_PAYMENT_BRIDGE_SECRET_STRIPE`、
   `D2S_PAYMENT_BRIDGE_SECRET_CREEM`、`D2S_PAYMENT_BRIDGE_SECRET_EPAY`、
   `D2S_PAYMENT_BRIDGE_SECRET_PAYMENTFM`、`D2S_PAYMENT_BRIDGE_SECRET_ALIPAY`、
   `D2S_PAYMENT_BRIDGE_SECRET_WECHAT`、`D2S_PAYMENT_BRIDGE_SECRET_WAFFO` 和
   `D2S_PAYMENT_BRIDGE_SECRET_WAFFO_PANCAKE`，渠道专用值优先于全局值。
-- `D2S_OFFLINE_EXTENSION_CNY_MINOR`、`D2S_OFFLINE_EXTENSION_USD_MINOR`。
+- `D2S_OFFLINE_EXTENSION_CNY_MINOR=1990`（¥19.90）；`D2S_OFFLINE_EXTENSION_USD_MINOR=299`（$2.99）。价格以最小货币单位配置，运行时校验必须为正整数。
 
-部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本还会校验离线延长
-价格为正整数、签名私钥配置为有效 Base64，并拒绝 `0.0.0.0/0`、`::/0`、`*` 或 `all` 这类
-全网信任代理配置；`TRUSTED_PROXIES=none` 只能单独使用；会话 Secret 和支付桥 Secret
-至少需要 32 个字符。`-BaseUrl` 必须是没有凭据、路径、查询串或片段的 HTTPS origin，
-即使使用 `-SkipHttp` 也会执行此校验。启用 HTTP 检查时还会确认 `/api/v1/license/keys`
-发布的 ES256 公钥 `kid` 与 `D2S_LICENSE_KEY_ID` 完全一致，防止密钥 ID 配错后误判通过。
+部署前运行 `scripts/d2s-production-readiness.ps1 -RequireSecrets` 时，脚本会校验身份核验 HMAC 密钥格式，并实际解析签名私钥，
+确认其包含私有标量且为有效 P-256 密钥，并拒绝错误 ASN.1、损坏密钥、仅公钥材料或非 P-256 曲线；还会校验离线延长
+价格为正整数，并拒绝 `0.0.0.0/0`、`::/0`、`*` 或 `all` 这类全网信任代理配置；
+`TRUSTED_PROXIES=none` 只能单独使用；会话 Secret 和支付桥 Secret 至少需要 32 个字符。
+`-BaseUrl` 必须是没有凭据、路径、查询串或片段的 HTTPS origin。Cookie 信任源和设备验证
+URL 还必须使用 BaseUrl 主机或其子域名，并匹配端口；脚本会拒绝 URL 凭据。即使使用
+`-SkipHttp`，这些静态配置校验仍会执行。启用 HTTP 检查并同时传入 `-RequireSecrets` 时，还会确认 `/api/v1/license/keys`
+发布的 ES256 公钥 `kid`、`x`、`y` 与配置的 `D2S_LICENSE_KEY_ID` 和 P-256 私钥完全一致，
+避免密钥 ID 相同但密钥对错配后误判通过；不传 `-RequireSecrets` 时只校验健康端点及公开密钥 ID。
+
+审计表迁移与权限：
+
+- PostgreSQL/MySQL 首次部署或升级审计表时，使用独立迁移身份设置 `D2S_AUDIT_MIGRATION_DIALECT` 和 `D2S_AUDIT_MIGRATION_DSN`；迁移 DSN 必须指向与 `SQL_DSN` 相同的数据库和 schema。随后执行 `go run ./cmd/d2s-audit-migrate`。该 DSN 只提供给迁移命令，不注入长期运行的应用容器。
+- 迁移完成后，由数据库管理员执行 `deploy/d2s-audit-permissions.postgresql.sql` 或 `deploy/d2s-audit-permissions.mysql.sql`，按实际数据库、schema 和账户调整占位符，并核对脚本结果。PostgreSQL 脚本检查有效表权限、列级 UPDATE、TRUNCATE 和清理身份的额外写权限；MySQL 必须检查 `SHOW GRANTS` 和继承角色，确认没有更宽的全局或数据库授权覆盖表级限制。
+- 运行服务的 `SQL_DSN` 对四张审计表只应有 SELECT/INSERT；`D2S_AUDIT_CLEANUP_DSN` 连接相同数据库和 schema，使用独立清理身份。缺少审计表时，MySQL/PostgreSQL 服务启动会失败；清理 DSN 未配置时，受控清理接口返回不可用且不会删除数据。
+- SQLite 开发环境仍由应用自动迁移，SQLite 不提供表级账户权限，不能据此声称生产权限隔离已经落实。
 
 同时在 new-api 管理设置中启用邮箱验证、SMTP、支付合规确认和实际使用的支付渠道。
 登录/注册使用服务端自托管点击验证码；邮箱验证码、密码重置和其他仍接入 Turnstile
@@ -200,7 +214,7 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
 ## 6. 首次部署
 
 1. 创建腾讯云 CVM/VPC、安全组、PostgreSQL、Redis 和 COS 备份桶。
-2. 将 `100393.com` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
+2. 将 `d2s.site` 接入 Cloudflare，配置严格 TLS、WAF、限流和源站连接。
 3. 克隆本仓库并从 `.env.example` 创建生产 Secret 配置。
    至少设置 `POSTGRES_PASSWORD` 和 `REDIS_PASSWORD`；生产 Compose 不再提供数据库或 Redis
    密码默认值，执行 `docker compose config` 可提前检查变量是否齐全。
@@ -240,14 +254,14 @@ Secret 管理、受限环境变量或编排系统 Secret，不能写入仓库、
 8. 执行健康检查：
 
    ```bash
-   curl -fsS https://100393.com/api/status
-   curl -fsS https://100393.com/api/v1/license/keys
+   curl -fsS https://d2s.site/api/status
+   curl -fsS https://d2s.site/api/v1/license/keys
    ```
 
 9. 用测试账号完成注册、邮箱验证、试用创建、设备码登录、绑定、离线签发、在线租约和沙箱
    支付闭环后，才允许开放公网购买。
 
-首次启动通过 GORM 建表。每次升级前必须做数据库快照，在同版本影子库连续执行两次迁移并
+常规业务表通过主服务 GORM 迁移。PostgreSQL/MySQL 的四张审计表通过独立的 `D2S_AUDIT_MIGRATION_DSN` 和 `go run ./cmd/d2s-audit-migrate` 创建或升级；迁移 DSN 不得注入长期运行的应用服务。迁移完成后执行 `deploy/d2s-audit-permissions.postgresql.sql` 或 `deploy/d2s-audit-permissions.mysql.sql`。SQLite 本地开发仍由主服务自动迁移审计表。每次升级前必须做数据库快照，在同版本影子库连续执行两次迁移并
 运行最小业务回归，再滚动生产节点。禁止多个不兼容版本同时执行结构变更。
 
 ## 7. 发布与回滚

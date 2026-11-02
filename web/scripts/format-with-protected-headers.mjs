@@ -135,19 +135,27 @@ const files = walk(root).filter(
   (file) => statSync(file).size < 10 * 1024 * 1024
 )
 const before = mode === '--check' ? snapshotFiles(files) : null
+const formatterCommand =
+  process.platform === 'win32'
+    ? join(root, 'node_modules', '.bin', 'oxfmt.cmd')
+    : 'oxfmt'
 let headers = new Map()
 let exitCode = 0
 
 try {
   headers = stripProtectedHeaders(files)
   const result = spawnSync(
-    'oxfmt',
+    formatterCommand,
     ['-c', '.oxfmtrc.json', '--ignore-path', '.gitignore', '--write', '.'],
     {
       cwd: root,
       stdio: 'inherit',
+      shell: process.platform === 'win32',
     }
   )
+  if (result.error) {
+    console.error(`Failed to run oxfmt: ${result.error.message}`)
+  }
   exitCode = result.status ?? 1
   restoreProtectedHeaders(headers)
 

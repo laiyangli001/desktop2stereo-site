@@ -5,7 +5,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$testFiles = @(git -C $RepositoryRoot ls-files "*_test.go" | Where-Object { $_ })
+$trackedTestFiles = @(git -C $RepositoryRoot ls-files "*_test.go" | Where-Object { $_ })
+$untrackedTestFiles = @(git -C $RepositoryRoot ls-files --others --exclude-standard -- "*_test.go" | Where-Object { $_ })
+$testFiles = @($trackedTestFiles + $untrackedTestFiles | Sort-Object -Unique)
 $patterns = @(
     @{ Name = "testing temporary directory"; Pattern = '\b[A-Za-z_][A-Za-z0-9_]*\.TempDir\(\)' },
     @{ Name = "os temporary directory"; Pattern = 'os\.TempDir\(\)' },

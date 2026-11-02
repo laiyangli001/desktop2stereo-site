@@ -11,11 +11,13 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 
 import { IconGithub } from '@/assets/brand-icons'
 import { Button } from '@/components/ui/button'
+import { trackD2SDownload, type D2SDownloadTarget } from '@/features/d2s/api'
 
 interface Desktop2StereoHomeProps {
   isAuthenticated: boolean
@@ -39,6 +41,8 @@ const copy = {
     eyebrow: 'Official Desktop2Stereo Website',
     hero: 'Convert ordinary desktop, video, game, and media content into stereo 3D output for large displays, VR viewing, and 3D display experiments.',
     download: 'Download v2.5',
+    downloadTrackingFailed:
+      'Could not record the download request. Please try again.',
     guide: 'Read install guide',
     dashboard: 'Go to Dashboard',
     signals: [
@@ -220,6 +224,7 @@ const copy = {
     eyebrow: '官方 Desktop2Stereo 网站',
     hero: 'Desktop2Stereo v2.5 可以把普通桌面、视频、游戏和媒体内容转换成 3D 立体输出，面向大屏、VR 观看和 3D 显示实验。',
     download: '下载 v2.5',
+    downloadTrackingFailed: '下载请求记录失败，请重试。',
     guide: '查看使用教程',
     dashboard: '进入控制台',
     signals: [
@@ -388,6 +393,37 @@ export function Desktop2StereoHome({
       ? copy.zh
       : copy.en
   const [lightbox, setLightbox] = useState<'qq' | 'support' | null>(null)
+  const openTrackedDownload = async (
+    target: D2SDownloadTarget,
+    href: string
+  ) => {
+    const popup = window.open('about:blank', '_blank')
+    if (popup) popup.opener = null
+    try {
+      const result = await trackD2SDownload(target)
+      if (
+        !result.success ||
+        result.data?.logged !== true ||
+        result.data.target !== target
+      ) {
+        throw new Error('download tracking failed')
+      }
+      if (popup) popup.location.replace(href)
+      else window.location.assign(href)
+    } catch {
+      popup?.close()
+      toast.error(text.downloadTrackingFailed)
+    }
+  }
+  const trackedExternal = (target: D2SDownloadTarget, href: string) => ({
+    ...external(href),
+    onClick: isAuthenticated
+      ? (event: MouseEvent<HTMLAnchorElement>) => {
+          event.preventDefault()
+          void openTrackedDownload(target, href)
+        }
+      : undefined,
+  })
   return (
     <main className='d2s-home bg-background text-foreground'>
       <section className='relative isolate overflow-hidden border-b px-6 py-20 md:py-28'>
@@ -412,7 +448,9 @@ export function Desktop2StereoHome({
               {text.hero}
             </p>
             <div className='mt-8 flex flex-wrap gap-3'>
-              <Button render={<a {...external(releaseUrl)} />}>
+              <Button
+                render={<a {...trackedExternal('release', releaseUrl)} />}
+              >
                 <Download className='mr-2 size-4' />
                 {text.download}
               </Button>
@@ -567,7 +605,9 @@ export function Desktop2StereoHome({
               <p className='text-muted-foreground mt-4'>{text.sourceCopy}</p>
             </div>
             <div className='mt-7 flex flex-wrap gap-3'>
-              <Button render={<a {...external(releaseUrl)} />}>
+              <Button
+                render={<a {...trackedExternal('release', releaseUrl)} />}
+              >
                 {text.release}
                 <ExternalLink className='ml-2 size-4' />
               </Button>
@@ -588,11 +628,14 @@ export function Desktop2StereoHome({
               <p className='text-muted-foreground mt-4'>{text.lazyCopy}</p>
             </div>
             <div className='mt-7 flex flex-wrap gap-3'>
-              <Button render={<a {...external(quarkUrl)} />}>
+              <Button render={<a {...trackedExternal('quark', quarkUrl)} />}>
                 {text.quark}
                 <ExternalLink className='ml-2 size-4' />
               </Button>
-              <Button variant='outline' render={<a {...external(baiduUrl)} />}>
+              <Button
+                variant='outline'
+                render={<a {...trackedExternal('baidu', baiduUrl)} />}
+              >
                 {text.baidu}
               </Button>
               <span className='text-muted-foreground w-full text-xs'>

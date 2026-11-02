@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as D2sAdminConsoleRouteImport } from './routes/d2s-admin-console'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
 import { Route as UserAgreementRouteImport } from './routes/user-agreement'
@@ -83,6 +84,11 @@ const authRouteRoute = authRouteRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const D2sAdminConsoleRoute = D2sAdminConsoleRouteImport.update({
+  id: '/d2s-admin-console',
+  path: '/d2s-admin-console',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DeviceRoute = DeviceRouteImport.update({
@@ -415,6 +421,7 @@ const AuthenticatedSystemSettingsSiteSectionRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
@@ -477,6 +484,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
@@ -541,6 +549,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/(auth)': typeof authRouteRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
   '/user-agreement': typeof UserAgreementRoute
@@ -605,6 +614,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
     | '/user-agreement'
@@ -667,6 +677,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
     | '/user-agreement'
@@ -730,6 +741,7 @@ export interface FileRouteTypes {
     | '/'
     | '/(auth)'
     | '/_authenticated'
+    | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
     | '/user-agreement'
@@ -795,6 +807,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   authRouteRoute: typeof authRouteRouteWithChildren
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  D2sAdminConsoleRoute: typeof D2sAdminConsoleRoute
   DeviceRoute: typeof DeviceRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
   UserAgreementRoute: typeof UserAgreementRoute
@@ -832,6 +845,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/d2s-admin-console': {
+      id: '/d2s-admin-console'
+      path: '/d2s-admin-console'
+      fullPath: '/d2s-admin-console'
+      preLoaderRoute: typeof D2sAdminConsoleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/device': {
@@ -1392,6 +1412,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   authRouteRoute: authRouteRouteWithChildren,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  D2sAdminConsoleRoute: D2sAdminConsoleRoute,
   DeviceRoute: DeviceRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,
   UserAgreementRoute: UserAgreementRoute,

@@ -6,6 +6,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 User=root
+UMask=0077
 EnvironmentFile=/etc/desktop2stereo/reconciliation.env
 ExecStart=/usr/local/sbin/desktop2stereo-reconciliation
 NoNewPrivileges=true

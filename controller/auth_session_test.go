@@ -74,7 +74,7 @@ func TestRefreshAuthAcceptsDesktopRefreshTokenBody(t *testing.T) {
 	previousSecret := common.SessionSecret
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}))
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.D2SUserSecurityControl{}))
 	model.DB = db
 	common.RedisEnabled = false
 	common.SessionSecret = "desktop-refresh-body-test-secret"
@@ -115,6 +115,72 @@ func TestRefreshAuthAcceptsDesktopRefreshTokenBody(t *testing.T) {
 	assert.True(t, response.Success)
 	assert.NotEmpty(t, response.Data.AccessToken)
 	assert.NotZero(t, response.Data.ServerTime)
+}
+
+func TestRefreshAuthRejectsLoginBlockedAccountWithoutRotatingRefreshToken(t *testing.T) {
+	previousDB := model.DB
+	previousRedis := common.RedisEnabled
+	previousSecret := common.SessionSecret
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}, &model.D2SUserSecurityControl{}))
+	model.DB = db
+	common.RedisEnabled = false
+	common.SessionSecret = "blocked-refresh-test-secret"
+	t.Cleanup(func() {
+		model.DB = previousDB
+		common.RedisEnabled = previousRedis
+		common.SessionSecret = previousSecret
+		sqlDB, dbErr := db.DB()
+		if dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	user := &model.User{
+		Username: "blocked-refresh-user", Password: "unused", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+	}
+	require.NoError(t, db.Create(user).Error)
+	bundle, err := service.CreateLoginSession(user.Id, "desktop2stereo", "127.0.0.1", "desktop-test")
+	require.NoError(t, err)
+	before, err := model.GetUserSessionBySID(bundle.Session.SID)
+	require.NoError(t, err)
+	require.NoError(t, db.Create(&model.D2SUserSecurityControl{
+		UserID: user.Id, LoginBlocked: true, UpdatedAt: time.Now().Unix(),
+	}).Error)
+
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/user/auth/refresh", nil)
+	c.Request.AddCookie(&http.Cookie{Name: service.RefreshCookieName, Value: bundle.RefreshToken})
+
+	RefreshAuth(c)
+
+	assert.Equal(t, http.StatusLocked, recorder.Code)
+	var response struct {
+		Success bool   `json:"success"`
+		Code    string `json:"code"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &response))
+	assert.False(t, response.Success)
+	assert.Equal(t, "ACCOUNT_LOGIN_BLOCKED", response.Code)
+
+	var refreshCookie *http.Cookie
+	for _, cookie := range recorder.Result().Cookies() {
+		if cookie.Name == service.RefreshCookieName {
+			refreshCookie = cookie
+			break
+		}
+	}
+	require.NotNil(t, refreshCookie)
+	assert.Equal(t, -1, refreshCookie.MaxAge)
+
+	after, err := model.GetUserSessionBySID(bundle.Session.SID)
+	require.NoError(t, err)
+	assert.Equal(t, model.UserSessionStatusActive, after.Status, "login block does not implicitly revoke sessions")
+	assert.Equal(t, before.RefreshHash, after.RefreshHash, "blocked refresh must not rotate credentials")
 }
 
 func TestAuthLogoutAcceptsDesktopRefreshTokenBody(t *testing.T) {
@@ -207,7 +273,9 @@ func TestSessionLimitDoesNotRecordRejectedLoginAsSuccessful(t *testing.T) {
 	previousIssuanceWindow := common.UserSessionIssuanceWindowSeconds
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.UserSession{}))
+	require.NoError(t, db.AutoMigrate(
+		&model.User{}, &model.UserSession{}, &model.D2SUserActionLog{}, &model.D2SUserSecurityControl{},
+	))
 	model.DB = db
 	common.RedisEnabled = false
 	common.UserSessionActiveLimit = 1
@@ -221,18 +289,22 @@ func TestSessionLimitDoesNotRecordRejectedLoginAsSuccessful(t *testing.T) {
 		common.UserSessionIssuanceWindowSeconds = previousIssuanceWindow
 	})
 
+	now := time.Now().Unix()
 	const previousLastLoginAt = int64(123)
 	user := &model.User{
 		Username: "rejected-login-audit-user", Password: "unused", Role: common.RoleCommonUser,
-		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1, LastLoginAt: previousLastLoginAt,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+		Email: "session-limit@example.com", EmailVerifiedAt: now, LastLoginAt: previousLastLoginAt,
 	}
 	require.NoError(t, db.Create(user).Error)
-	now := time.Now().Unix()
 	require.NoError(t, db.Create(&model.UserSession{
 		SID: "existing-active-session", UserID: user.Id, Version: 1, UserAuthVersion: user.AuthVersion,
 		Status: model.UserSessionStatusActive, RefreshHash: "hash", LoginMethod: "password",
 		CreatedAt: now, LastActiveAt: now, ExpiresAt: now + 3600,
 	}).Error)
+	activeCount, err := model.CountActiveUserSessions(user.Id, now)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, activeCount)
 
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

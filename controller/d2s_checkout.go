@@ -2,6 +2,8 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -21,7 +23,36 @@ import (
 	waffoOrder "github.com/waffo-com/waffo-go/types/order"
 )
 
+func d2SOrderCheckoutEmail(order *model.D2SOrder, user *model.User) string {
+	if order != nil && strings.TrimSpace(order.EmailSnapshot) != "" {
+		return strings.TrimSpace(order.EmailSnapshot)
+	}
+	if user != nil {
+		return strings.TrimSpace(user.Email)
+	}
+	return ""
+}
+
+// d2SWaffoPaymentRequestID renders a stable 32-character Waffo idempotency key.
+func d2SWaffoPaymentRequestID(orderID string) string {
+	trimmed := strings.TrimSpace(orderID)
+	if trimmed == "" {
+		return ""
+	}
+	compact := strings.ReplaceAll(trimmed, "-", "")
+	if len(compact) == 32 {
+		if _, err := hex.DecodeString(compact); err == nil {
+			return strings.ToLower(compact)
+		}
+	}
+	digest := sha256.Sum256([]byte("d2s-waffo-payment-request-v1\x00" + trimmed))
+	return hex.EncodeToString(digest[:16])
+}
+
 func D2SOrderCheckout(c *gin.Context) {
+	if d2sRejectBlockedPurchase(c, "checkout") {
+		return
+	}
 	var order model.D2SOrder
 	if err := model.DB.Where("id = ? AND user_id = ?", c.Param("id"), c.GetInt("id")).First(&order).Error; err != nil {
 		d2sError(c, model.ErrD2SOrderNotFound)
@@ -61,7 +92,7 @@ func D2SOrderCheckout(c *gin.Context) {
 }
 
 func createD2SWaffoCheckout(ctx context.Context, order *model.D2SOrder, user *model.User) (string, error) {
-	if order == nil || user == nil || order.Provider != "waffo" || order.Region != model.D2SRegionCN || order.Currency != "CNY" || order.GatewayMinor <= 0 || !isWaffoTopUpEnabled() {
+	if order == nil || user == nil || strings.TrimSpace(order.ID) == "" || order.Provider != "waffo" || order.Region != model.D2SRegionCN || order.Currency != "CNY" || order.GatewayMinor <= 0 || !isWaffoTopUpEnabled() {
 		return "", model.ErrD2SCheckoutUnavailable
 	}
 	sdk, err := getWaffoSDK()
@@ -77,7 +108,7 @@ func createD2SWaffoCheckout(ctx context.Context, order *model.D2SOrder, user *mo
 		returnURL = setting.WaffoReturnUrl
 	}
 	response, err := sdk.Order().Create(ctx, &waffoOrder.CreateOrderParams{
-		PaymentRequestID: order.ID,
+		PaymentRequestID: d2SWaffoPaymentRequestID(order.ID),
 		MerchantOrderID:  order.ID,
 		OrderAmount:      decimal.NewFromInt(order.GatewayMinor).Div(decimal.NewFromInt(100)).StringFixed(2),
 		OrderCurrency:    order.Currency,
@@ -170,9 +201,10 @@ func createD2SWaffoPancakeCheckout(ctx context.Context, order *model.D2SOrder, u
 			Amount:      decimal.NewFromInt(order.GatewayMinor).Div(decimal.NewFromInt(100)).StringFixed(2),
 			TaxCategory: "saas",
 		},
-		BuyerEmail:              getWaffoPancakeBuyerEmail(user),
+		BuyerEmail:              d2SOrderCheckoutEmail(order, user),
 		ExpiresInSeconds:        &expiresInSeconds,
 		OrderMerchantExternalID: order.ID,
+		IdempotencyKey:          "d2s-checkout-" + order.ID,
 	})
 	if err != nil || session == nil || strings.TrimSpace(session.CheckoutURL) == "" {
 		return "", model.ErrD2SCheckoutUnavailable
@@ -203,7 +235,7 @@ func createD2SCreemCheckout(order *model.D2SOrder, user *model.User) (string, er
 	if strings.TrimSpace(selected.Name) == "" {
 		selected.Name = "Desktop2Stereo license"
 	}
-	return genCreemLink(context.Background(), order.ID, selected, user.Email, user.Username)
+	return genCreemLink(context.Background(), order.ID, selected, d2SOrderCheckoutEmail(order, user), fmt.Sprintf("d2s-user-%d", order.UserID))
 }
 
 func createD2SStripeCheckout(order *model.D2SOrder, user *model.User) (string, error) {
@@ -232,8 +264,9 @@ func createD2SStripeCheckout(order *model.D2SOrder, user *model.User) (string, e
 		AllowPromotionCodes: stripe.Bool(setting.StripePromotionCodesEnabled),
 		Metadata:            map[string]string{"d2s_order_id": order.ID},
 	}
-	if strings.TrimSpace(user.Email) != "" {
-		params.CustomerEmail = stripe.String(user.Email)
+	params.SetIdempotencyKey("d2s-checkout-" + order.ID)
+	if email := d2SOrderCheckoutEmail(order, user); email != "" {
+		params.CustomerEmail = stripe.String(email)
 	}
 	result, err := session.New(params)
 	if err != nil || result == nil || strings.TrimSpace(result.URL) == "" {

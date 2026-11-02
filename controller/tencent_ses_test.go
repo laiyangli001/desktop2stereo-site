@@ -3,22 +3,29 @@ package controller
 import (
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFillTencentSESTestData(t *testing.T) {
 	previousAddress := system_setting.ServerAddress
-	system_setting.ServerAddress = "https://100393.com"
-	t.Cleanup(func() { system_setting.ServerAddress = previousAddress })
+	previousVerificationMinutes := common.VerificationValidMinutes
+	system_setting.ServerAddress = "https://d2s.site"
+	common.VerificationValidMinutes = 20
+	t.Cleanup(func() {
+		system_setting.ServerAddress = previousAddress
+		common.VerificationValidMinutes = previousVerificationMinutes
+	})
 
 	verification := fillTencentSESTestData("email_verification", nil)
 	require.Equal(t, "123456", verification["code"])
-	require.NotEmpty(t, verification["expire_minutes"])
+	require.Equal(t, "15", verification["expire_minutes"])
 
 	reset := fillTencentSESTestData("password_reset", map[string]string{"system_name": "D2S"})
-	require.Contains(t, reset["reset_url"], "https://100393.com/user/reset")
+	require.Contains(t, reset["reset_url"], "https://d2s.site/user/reset")
 	require.Equal(t, "D2S", reset["system_name"])
+	require.Equal(t, "15", reset["expire_minutes"])
 
 	notification := fillTencentSESTestData("system_notification", nil)
 	require.Equal(t, "测试通知", notification["title"])

@@ -279,7 +279,11 @@ func SendEmailVerification(c *gin.Context) {
 		return
 	}
 	code := common.GenerateVerificationCode(6)
-	common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose)
+	if err := common.RegisterVerificationCodeWithKey(email, code, common.EmailVerificationPurpose); err != nil {
+		common.SysError("failed to store email verification code")
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "code": "VERIFICATION_STORE_UNAVAILABLE"})
+		return
+	}
 	language := requestEmailLanguage(c)
 	subject := fmt.Sprintf("%s邮箱验证邮件", common.SystemName)
 	if strings.HasPrefix(strings.ToLower(language), "en") {
@@ -287,7 +291,7 @@ func SendEmailVerification(c *gin.Context) {
 	}
 	content := fmt.Sprintf("<p>您好，你正在进行%s邮箱验证。</p>"+
 		"<p>您的验证码为: <strong>%s</strong></p>"+
-		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
+		"<p>验证码 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, code, common.EffectiveVerificationValidMinutes())
 	var err error
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 	defer cancel()
@@ -296,11 +300,12 @@ func SendEmailVerification(c *gin.Context) {
 		Language:     language,
 		To:           []string{email},
 		Subject:      subject,
-		TemplateData: map[string]string{"token": code, "code": code, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
+		TemplateData: map[string]string{"token": code, "code": code, "expire_minutes": fmt.Sprintf("%d", common.EffectiveVerificationValidMinutes()), "system_name": common.SystemName},
 		HTMLBody:     content,
 	})
 	model.RecordEmailDelivery("email_verification", email, deliveryStatus(err), delivery.RequestID, delivery.MessageID, err)
 	if err != nil {
+		common.DeleteKey(email, common.EmailVerificationPurpose)
 		common.ApiError(c, err)
 		return
 	}
@@ -319,34 +324,38 @@ func SendPasswordResetEmail(c *gin.Context) {
 	}
 	if user, err := model.GetUniqueUserByEmail(email); err == nil {
 		code := common.GenerateVerificationCode(0)
-		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose)
-		escapedEmail := url.QueryEscape(email)
-		link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", strings.TrimRight(system_setting.ServerAddress, "/"), escapedEmail, code)
-		language := model.GetUserLanguage(user.Id)
-		if language == "" {
-			language = requestEmailLanguage(c)
-		}
-		subject := fmt.Sprintf("%s密码重置", common.SystemName)
-		if strings.HasPrefix(strings.ToLower(language), "en") {
-			subject = fmt.Sprintf("Reset your %s password", common.SystemName)
-		}
-		content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
-			"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
-			"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
-			"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.VerificationValidMinutes)
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
-		delivery, err := common.SendEmailMessage(ctx, common.EmailMessage{
-			Scene:        "password_reset",
-			Language:     language,
-			To:           []string{email},
-			Subject:      subject,
-			TemplateData: map[string]string{"email": escapedEmail, "token": code, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.VerificationValidMinutes), "system_name": common.SystemName},
-			HTMLBody:     content,
-		})
-		cancel()
-		model.RecordEmailDelivery("password_reset", email, deliveryStatus(err), delivery.RequestID, delivery.MessageID, err)
-		if err != nil {
-			logger.LogError(c.Request.Context(), fmt.Sprintf("failed to send password reset email to %s: %s", email, err.Error()))
+		if err := common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetPurpose); err != nil {
+			logger.LogError(c.Request.Context(), "failed to store password reset verification code")
+		} else {
+			escapedEmail := url.QueryEscape(email)
+			link := fmt.Sprintf("%s/user/reset?email=%s&token=%s", strings.TrimRight(system_setting.ServerAddress, "/"), escapedEmail, code)
+			language := model.GetUserLanguage(user.Id)
+			if language == "" {
+				language = requestEmailLanguage(c)
+			}
+			subject := fmt.Sprintf("%s密码重置", common.SystemName)
+			if strings.HasPrefix(strings.ToLower(language), "en") {
+				subject = fmt.Sprintf("Reset your %s password", common.SystemName)
+			}
+			content := fmt.Sprintf("<p>您好，你正在进行%s密码重置。</p>"+
+				"<p>点击 <a href='%s'>此处</a> 进行密码重置。</p>"+
+				"<p>如果链接无法点击，请尝试点击下面的链接或将其复制到浏览器中打开：<br> %s </p>"+
+				"<p>重置链接 %d 分钟内有效，如果不是本人操作，请忽略。</p>", common.SystemName, link, link, common.EffectiveVerificationValidMinutes())
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
+			delivery, err := common.SendEmailMessage(ctx, common.EmailMessage{
+				Scene:        "password_reset",
+				Language:     language,
+				To:           []string{email},
+				Subject:      subject,
+				TemplateData: map[string]string{"email": escapedEmail, "token": code, "reset_url": link, "expire_minutes": fmt.Sprintf("%d", common.EffectiveVerificationValidMinutes()), "system_name": common.SystemName},
+				HTMLBody:     content,
+			})
+			cancel()
+			model.RecordEmailDelivery("password_reset", email, deliveryStatus(err), delivery.RequestID, delivery.MessageID, err)
+			if err != nil {
+				common.DeleteKey(email, common.PasswordResetPurpose)
+				logger.LogError(c.Request.Context(), fmt.Sprintf("failed to send password reset email to %s: %s", email, err.Error()))
+			}
 		}
 	} else if err != nil && !errors.Is(err, model.ErrEmailNotFound) {
 		logger.LogWarn(c.Request.Context(), fmt.Sprintf("skip password reset email for %s: %s", email, err.Error()))

@@ -55,9 +55,121 @@ func useD2STestDB(t *testing.T) {
 
 func createD2STestUser(t *testing.T, username string) User {
 	t.Helper()
-	user := User{Username: username, Password: "unused-hash", Email: username + "@example.com", AffCode: username, Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
+	user := User{Username: username, Password: "unused-hash", Email: username + "@example.com", EmailVerifiedAt: time.Now().UTC().Unix(), AffCode: username, Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 	require.NoError(t, DB.Create(&user).Error)
 	return user
+}
+
+func TestD2SAuditSchemaMigratesIdempotentlyOnSQLite(t *testing.T) {
+	useD2STestDB(t)
+	auditModels := []any{
+		&D2SUserActionLog{}, &D2SRegistrationRecord{}, &D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
+	}
+	require.NoError(t, DB.AutoMigrate(auditModels...))
+	require.NoError(t, DB.AutoMigrate(auditModels...), "audit migration must be idempotent")
+}
+
+func TestD2SAuditRecordsAreAppendOnlyAndRetentionIsAtLeast180Days(t *testing.T) {
+	useD2STestDB(t)
+	previousCleanupDB := D2SAuditCleanupDB
+	D2SAuditCleanupDB = nil
+	t.Cleanup(func() { D2SAuditCleanupDB = previousCleanupDB })
+
+	auditModels := []any{
+		&D2SUserActionLog{}, &D2SRegistrationRecord{}, &D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
+	}
+	require.NoError(t, DB.AutoMigrate(auditModels...))
+
+	action := D2SUserActionLog{ID: "append-only-action", ActionType: D2SActionLogin, EventTime: 2_000_000_000, SourceIP: "192.0.2.1", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("a", 64)}
+	registration := D2SRegistrationRecord{ID: "append-only-registration", UserID: 51, Email: "user@example.com", RegisterIP: "192.0.2.2", RegisterTime: 2_000_000_000, EmailVerified: true, EmailVerifiedAt: 2_000_000_000}
+	adminAudit := D2SAdminOperationAudit{ID: "append-only-admin", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: 2_000_000_000, Result: "SUCCESS"}
+	retentionAudit := D2SAuditRetentionRun{ID: "append-only-retention", OperatorID: 1, OperatorEmail: "admin@example.com", RetentionDays: D2SMinimumAuditRetentionDays, RangeStart: 2_000_000_000, CutoffAt: 2_000_000_000, CreatedAt: 2_000_000_000}
+	for _, record := range []any{&action, &registration, &adminAudit, &retentionAudit} {
+		require.NoError(t, DB.Create(record).Error)
+		require.ErrorIs(t, DB.Model(record).Update("id", "changed").Error, ErrD2SAppendOnlyRecord)
+		require.ErrorIs(t, DB.Delete(record).Error, ErrD2SAppendOnlyRecord)
+	}
+
+	const now int64 = 2_000_000_000
+	cutoff := now - int64(D2SMinimumAuditRetentionDays)*86400
+	oldTime := cutoff - 1
+	recentTime := cutoff
+	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "old-action", ActionType: D2SActionLogin, EventTime: oldTime, SourceIP: "192.0.2.3", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("b", 64)}).Error)
+	require.NoError(t, DB.Create(&D2SUserActionLog{ID: "boundary-action", ActionType: D2SActionLogin, EventTime: recentTime, SourceIP: "192.0.2.4", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("c", 64)}).Error)
+	require.NoError(t, DB.Create(&D2SRegistrationRecord{ID: "old-registration", UserID: 52, Email: "old@example.com", RegisterIP: "192.0.2.5", RegisterTime: oldTime, EmailVerified: true, EmailVerifiedAt: oldTime}).Error)
+	require.NoError(t, DB.Create(&D2SRegistrationRecord{ID: "boundary-registration", UserID: 53, Email: "boundary@example.com", RegisterIP: "192.0.2.6", RegisterTime: recentTime, EmailVerified: true, EmailVerifiedAt: recentTime}).Error)
+	require.NoError(t, DB.Create(&D2SAdminOperationAudit{ID: "old-admin-audit", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: oldTime, Result: "SUCCESS"}).Error)
+	require.NoError(t, DB.Create(&D2SAdminOperationAudit{ID: "boundary-admin-audit", OperatorID: 1, OperatorEmail: "admin@example.com", OperationType: "VIEW_USER_LOG", OperationTime: recentTime, Result: "SUCCESS"}).Error)
+
+	_, err := PruneD2SAuditData(D2SMinimumAuditRetentionDays-1, 1, "admin@example.com", "192.0.2.7", now)
+	require.ErrorIs(t, err, ErrD2SAuditRetention)
+	retentionAboveDatabaseInteger := int64(D2SMaximumAuditRetentionDays) + 1
+	if retentionAboveDatabaseInteger <= int64(int(^uint(0)>>1)) {
+		_, err = PruneD2SAuditData(int(retentionAboveDatabaseInteger), 1, "admin@example.com", "192.0.2.7", now)
+		require.ErrorIs(t, err, ErrD2SAuditRetention)
+	}
+	var actionCount int64
+	require.NoError(t, DB.Model(&D2SUserActionLog{}).Count(&actionCount).Error)
+	assert.EqualValues(t, 3, actionCount)
+
+	run, err := PruneD2SAuditData(D2SMinimumAuditRetentionDays, 1, "admin@example.com", "192.0.2.7", now)
+	require.NoError(t, err)
+	require.EqualValues(t, 3, run.RecordCount)
+	require.Equal(t, oldTime, run.RangeStart)
+	require.Equal(t, cutoff, run.CutoffAt)
+	assert.Contains(t, run.DetailsJSON, `"record_count":3`)
+
+	for _, table := range []struct {
+		model any
+		where string
+	}{
+		{&D2SUserActionLog{}, "event_time < ?"},
+		{&D2SRegistrationRecord{}, "register_time < ?"},
+		{&D2SAdminOperationAudit{}, "operation_time < ?"},
+	} {
+		var oldCount, boundaryCount int64
+		require.NoError(t, DB.Model(table.model).Where(table.where, cutoff).Count(&oldCount).Error)
+		assert.Zero(t, oldCount)
+		require.NoError(t, DB.Model(table.model).Where(strings.Replace(table.where, "< ?", "= ?", 1), cutoff).Count(&boundaryCount).Error)
+		assert.EqualValues(t, 1, boundaryCount)
+	}
+	var cleanupRunCount int64
+	require.NoError(t, DB.Model(&D2SAuditRetentionRun{}).Where("id = ?", run.ID).Count(&cleanupRunCount).Error)
+	assert.EqualValues(t, 1, cleanupRunCount)
+}
+
+func TestPruneD2SAuditDataPersistsFailureAuditAfterRollback(t *testing.T) {
+	useD2STestDB(t)
+	previousCleanupDB := D2SAuditCleanupDB
+	D2SAuditCleanupDB = nil
+	t.Cleanup(func() { D2SAuditCleanupDB = previousCleanupDB })
+
+	require.NoError(t, DB.AutoMigrate(
+		&D2SUserActionLog{}, &D2SRegistrationRecord{}, &D2SAdminOperationAudit{}, &D2SAuditRetentionRun{},
+	))
+	const now int64 = 2_000_000_000
+	cutoff := now - int64(D2SMinimumAuditRetentionDays)*86400
+	require.NoError(t, DB.Create(&D2SUserActionLog{
+		ID: "cleanup-failure-action", ActionType: D2SActionLogin, EventTime: cutoff - 1,
+		SourceIP: "192.0.2.8", ResultStatus: D2SActionResultSuccess, RecordHash: strings.Repeat("d", 64),
+	}).Error)
+	require.NoError(t, DB.Exec("CREATE TRIGGER fail_audit_cleanup_delete BEFORE DELETE ON d2s_user_action_logs BEGIN SELECT RAISE(ABORT, 'forced cleanup failure'); END;").Error)
+
+	_, err := PruneD2SAuditData(D2SMinimumAuditRetentionDays, 7, "admin@example.com", "192.0.2.9", now)
+	require.ErrorIs(t, err, ErrD2SAuditCleanupFailed)
+
+	var remainingActions int64
+	require.NoError(t, DB.Model(&D2SUserActionLog{}).Where("id = ?", "cleanup-failure-action").Count(&remainingActions).Error)
+	assert.EqualValues(t, 1, remainingActions)
+
+	var failureRun D2SAuditRetentionRun
+	require.NoError(t, DB.Where("result = ?", "FAILURE").First(&failureRun).Error)
+	assert.Equal(t, "FAILURE", failureRun.Result)
+	assert.Zero(t, failureRun.RecordCount)
+	assert.Equal(t, cutoff-1, failureRun.RangeStart)
+	assert.Contains(t, failureRun.DetailsJSON, `"failed_stage":"delete_d2s_user_action_logs"`)
+	assert.Contains(t, failureRun.DetailsJSON, `"failure_code":"CLEANUP_TRANSACTION_FAILED"`)
+	assert.Contains(t, failureRun.DetailsJSON, `"candidate_record_count":1`)
 }
 
 func TestD2STrialProvisioningIsIdempotent(t *testing.T) {
@@ -305,6 +417,46 @@ func TestD2SExpiredRuntimeArtifactsAreCleaned(t *testing.T) {
 	assert.Zero(t, leaseCount)
 }
 
+func TestD2SOrderAndPurchaseAuditCommitAtomically(t *testing.T) {
+	useD2STestDB(t)
+	require.NoError(t, DB.AutoMigrate(&D2SUserActionLog{}))
+
+	user := createD2STestUser(t, "d2s-order-audit-atomic")
+	const now int64 = 2_000_300_100
+	quote, err := QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", "stripe", now)
+	require.NoError(t, err)
+
+	userID := user.Id
+	audit := D2SActionLogInput{
+		UserID: &userID, Email: user.Email, ActionType: D2SActionPurchase, EventTime: now,
+		SourceIP: "192.0.2.20", ResultStatus: D2SActionResultSuccess,
+	}
+	require.NoError(t, DB.Exec(`CREATE TRIGGER fail_d2s_purchase_audit BEFORE INSERT ON d2s_user_action_logs BEGIN SELECT RAISE(ABORT, 'audit unavailable'); END`).Error)
+	_, err = CreateD2SOrderWithMetadataAndAudit(user.Id, quote, 0, "atomic-purchase-audit", user.Email, "192.0.2.20", now, &audit)
+	require.Error(t, err)
+
+	var orderCount, auditCount int64
+	require.NoError(t, DB.Model(&D2SOrder{}).Where("user_id = ? AND idempotency_key = ?", user.Id, "atomic-purchase-audit").Count(&orderCount).Error)
+	require.NoError(t, DB.Model(&D2SUserActionLog{}).Where("user_id = ? AND action_type = ?", user.Id, D2SActionPurchase).Count(&auditCount).Error)
+	assert.Zero(t, orderCount, "the order must roll back when its audit insert fails")
+	assert.Zero(t, auditCount)
+
+	require.NoError(t, DB.Exec("DROP TRIGGER fail_d2s_purchase_audit").Error)
+	order, err := CreateD2SOrderWithMetadataAndAudit(user.Id, quote, 0, "atomic-purchase-audit", user.Email, "192.0.2.20", now, &audit)
+	require.NoError(t, err)
+	require.NotNil(t, order)
+	require.NoError(t, DB.Model(&D2SOrder{}).Where("user_id = ? AND idempotency_key = ?", user.Id, "atomic-purchase-audit").Count(&orderCount).Error)
+	require.NoError(t, DB.Model(&D2SUserActionLog{}).Where("user_id = ? AND action_type = ?", user.Id, D2SActionPurchase).Count(&auditCount).Error)
+	assert.EqualValues(t, 1, orderCount)
+	assert.EqualValues(t, 1, auditCount)
+
+	audit.EventTime++
+	_, err = CreateD2SOrderWithMetadataAndAudit(user.Id, quote, 0, "atomic-purchase-audit", user.Email, "192.0.2.20", now+1, &audit)
+	require.NoError(t, err, "idempotent replay records another purchase request")
+	require.NoError(t, DB.Model(&D2SUserActionLog{}).Where("user_id = ? AND action_type = ?", user.Id, D2SActionPurchase).Count(&auditCount).Error)
+	assert.EqualValues(t, 2, auditCount)
+}
+
 func TestD2SOrderLocksRegionAndCreatesPaidLicense(t *testing.T) {
 	useD2STestDB(t)
 	user := createD2STestUser(t, "d2s-order")
@@ -402,6 +554,16 @@ func TestD2SReversalRequiresOriginalPaidEvent(t *testing.T) {
 	var eventCount int64
 	require.NoError(t, DB.Model(&D2SPaymentEvent{}).Where("provider_event_id = ?", "orphan-reversal").Count(&eventCount).Error)
 	assert.Zero(t, eventCount)
+}
+
+func TestD2SPaymentEventRejectsInvalidPaymentAccountHash(t *testing.T) {
+	_, err := ProcessD2SPaymentEvent("stripe", "account-hash-event", "account-hash-order", "paid", 2990, "USD", "payload-hash", 2_000_900_100, "not-a-sha256-digest")
+	require.ErrorIs(t, err, ErrD2SOrderInvalid)
+}
+
+func TestD2SPaymentEventRejectsUnsupportedPaymentAccountHashProvider(t *testing.T) {
+	_, err := ProcessD2SPaymentEvent("epay", "account-hash-provider-event", "account-hash-provider-order", "paid", 2990, "CNY", "payload-hash", 2_000_900_100, strings.Repeat("a", 64))
+	require.ErrorIs(t, err, ErrD2SOrderInvalid)
 }
 
 func TestD2SPaymentEventLifecycleMatrix(t *testing.T) {
@@ -729,6 +891,79 @@ func TestManualUnbindAllowsOnlyOnePendingRequest(t *testing.T) {
 	assert.ErrorIs(t, err, ErrD2SManualUnbindPending)
 }
 
+func TestManualUnbindConcurrentApprovalsAllowOnlyOneLifetimeApproval(t *testing.T) {
+	useD2STestDB(t)
+	user := createD2STestUser(t, "d2s-manual-unbind-concurrent")
+	assertOnlyOneConcurrentManualUnbindApproval(t, user.Id)
+}
+
+func assertOnlyOneConcurrentManualUnbindApproval(t *testing.T, userID int) {
+	t.Helper()
+	now := time.Now().UTC().Unix()
+	require.NoError(t, DB.Create(&D2SUserProfile{
+		UserID: userID, EmailVerified: true, CreatedAt: now, UpdatedAt: now,
+	}).Error)
+
+	suffix := fmt.Sprintf("%d", userID)
+	licenses := []D2SLicense{
+		{
+			ID: "manual-unbind-license-trial-" + suffix, LicenseCode: "MU" + suffix + "A",
+			UserID: userID, Product: D2SProductDesktop2Stereo, Kind: D2SLicenseKindTrial,
+			Status: D2SLicenseStatusActive, Mode: D2SLicenseModePermanent,
+			DeviceHash: strings.Repeat("a", 64), PermanentBoundAt: now, CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			ID: "manual-unbind-license-paid-" + suffix, LicenseCode: "MU" + suffix + "B",
+			UserID: userID, Product: D2SProductDesktop2Stereo, Kind: D2SLicenseKindPaid,
+			Status: D2SLicenseStatusActive, Mode: D2SLicenseModePermanent,
+			DeviceHash: strings.Repeat("b", 64), PermanentBoundAt: now,
+			SourceOrderID: "manual-unbind-order-" + suffix, CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	for _, license := range licenses {
+		require.NoError(t, DB.Create(&license).Error)
+	}
+	requests := []D2SManualUnbindRequest{
+		{ID: "manual-unbind-request-a-" + suffix, LicenseID: licenses[0].ID, UserID: userID, Status: "pending", CreatedAt: now, UpdatedAt: now},
+		{ID: "manual-unbind-request-b-" + suffix, LicenseID: licenses[1].ID, UserID: userID, Status: "pending", CreatedAt: now, UpdatedAt: now},
+	}
+	for _, request := range requests {
+		require.NoError(t, DB.Create(&request).Error)
+	}
+
+	results := make(chan error, len(requests))
+	var wait sync.WaitGroup
+	for _, request := range requests {
+		requestID := request.ID
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			_, err := ReviewD2SManualUnbind(1, requestID, "approved", "concurrency regression", now+1)
+			results <- err
+		}()
+	}
+	wait.Wait()
+	close(results)
+
+	approved := 0
+	rejectedByLifetimeLimit := 0
+	for err := range results {
+		if err == nil {
+			approved++
+		} else if errors.Is(err, ErrD2SPermanentLocked) {
+			rejectedByLifetimeLimit++
+		} else {
+			require.NoError(t, err)
+		}
+	}
+	assert.Equal(t, 1, approved)
+	assert.Equal(t, 1, rejectedByLifetimeLimit)
+
+	var approvedCount int64
+	require.NoError(t, DB.Model(&D2SManualUnbindRequest{}).Where("user_id = ? AND status = ?", userID, "approved").Count(&approvedCount).Error)
+	assert.EqualValues(t, 1, approvedCount)
+}
+
 func TestD2SPaymentReconciliationReportsLocalAnomalies(t *testing.T) {
 	useD2STestDB(t)
 	const now = int64(2_000_600_000)
@@ -764,6 +999,24 @@ func TestD2SPaymentReconciliationReportsLocalAnomalies(t *testing.T) {
 	assert.Equal(t, "paid_order_without_payment_event", report.Mismatches[2].Kind)
 	_, err = ReconcileD2SPayments(now, now)
 	assert.Error(t, err)
+}
+
+func TestD2SPaymentReconciliationKeepsOlderExpiredPendingOrdersVisible(t *testing.T) {
+	useD2STestDB(t)
+	const now = int64(2_000_650_000)
+	require.NoError(t, DB.Create(&D2SOrder{
+		ID: "reconcile-old-expired-pending", UserID: 1, Product: D2SOrderProductLicense, Provider: "stripe",
+		Region: D2SRegionINTL, Currency: "USD", AmountMinor: 2990, GatewayMinor: 2990,
+		Status: D2SOrderPending, CreatedAt: now - 86400, ExpiresAt: now - 500,
+	}).Error)
+
+	report, err := ReconcileD2SPayments(now-100, now+100)
+	require.NoError(t, err)
+	assert.Equal(t, 0, report.Orders)
+	assert.Equal(t, 1, report.PendingExpired)
+	assert.Contains(t, report.Mismatches, D2SReconciliationMismatch{
+		OrderID: "reconcile-old-expired-pending", Kind: "pending_expired",
+	})
 }
 
 func TestD2SPaymentReconciliationIncludesOlderOrdersReferencedByEvents(t *testing.T) {

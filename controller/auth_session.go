@@ -35,7 +35,8 @@ func RefreshAuth(c *gin.Context) {
 	}
 	bundle, user, err := service.RefreshLoginSession(rawRefreshToken, c.GetHeader("X-Auth-Session"), c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
-		if errors.Is(err, service.ErrRefreshTokenInvalid) || errors.Is(err, service.ErrLoginSessionRevoked) {
+		if errors.Is(err, service.ErrRefreshTokenInvalid) || errors.Is(err, service.ErrLoginSessionRevoked) ||
+			errors.Is(err, model.ErrD2SAccountLoginBlocked) {
 			service.ClearRefreshCookie(c)
 		}
 		writeAuthSessionError(c, err)

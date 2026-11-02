@@ -218,7 +218,11 @@ jobs:
           $pancakeSecretName = 'D2S_' + 'PAYMENT_BRIDGE_SECRET_' + 'WAFFO_PANCAKE'
           Set-Item "Env:$pancakeSecretName" ('w' * 32)
           $privateKeyName = 'D2S_' + 'LICENSE_PRIVATE_KEY_B64'
-          Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32)))
+          $signingKey = [Security.Cryptography.ECDsa]::Create()
+          $signingKey.GenerateKey([Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+          $privateKeyDer = $signingKey.ExportPkcs8PrivateKey()
+          $privateKeyParameters = $signingKey.ExportParameters($false)
+          Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String($privateKeyDer))
           $env:D2S_OFFLINE_EXTENSION_CNY_MINOR = '3000'
           $env:D2S_OFFLINE_EXTENSION_USD_MINOR = '500'
           $env:D2S_DEVICE_VERIFICATION_URI = 'https://d2s.site/device'
@@ -226,6 +230,109 @@ jobs:
           $env:TRUSTED_PROXIES = 'none'
           $env:SESSION_COOKIE_SECURE = 'true'
           ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp -RequiredPaymentProviders stripe,waffo_pancake
+
+          $toBase64Url = {
+            param([byte[]]$Bytes)
+            [Convert]::ToBase64String($Bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_')
+          }
+          $configuredPublicKey = [pscustomobject]@{
+            kid = $env:D2S_LICENSE_KEY_ID
+            alg = 'ES256'
+            crv = 'P-256'
+            x = & $toBase64Url $privateKeyParameters.Q.X
+            y = & $toBase64Url $privateKeyParameters.Q.Y
+          }
+          $global:d2sReadinessResponse = [pscustomobject]@{
+            success = $true
+            data = [pscustomobject]@{ keys = @($configuredPublicKey) }
+          }
+          function global:Invoke-WebRequest {
+            param([string]$Uri, [switch]$UseBasicParsing)
+            [pscustomobject]@{ StatusCode = 200 }
+          }
+          function global:Invoke-RestMethod {
+            param([string]$Uri, [string]$Method)
+            $global:d2sReadinessResponse
+          }
+          ./scripts/d2s-production-readiness.ps1 -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
+
+          $otherKey = [Security.Cryptography.ECDsa]::Create()
+          $otherKey.GenerateKey([Security.Cryptography.ECCurve+NamedCurves]::nistP256)
+          $otherParameters = $otherKey.ExportParameters($false)
+          $global:d2sReadinessResponse.data.keys = @([pscustomobject]@{
+            kid = $env:D2S_LICENSE_KEY_ID
+            alg = 'ES256'
+            crv = 'P-256'
+            x = & $toBase64Url $otherParameters.Q.X
+            y = & $toBase64Url $otherParameters.Q.Y
+          })
+          $mismatchRejected = $false
+          try {
+            ./scripts/d2s-production-readiness.ps1 -RequireSecrets -RequiredPaymentProviders stripe,waffo_pancake
+          } catch {
+            if ($_.Exception.Message -like '*does not match*') {
+              $mismatchRejected = $true
+            } else {
+              throw
+            }
+          }
+          if (-not $mismatchRejected) {
+            throw 'Mismatched published signing key was not rejected.'
+          }
+
+          $wrongCurveKey = [Security.Cryptography.ECDsa]::Create()
+          $wrongCurveKey.GenerateKey([Security.Cryptography.ECCurve+NamedCurves]::nistP384)
+          Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String($wrongCurveKey.ExportPkcs8PrivateKey()))
+          $wrongCurveRejected = $false
+          try {
+            ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp -RequiredPaymentProviders stripe,waffo_pancake
+          } catch {
+            if ($_.Exception.Message -like '*valid P-256 private key*') {
+              $wrongCurveRejected = $true
+            } else {
+              throw
+            }
+          }
+          if (-not $wrongCurveRejected) {
+            throw 'Non-P-256 signing key was not rejected.'
+          }
+
+          $publicOnlyKey = [Security.Cryptography.ECDsa]::Create()
+          $publicOnlyKey.ImportFromPem($signingKey.ExportSubjectPublicKeyInfoPem())
+          Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($publicOnlyKey.ExportSubjectPublicKeyInfoPem())))
+          $publicOnlyRejected = $false
+          try {
+            ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp -RequiredPaymentProviders stripe,waffo_pancake
+          } catch {
+            if ($_.Exception.Message -like '*valid P-256 private key*') {
+              $publicOnlyRejected = $true
+            } else {
+              throw
+            }
+          }
+          if (-not $publicOnlyRejected) {
+            throw 'A public-only key was not rejected.'
+          }
+
+          Set-Item "Env:$privateKeyName" ([Convert]::ToBase64String([byte[]]@(0x30) + [byte[]]@(1..32)))
+          $malformedKeyRejected = $false
+          try {
+            ./scripts/d2s-production-readiness.ps1 -RequireSecrets -SkipHttp -RequiredPaymentProviders stripe,waffo_pancake
+          } catch {
+            if ($_.Exception.Message -like '*valid P-256 private key*') {
+              $malformedKeyRejected = $true
+            } else {
+              throw
+            }
+          }
+          if (-not $malformedKeyRejected) {
+            throw 'A malformed private key was not rejected.'
+          }
+
+          $signingKey.Dispose()
+          $otherKey.Dispose()
+          $wrongCurveKey.Dispose()
+          $publicOnlyKey.Dispose()
       - name: Reject malformed production BaseUrl
         shell: pwsh
         run: |
