@@ -251,7 +251,8 @@ GORM 维护以下表：
 
 - 2026-10-31 补充复核：同一授权范围内的无凭据 GET 再次确认 status、公钥、设备页为 200，旧域名 API 为 404；当前工作树 `go vet -p 1 ./...` 与 `go build -p 1 ./...` 均以退出码 0 完成。公网检查不验证生产内部健康，构建与静态分析不替代部署演练。
 - 2026-11-02 通过无凭据只读 GET 再核验生产公开端点：`/api/status` 返回 200，版本 `26f524d11424a2866a8608a4883a63dd1f7fe16d`；`/api/v1/license/keys` 返回 200 并公布 1 个 ES256/P-256 公钥（`kid=d2s-es256-2026-09`）；`/device` 返回 200。该结果仅说明三个公网路由可响应，不验证生产容器/数据库状态、密钥轮换、支付回调或交易闭环。
-- 2026-11-02 再次无凭据核验上述端点，均返回 200；公网 `/api/status` 版本与本地 Git `HEAD` 同为 `26f524d11424a2866a8608a4883a63dd1f7fe16d`。当前工作区仍有大量未提交和未跟踪的本地实现，因此版本相同只代表生产仍运行仓库基线提交，不能视为本轮改动已部署；本次未执行生产写操作。
+- 2026-11-02 再次无凭据核验上述端点，均返回 200；公网 `/api/status` 版本与本地 Git `HEAD` 同为 `26f524d11424a2866a8608a4883a63dd1f7fe16d`。该次核验时本地工作区仍有大量未提交和未跟踪的实现，因此版本相同只代表生产仍运行仓库基线提交，不能视为本轮改动已部署；本次未执行生产写操作。
+- 2026-11-02 通过 SSH 对生产主机执行只读核查：`/opt/desktop2stereo-site` Git HEAD 为 `b9c068bebdea1670a0242e67b449fc9e2621d3f0`，工作区有 12 个已跟踪改动和 131 个未跟踪文件；运行容器 `new-api` 健康且镜像 revision 为 `26f524d11424a2866a8608a4883a63dd1f7fe16d`，PostgreSQL 与 Redis 容器运行。`desktop2stereo-reconciliation.timer` 为 disabled，`/etc/desktop2stereo/reconciliation.env` 不存在；只读查询 PostgreSQL `information_schema.columns` 未找到用户行为日志、注册记录、管理员审计和留存审计四张表。当前本地提交 `50899e5` 尚未部署。不得从该脏工作区直接发布；生产迁移、权限配置和定时器仍未执行。
 - 2026-10-31 交叉目标编译：当前工作树 `GOOS=linux GOARCH=amd64 go build -p 1 ./...` 与 `GOOS=darwin GOARCH=arm64 go build -p 1 ./...` 均退出码 0；仅证明对应平台编译通过，未在 Linux/macOS 主机运行或验收。
 - 2026-11-02 在当前工作树复跑 `GOOS=linux GOARCH=amd64 go build -p 1 ./...` 与 `GOOS=darwin GOARCH=arm64 go build -p 1 ./...`，均退出码 0；这仅验证交叉编译，不替代 Linux/macOS 实机运行、签名或平台端到端验收。
 - 2026-10-31 处理 360 报毒反馈：核对发布工作流后确认 `controller.test.exe` 不在任何用户发布清单中；服务端和 Electron Windows 发布目前都没有 Authenticode 签名步骤。新增 [Windows 误报与签名处理说明](windows-360-false-positive-and-signing.md)，记录 360 官方样本申诉步骤、同 SHA-256 复核和正式签名要求。具体误报文件、检测名、样本哈希及正式签名证书/托管签名服务尚未提供，因此正式发布签名与该具体样本的厂商复核仍待完成。
