@@ -194,7 +194,11 @@ if [[ -z "$SOURCE_DIR" ]]; then
   echo "GitHub commit archive has no source directory" >&2
   exit 7
 fi
-mv "$SOURCE_DIR" "$RELEASE"
+mv -T "$SOURCE_DIR" "$RELEASE"
+if [[ ! -f "$RELEASE/docker-compose.yml" ]]; then
+  echo "release archive was not installed at the expected root: $RELEASE" >&2
+  exit 7
+fi
 rm -rf -- "$EXTRACT_ROOT" "$ARCHIVE"
 
 ln -s "$APP_ROOT/.env" "$RELEASE/.env"

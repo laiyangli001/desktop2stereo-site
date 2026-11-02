@@ -180,6 +180,7 @@ if ! run_update success "$TARGET_SHA" ok; then
 fi
 assert_status success succeeded
 [[ -f "$TEST_ROOT/cases/success/releases/$TARGET_SHA/.update-complete" ]]
+[[ -f "$TEST_ROOT/cases/success/releases/$TARGET_SHA/docker-compose.yml" ]]
 [[ "$(cat "$TEST_ROOT/cases/success/download-count")" == "1" ]]
 grep -Fq -- "--profile maintenance run --rm --no-deps audit-ownership" "$TEST_ROOT/cases/success/docker.log"
 grep -Fq -- "--profile maintenance run --rm --no-deps audit-migrate" "$TEST_ROOT/cases/success/docker.log"
