@@ -263,7 +263,7 @@ GORM 维护以下表：
 - 完成双实例压力、密钥轮换、备份恢复、灰度、回滚、监控和告警演练。
 - 与 Windows/Linux/macOS 客户端执行生产等价端到端验收。
 - 已建立 [`d2s-production-drill.md`](d2s-production-drill.md) 和无破坏性的生产就绪检查脚本；runbook §5 已列出 Windows/Linux/macOS 的账号登录、设备码、绑定、模式、租约、离线周期和证据要求，真实基础设施、渠道沙箱和三平台端到端证据仍待执行。
-- 2026-11-02 生产就绪脚本新增 `-ExpectedVersion`，校验 `/api/status` 的 `data.version` 与指定的 40 位发布 Git SHA 精确一致，并拒绝格式错误 SHA、版本不匹配、无 HTTP 检查时指定版本。PowerShell AST 和本地 HTTP mock 的匹配/不匹配/非法 SHA/`-SkipHttp` 四种回归通过；runbook 已要求部署验收传入目标 SHA。尚未对生产发布执行该检查。
+- 2026-11-02 生产就绪脚本新增 `-ExpectedVersion`，校验 `/api/status` 的 `data.version` 与指定的 40 位发布 Git SHA 精确一致，并拒绝格式错误 SHA、版本不匹配、无 HTTP 检查时指定版本。PowerShell AST 和本地 HTTP mock 的匹配/不匹配/非法 SHA/`-SkipHttp` 四种回归通过；runbook 已要求部署验收传入目标 SHA。随后使用已授权的无凭据只读 GET 对真实生产 API 验证：当前运行版本 `26f524d11424a2866a8608a4883a63dd1f7fe16d` 匹配通过，错误 SHA 被拒绝；此结果仅验证公开 API 契约，不代表新提交已部署。
 - 2026-10-30 加强生产就绪检查：`-RequireSecrets` 现在实际解析配置私钥并校验 P-256 曲线；启用 HTTP 检查并传入 `-RequireSecrets` 时逐字比较 `/api/v1/license/keys` 中配置 `kid` 的 `x/y` 坐标，防止同 ID 错配密钥。隔离回归覆盖 PKCS#8 DER、Base64 PEM、SEC1 DER、损坏密钥、非 P-256/仅公钥密钥及公钥不匹配；本地 mock HTTP 验证通过，CI 冒烟步骤已同步生成隔离 P-256 密钥并覆盖错配、错误曲线、仅公钥材料及损坏密钥拒绝。此结果不证明生产 Secret 当前有效，也未替代生产密钥轮换演练。
 - 已部署固定路径的日终对账脚本和 systemd 单元；生产服务器 timer 当前为 disabled，root-only 对账环境文件不存在，令牌与定时器演练仍待完成。
 - 2026-10-30 修复对账认证契约：原 runner 使用 Bearer 令牌，但生产接口只接受 12 小时后台会话。代码现为对账接口单独支持 32 字节随机十六进制令牌（恒定时间比较），仍保留后台会话访问；其它后台 API 不接受该机器令牌。每次成功或失败的对账请求写入管理员审计，审计范围包含 UTC 时间窗和结果/差异数量。runner、Compose 环境变量、PowerShell 手动 runner 与部署说明已统一为 `D2S_RECONCILIATION_TOKEN`。middleware/controller 定向测试通过。此修复尚未部署生产，因此生产 timer 保持禁用。只读核验发现生产部署仓库 HEAD 与本地基线不同，且含有既有未提交及未跟踪内容；为避免覆盖或混入生产变更，本轮未部署代码、未写入生产令牌。待通过受控发布交付代码并核对审计表权限后，再配置令牌、验证端点并启用 timer。
