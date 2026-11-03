@@ -155,6 +155,7 @@ GORM 维护以下表：
 - 2026-11-03 再次使用固定路径 runner 执行当前工作树完整 `controller` 包测试，通过（退出码 0）；测试覆盖批量账户筛选、邮箱域名及注册 IP 条件、软删除账户排除等现有控制器回归。此结果不等于全仓 Go 测试通过；批量操作失败审计类型的待修复项仍以其独立授权状态为准。
 - 2026-11-03 当前工作树全仓 `go vet -p 1 ./...`、Windows 原生 `go build -p 1 ./...`、Linux/amd64 与 macOS/arm64 交叉构建全部通过（同一固定 GOCACHE/GOTMPDIR）。全仓 Go 测试仍未完成，因此 S1 不据此改为 `verified`。
 - 2026-11-03 当前工作树重新执行 `go list ./...` 枚举的全部 39 个含测试包，使用 `scripts/d2s-fixed-go-test.ps1` 固定路径编译并逐包运行，全部通过（含此前受 Windows 临时 EXE 启动限制的 `e2e`、`middleware`、`relay/channel/ollama` 和 `pkg/billingexpr`）；`go vet -p 1 ./...`、`go build -p 1 ./...` 及 `scripts/d2s-sensitive-scan.ps1` 均通过，敏感扫描覆盖 7,843 个跟踪/未跟踪工作树文件。360 托盘进程仍在，但本轮未发现 `360Safe` 进程，测试 EXE 均保留并执行完成。此项更新取代本节较早的“全仓测试未完成”检查点记录；Windows 原生、Linux/amd64 和 macOS/arm64 构建结果仍以此前记录为准。
+- 2026-11-03 经用户授权修复批量账户解锁失败审计类型错误：原实现把所有执行失败固定记为 `EMERGENCY_LOCK`，即使预览中的操作是解锁。新增 selection-changed 失败回归，先确认其失败并显示实际记录为错误类型；现根据已验证的预览动作确定类型，并让失败审计沿用该类型。回归转绿后，固定路径 `controller` 全包测试、39 个含测试包的固定路径全量测试、`go vet -p 1 ./controller`、`go build -p 1 ./controller` 和 `git diff --check` 均通过。
 
 - 导入 new-api、保留上游和 AGPL-3.0 信息。
 - 增加 D2S 模型、迁移、路由、授权状态机、设备码、ES256 和在线租约。

@@ -230,7 +230,7 @@ func D2SAdminBatchEmergencyApply(c *gin.Context) {
 	now := time.Now().UTC().Unix()
 	var count int64
 	var previewCount, currentCount int64
-	var operationType string
+	operationType := "EMERGENCY_LOCK"
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		var preview model.D2SAdminBatchPreview
 		if err := tx.Where("id = ? AND admin_id = ? AND consumed_at = 0 AND expires_at > ?", strings.TrimSpace(request.PreviewID), c.GetInt("d2s_admin_id"), now).First(&preview).Error; err != nil {
@@ -249,6 +249,7 @@ func D2SAdminBatchEmergencyApply(c *gin.Context) {
 		if err := common.Unmarshal([]byte(preview.ActionJSON), &actions); err != nil {
 			return err
 		}
+		operationType = d2SBatchEmergencyOperationType(actions)
 		if err := common.Unmarshal([]byte(preview.UserIDsJSON), &userIDs); err != nil {
 			return err
 		}
@@ -296,10 +297,6 @@ func D2SAdminBatchEmergencyApply(c *gin.Context) {
 			return fmt.Errorf("batch preview already consumed")
 		}
 		count = currentCount
-		operationType = "EMERGENCY_UNLOCK"
-		if (actions.LoginBlocked != nil && *actions.LoginBlocked) || (actions.PurchaseBlocked != nil && *actions.PurchaseBlocked) {
-			operationType = "EMERGENCY_LOCK"
-		}
 		details, err := common.Marshal(map[string]any{
 			"selector": selector, "login_blocked": actions.LoginBlocked,
 			"purchase_blocked": actions.PurchaseBlocked, "affected_accounts": count,
@@ -319,7 +316,7 @@ func D2SAdminBatchEmergencyApply(c *gin.Context) {
 		if errors.Is(err, errD2SBatchSelectionChanged) {
 			reason = "selection_changed_since_preview"
 		}
-		respondD2SAdminAuditedFailureDetails(c, "EMERGENCY_LOCK", "user_accounts:batch", map[string]any{
+		respondD2SAdminAuditedFailureDetails(c, operationType, "user_accounts:batch", map[string]any{
 			"reason": reason, "preview_id": strings.TrimSpace(request.PreviewID),
 			"confirmation_count":  request.ConfirmationCount,
 			"preview_match_count": previewCount, "current_match_count": currentCount,
@@ -327,4 +324,11 @@ func D2SAdminBatchEmergencyApply(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{"affected_accounts": count, "operation_type": operationType}})
+}
+
+func d2SBatchEmergencyOperationType(actions d2SBatchActions) string {
+	if (actions.LoginBlocked != nil && *actions.LoginBlocked) || (actions.PurchaseBlocked != nil && *actions.PurchaseBlocked) {
+		return "EMERGENCY_LOCK"
+	}
+	return "EMERGENCY_UNLOCK"
 }
