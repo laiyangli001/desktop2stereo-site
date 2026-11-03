@@ -136,7 +136,7 @@
 | `PUT /api/v1/admin/users/:id/region` | `super_admin` | 修改账户区域；区域变更和成功审计同事务提交；失败单独审计 |
 | `GET /api/v1/admin/signing-keys` | `super_admin` | 查看签名公钥状态；记录返回数量 |
 | `PUT /api/v1/admin/signing-keys/:id` | `super_admin` | 退役非当前签名密钥；密钥状态和成功审计同事务提交；失败单独审计 |
-| `GET /api/v1/admin/support/tickets` | `account_operator` 或更高 | 按状态筛选并分页查看投诉与服务咨询；访问写入管理员审计 |
+| `GET /api/v1/admin/support/tickets` | `account_operator` 或更高 | 按 `OPEN`、`IN_PROGRESS`、`RESOLVED`、`CLOSED` 状态筛选并分页查看投诉与服务咨询；非法状态返回 `400 INVALID_STATUS` 并写 `VIEW_SUPPORT_TICKETS/FAILURE` 审计，查询失败返回 500 并审计 |
 | `PUT /api/v1/admin/support/tickets/:id` | `account_operator` 或更高 | 更新处理状态及内部回复；状态变更和管理员审计在同一数据库事务提交 |
 | `PUT /api/v1/admin/users/:id/emergency` | `account_operator` 或更高 | 设置 `login_blocked`、`purchase_blocked`、`force_logout`；强制下线先记 `STARTED`，完成所有会话撤销、认证版本提升及在线租约释放后追加 `SUCCESS`，失败追加阶段性 `FAILURE` |
 | `POST /api/v1/admin/users/batch/preview` | `account_operator` 或更高 | 邮箱域名和注册时间窗口按当前用户邮箱/创建时间筛选，涵盖没有历史注册快照的账号；IP CIDR 按不可变注册快照中的注册 IP 筛选，并只命中未软删除账户。缺少注册快照时不推断 IP。返回命中数及短时有效预览 ID |

@@ -118,6 +118,14 @@ func D2SAdminSupportTickets(c *gin.Context) {
 		return
 	}
 	status := strings.ToUpper(strings.TrimSpace(c.Query("status")))
+	if status != "" {
+		switch status {
+		case model.D2SSupportOpen, model.D2SSupportInProgress, model.D2SSupportResolved, model.D2SSupportClosed:
+		default:
+			respondD2SAdminAuditedFailure(c, "VIEW_SUPPORT_TICKETS", "d2s_support_tickets", "invalid_status", http.StatusBadRequest, "INVALID_STATUS")
+			return
+		}
+	}
 	tickets, total, err := model.ListD2SSupportTickets(status, page, pageSize)
 	if err != nil {
 		respondD2SAdminAuditedFailure(c, "VIEW_SUPPORT_TICKETS", "d2s_support_tickets", "query_failed", http.StatusInternalServerError, "SUPPORT_QUERY_FAILED")

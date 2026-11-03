@@ -108,3 +108,19 @@ func TestD2SAdminSupportTicketQueryFailureReturnsServerErrorAndAudits(t *testing
 	require.Equal(t, "VIEW_SUPPORT_TICKETS", audit.OperationType)
 	require.Equal(t, "FAILURE", audit.Result)
 }
+
+func TestD2SAdminSupportTicketRejectsInvalidStatusAndAudits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupD2SAdminExportTestDB(t, "d2s_admin_support_invalid_status_test", &model.D2SAdminOperationAudit{})
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/support/tickets?status=INVALID")
+
+	D2SAdminSupportTickets(context)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "INVALID_STATUS")
+	var audit model.D2SAdminOperationAudit
+	require.NoError(t, db.First(&audit).Error)
+	require.Equal(t, "VIEW_SUPPORT_TICKETS", audit.OperationType)
+	require.Equal(t, "FAILURE", audit.Result)
+	require.Contains(t, audit.DetailsJSON, "invalid_status")
+}
