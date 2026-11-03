@@ -7,6 +7,7 @@ import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { toIntlLocale } from '@/i18n/languages'
 
 import {
   getD2SAdminBalances,
@@ -22,11 +23,7 @@ import {
   reviewD2SWithdrawal,
   setD2SUserRegion,
 } from './api'
-
-function formatPaymentEventDate(timestamp: number): string {
-  if (!timestamp) return '—'
-  return new Date(timestamp * 1000).toLocaleString()
-}
+import { formatD2SDate, formatD2SMoney } from './lib/format'
 
 function ReviewActions(props: {
   id: string
@@ -56,9 +53,10 @@ function ReviewActions(props: {
     <div className='flex min-w-52 gap-2' aria-busy={mutation.isPending}>
       <Input
         aria-label={`${t('Review note')} ${props.id}`}
+        autoComplete='off'
+        name={`review_note_${props.id}`}
         value={note}
         onChange={(event) => setNote(event.target.value)}
-        placeholder={t('Review note')}
       />
       <Button
         type='button'
@@ -86,7 +84,8 @@ function ReviewActions(props: {
 }
 
 export function D2SAdminWorkspace() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const queryClient = useQueryClient()
   const [eventFilters, setEventFilters] = useState({
     provider: '',
@@ -208,6 +207,8 @@ export function D2SAdminWorkspace() {
                 >
                   <select
                     aria-label={t('Order status')}
+                    autoComplete='off'
+                    name='order_status'
                     value={orderFilters.status}
                     onChange={(event) =>
                       setOrderFilters((current) => ({
@@ -225,6 +226,8 @@ export function D2SAdminWorkspace() {
                   </select>
                   <Input
                     aria-label={t('User ID')}
+                    autoComplete='off'
+                    name='user_id'
                     placeholder={t('User ID')}
                     inputMode='numeric'
                     value={orderFilters.user_id}
@@ -260,7 +263,12 @@ export function D2SAdminWorkspace() {
                       {order.id} · user {order.user_id} · {order.provider}
                     </span>
                     <span>
-                      {order.status} · {order.currency} {order.amount_minor}
+                      {order.status} ·{' '}
+                      {formatD2SMoney(
+                        order.amount_minor,
+                        order.currency,
+                        locale
+                      )}
                     </span>
                   </div>
                 ))}
@@ -283,7 +291,11 @@ export function D2SAdminWorkspace() {
                       user {account.user_id} · {account.currency}
                     </span>
                     <span className='text-destructive'>
-                      {account.available_minor}
+                      {formatD2SMoney(
+                        account.available_minor,
+                        account.currency,
+                        locale
+                      )}
                     </span>
                   </div>
                 ))}
@@ -312,6 +324,8 @@ export function D2SAdminWorkspace() {
                 >
                   <Input
                     aria-label={t('Provider')}
+                    autoComplete='off'
+                    name='provider'
                     placeholder={t('Provider')}
                     value={eventFilters.provider}
                     onChange={(event) =>
@@ -323,6 +337,8 @@ export function D2SAdminWorkspace() {
                   />
                   <Input
                     aria-label={t('Event type')}
+                    autoComplete='off'
+                    name='event_type'
                     placeholder={t('Event type')}
                     value={eventFilters.event_type}
                     onChange={(event) =>
@@ -334,6 +350,8 @@ export function D2SAdminWorkspace() {
                   />
                   <Input
                     aria-label={t('Order ID')}
+                    autoComplete='off'
+                    name='order_id'
                     placeholder={t('Order ID')}
                     value={eventFilters.order_id}
                     onChange={(event) =>
@@ -369,15 +387,19 @@ export function D2SAdminWorkspace() {
                     className='space-y-1 border-b pb-2 last:border-0'
                   >
                     <div>
-                      {event.provider} · {event.event_type} · {event.currency}{' '}
-                      {event.amount_minor}
+                      {event.provider} · {event.event_type} ·{' '}
+                      {formatD2SMoney(
+                        event.amount_minor,
+                        event.currency,
+                        locale
+                      )}
                     </div>
                     <div className='text-muted-foreground font-mono text-xs'>
                       {event.provider_event_id} · {event.order_id}
                     </div>
                     <div className='text-muted-foreground text-xs'>
                       {t('Processed at')}:{' '}
-                      {formatPaymentEventDate(event.processed_at)}
+                      {formatD2SDate(event.processed_at, locale)}
                     </div>
                   </div>
                 ))}
@@ -414,6 +436,7 @@ export function D2SAdminWorkspace() {
             <ReviewCard
               title={t('Withdrawal review')}
               rows={withdrawals.data?.data?.withdrawals || []}
+              locale={locale}
               kind='withdrawal'
               onDone={refresh}
             />
@@ -560,6 +583,8 @@ function RegionRow(props: {
       </div>
       <select
         aria-label={`${t('Region')} ${props.license.license_code}`}
+        autoComplete='off'
+        name={`region_${props.license.id}`}
         value={region}
         onChange={(event) => setRegion(event.target.value)}
         disabled={props.saving}
@@ -589,8 +614,10 @@ function ReviewCard(props: {
     user_id?: number
     status: string
     amount_minor?: number
+    currency?: string
     reason?: string
   }>
+  locale?: string
   kind: 'unbind' | 'withdrawal'
   onDone: () => void
 }) {
@@ -604,7 +631,9 @@ function ReviewCard(props: {
           <div key={row.id} className='space-y-2 border-b pb-3'>
             <div>
               {row.id} · user {row.user_id} · {row.status}{' '}
-              {row.amount_minor ?? row.reason}
+              {row.amount_minor !== undefined && row.currency
+                ? formatD2SMoney(row.amount_minor, row.currency, props.locale)
+                : (row.amount_minor ?? row.reason)}
             </div>
             {row.status === 'pending' && (
               <ReviewActions

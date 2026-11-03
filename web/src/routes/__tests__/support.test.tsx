@@ -103,6 +103,10 @@ describe('D2S support form', () => {
     const user = userEvent.setup()
     render(<D2SSupportPage />)
 
+    expect(screen.getByLabelText('Contact email')).toHaveAttribute(
+      'spellcheck',
+      'false'
+    )
     await user.type(screen.getByLabelText('Subject'), 'Payment not reflected')
     await user.type(
       screen.getByLabelText('Describe the issue', { exact: false }),
@@ -229,6 +233,7 @@ describe('D2S support form', () => {
   })
 
   it('shows the signed-in user their own ticket list', async () => {
+    const longSubject = 'A'.repeat(180)
     supportMocks.getMyTickets.mockResolvedValue({
       success: true,
       data: {
@@ -237,7 +242,7 @@ describe('D2S support form', () => {
             id: 'ticket-123',
             category: 'PAYMENT',
             order_id: 'order-456',
-            subject: 'Payment not reflected',
+            subject: longSubject,
             message: 'My payment succeeded but my account does not show it.',
             status: 'IN_PROGRESS',
             admin_reply: 'We are checking the payment with the provider.',
@@ -258,9 +263,8 @@ describe('D2S support form', () => {
       </QueryClientProvider>
     )
 
-    expect(
-      await screen.findByRole('heading', { name: 'Payment not reflected' })
-    ).toBeInTheDocument()
+    const subject = await screen.findByRole('heading', { name: longSubject })
+    expect(subject).toHaveClass('break-words')
     expect(screen.getByText('ticket-123')).toBeInTheDocument()
     expect(screen.getByText('In progress')).toBeInTheDocument()
     expect(screen.getByText('Response from support')).toBeInTheDocument()

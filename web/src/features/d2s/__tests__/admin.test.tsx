@@ -107,6 +107,7 @@ describe('D2SAdminWorkspace', () => {
             id: 'withdrawal-1',
             user_id: 42,
             status: 'pending',
+            currency: 'CNY',
             amount_minor: 5000,
           },
         ],
@@ -161,28 +162,36 @@ describe('D2SAdminWorkspace', () => {
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
     expect(
       screen.getByRole('combobox', { name: 'Order status' })
-    ).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'User ID' })).toBeInTheDocument()
+    ).toHaveAttribute('name', 'order_status')
+    expect(screen.getByRole('textbox', { name: 'User ID' })).toHaveAttribute(
+      'name',
+      'user_id'
+    )
     expect(
       screen.getByRole('button', { name: 'Filter orders' })
     ).toBeInTheDocument()
     expect(screen.getByText(/Paid orders: 0/)).toBeInTheDocument()
     expect(screen.getByText(/Pending expired: 0/)).toBeInTheDocument()
     expect(
-      screen.getByText(/stripe · chargeback · USD 2990/)
+      screen.getByText(/stripe · chargeback · USD\s*29\.90/)
     ).toBeInTheDocument()
+    expect(screen.getAllByText(/chargeback · USD\s*29\.90/)).toHaveLength(2)
+    expect(screen.getByText(/-USD\s*1\.40/)).toBeInTheDocument()
+    expect(screen.getByText(/CNY\s*50\.00/)).toBeInTheDocument()
     expect(
       screen.getByText(/stripe-chargeback-1 · order-chargeback/)
     ).toBeInTheDocument()
     expect(screen.getByText(/Processed at:/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('textbox', { name: 'Event type' })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('textbox', { name: 'Order ID' })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Event type' })).toHaveAttribute(
+      'name',
+      'event_type'
+    )
+    expect(screen.getByRole('textbox', { name: 'Order ID' })).toHaveAttribute(
+      'name',
+      'order_id'
+    )
     expect(
       screen.getByText(/Status: active · Mode: online/)
     ).toBeInTheDocument()
@@ -191,6 +200,9 @@ describe('D2SAdminWorkspace', () => {
     expect(
       screen.getByRole('combobox', { name: 'Region D2S-ADMIN-1' })
     ).toHaveValue('INTL')
+    expect(
+      screen.getByRole('combobox', { name: 'Region D2S-ADMIN-1' })
+    ).toHaveAttribute('name', 'region_license-1')
     const approveButtons = screen.getAllByRole('button', {
       name: /^Approve /,
     })
@@ -218,9 +230,16 @@ describe('D2SAdminWorkspace', () => {
     expect(
       screen.getByRole('button', { name: 'Save region D2S-ADMIN-1' })
     ).toHaveAttribute('type', 'button')
-    expect(
-      screen.getAllByRole('textbox', { name: /^Review note / })
-    ).toHaveLength(2)
+    const reviewNotes = screen.getAllByRole('textbox', {
+      name: /^Review note /,
+    })
+    expect(reviewNotes).toHaveLength(2)
+    expect(reviewNotes.map((input) => input.getAttribute('name'))).toEqual(
+      expect.arrayContaining([
+        'review_note_withdrawal-1',
+        'review_note_unbind-1',
+      ])
+    )
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Order status' }), {
       target: { value: 'paid' },

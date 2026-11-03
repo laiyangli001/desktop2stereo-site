@@ -72,10 +72,13 @@ export function D2SMySupportTickets() {
                 key={ticket.id}
               >
                 <header className='flex flex-wrap items-start justify-between gap-3'>
-                  <div>
-                    <h2 className='font-semibold'>{ticket.subject}</h2>
+                  <div className='min-w-0 break-words'>
+                    <h2 className='font-semibold break-words'>
+                      {ticket.subject}
+                    </h2>
                     <p className='text-muted-foreground text-xs'>
-                      {t('Reference')}: <code>{ticket.id}</code>
+                      {t('Reference')}:{' '}
+                      <code className='break-all'>{ticket.id}</code>
                     </p>
                   </div>
                   <span className='rounded-full border px-3 py-1 text-xs'>
@@ -93,7 +96,9 @@ export function D2SMySupportTickets() {
                     <dt className='text-muted-foreground'>
                       {t('Order number')}
                     </dt>
-                    <dd>{ticket.order_id || t('Not provided')}</dd>
+                    <dd className='break-all'>
+                      {ticket.order_id || t('Not provided')}
+                    </dd>
                   </div>
                   <div>
                     <dt className='text-muted-foreground'>{t('Submitted')}</dt>
