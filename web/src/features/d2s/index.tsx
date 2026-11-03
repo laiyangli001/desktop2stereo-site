@@ -25,7 +25,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { toIntlLocale } from '@/i18n/languages'
 
 import {
   getD2SBalance,
@@ -43,6 +42,7 @@ import {
   getD2SManualUnbindRequests,
 } from './api'
 import { WithdrawalRequestForm } from './components/withdrawal-request-form'
+import { formatD2SDate, formatD2SMoney } from './lib/format'
 import type { D2SLicense, D2SOrder, D2SWalletSummary } from './types'
 
 function submitD2SCheckout(checkout: {
@@ -67,29 +67,6 @@ function submitD2SCheckout(checkout: {
     return
   }
   window.location.assign(checkout.checkout_url)
-}
-
-function formatMoney(
-  amountMinor: number,
-  currency: string,
-  locale?: string
-): string {
-  const parts = new Intl.NumberFormat(toIntlLocale(locale), {
-    style: 'currency',
-    currency,
-    currencyDisplay: 'code',
-  }).formatToParts(amountMinor / 100)
-  return parts
-    .map((part) => (part.type === 'literal' ? ' ' : part.value))
-    .join('')
-}
-
-function formatDate(timestamp: number, locale?: string): string {
-  if (!timestamp) return '—'
-  return new Intl.DateTimeFormat(toIntlLocale(locale), {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(timestamp * 1000))
 }
 
 type D2SPurchaseProduct = 'license' | 'paid_revoke' | 'offline_extension'
@@ -185,11 +162,11 @@ export function LicenseCard(props: {
           </span>
         </div>
         <div>
-          {t('Expires')}: {formatDate(props.license.expires_at, locale)}
+          {t('Expires')}: {formatD2SDate(props.license.expires_at, locale)}
         </div>
         <div>
           {t('Offline access until')}:{' '}
-          {formatDate(props.license.offline_valid_until, locale)}
+          {formatD2SDate(props.license.offline_valid_until, locale)}
         </div>
         {props.license.status === 'active' &&
           props.license.device_hash &&
@@ -325,9 +302,9 @@ function OrderRow(props: { order: D2SOrder }) {
         <StatusBadge value={props.order.status} />
       </div>
       <div className='sm:text-right'>
-        {formatMoney(props.order.amount_minor, props.order.currency, locale)}
+        {formatD2SMoney(props.order.amount_minor, props.order.currency, locale)}
         <div className='text-muted-foreground text-xs'>
-          {formatDate(props.order.created_at, locale)}
+          {formatD2SDate(props.order.created_at, locale)}
         </div>
       </div>
     </div>
@@ -476,7 +453,10 @@ export function D2SWorkspace(
       orders: orderRows,
     })
   }, [orderRows, onWalletSummaryChange, view])
-  const enabledCheckoutProviders = checkoutProviders.data?.data?.providers ?? []
+  const purchaseEnabled = checkoutProviders.data?.data?.enabled === true
+  const enabledCheckoutProviders = purchaseEnabled
+    ? (checkoutProviders.data?.data?.providers ?? [])
+    : []
   const quoteMutation = useMutation({
     mutationFn: async (request: {
       provider: D2SPurchaseProvider
@@ -653,6 +633,11 @@ export function D2SWorkspace(
             <CardDescription>
               {t('Use your locked-region balance for a full payment.')}
             </CardDescription>
+            {!purchaseEnabled && (
+              <p role='status' className='text-muted-foreground text-sm'>
+                {t('Purchases are currently unavailable.')}
+              </p>
+            )}
           </CardHeader>
           <CardContent
             className='flex flex-wrap items-center gap-3'
@@ -665,7 +650,7 @@ export function D2SWorkspace(
                 autoComplete='off'
                 className='h-8 rounded-lg border bg-transparent px-2 text-sm'
                 name='purchase_type'
-                disabled={purchasePending}
+                disabled={!purchaseEnabled || purchasePending}
                 value={purchaseProduct}
                 onChange={(event) =>
                   setPurchaseProduct(event.target.value as D2SPurchaseProduct)
@@ -686,7 +671,7 @@ export function D2SWorkspace(
                   autoComplete='off'
                   className='h-8 max-w-56 rounded-lg border bg-transparent px-2 text-sm'
                   name='license_id'
-                  disabled={purchasePending}
+                  disabled={!purchaseEnabled || purchasePending}
                   value={purchaseLicenseID}
                   onChange={(event) => setPurchaseLicenseID(event.target.value)}
                 >
@@ -824,7 +809,7 @@ export function D2SWorkspace(
                 {t('Amount to pay:')}{' '}
                 <strong className='text-foreground'>
                   {pendingPurchase &&
-                    formatMoney(
+                    formatD2SMoney(
                       pendingPurchase.amountMinor,
                       pendingPurchase.currency,
                       locale
@@ -1024,7 +1009,7 @@ export function D2SWorkspace(
                       className='flex flex-wrap justify-between gap-2 border-b py-3 last:border-0'
                     >
                       <span>
-                        {formatMoney(
+                        {formatD2SMoney(
                           withdrawal.amount_minor,
                           withdrawal.currency,
                           locale
@@ -1033,7 +1018,7 @@ export function D2SWorkspace(
                       <span>
                         <StatusBadge value={withdrawal.status} />{' '}
                         <span className='text-muted-foreground text-xs'>
-                          {formatDate(withdrawal.created_at, locale)}
+                          {formatD2SDate(withdrawal.created_at, locale)}
                         </span>
                       </span>
                     </div>

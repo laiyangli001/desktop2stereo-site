@@ -218,6 +218,8 @@ const copy = {
       'Official source: lc700x/desktop2stereo on GitHub',
       'Manual resources: English / 中文',
     ],
+    businessLicense:
+      'Business license: Yantai Tuli Vision Software Development Co., Ltd.',
     close: 'Close',
   },
   zh: {
@@ -380,6 +382,7 @@ const copy = {
       '官方源码：GitHub lc700x/desktop2stereo',
       '手册资源：English / 中文',
     ],
+    businessLicense: '营业执照：烟台图立视软件开发有限公司',
     close: '关闭',
   },
 } as const
@@ -417,12 +420,10 @@ export function Desktop2StereoHome({
   }
   const trackedExternal = (target: D2SDownloadTarget, href: string) => ({
     ...external(href),
-    onClick: isAuthenticated
-      ? (event: MouseEvent<HTMLAnchorElement>) => {
-          event.preventDefault()
-          void openTrackedDownload(target, href)
-        }
-      : undefined,
+    onClick: (event: MouseEvent<HTMLAnchorElement>) => {
+      event.preventDefault()
+      void openTrackedDownload(target, href)
+    },
   })
   return (
     <main className='d2s-home bg-background text-foreground'>
@@ -811,6 +812,14 @@ export function Desktop2StereoHome({
               </p>
             ))}
           </div>
+          <a
+            href='/business-license.png'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='text-primary hover:text-primary/80 mt-5 inline-flex min-h-11 items-center rounded-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4'
+          >
+            {text.businessLicense}
+          </a>
         </div>
       </section>
       {lightbox ? (

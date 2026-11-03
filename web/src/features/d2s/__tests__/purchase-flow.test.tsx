@@ -77,7 +77,7 @@ describe('D2S wallet purchase flow', () => {
       response({ transactions: [] })
     )
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['stripe'] })
+      response({ enabled: true, providers: ['stripe'] })
     )
     apiMocks.getD2SInvite.mockResolvedValue(
       response({ invite_code: 'invite-code', rewarded_invitees: 0 })
@@ -150,7 +150,7 @@ describe('D2S wallet purchase flow', () => {
 
   it('previews a balance order and submits the quoted amount without checkout redirect', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['balance'] })
+      response({ enabled: true, providers: ['balance'] })
     )
     apiMocks.getD2SBalance.mockResolvedValue(
       response({
@@ -206,7 +206,7 @@ describe('D2S wallet purchase flow', () => {
 
   it('does not create a balance order when the quoted purchase is canceled', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['balance'] })
+      response({ enabled: true, providers: ['balance'] })
     )
     apiMocks.getD2SBalance.mockResolvedValue(
       response({
@@ -240,7 +240,7 @@ describe('D2S wallet purchase flow', () => {
 
   it('passes the selected license when starting a paid revoke order', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['creem'] })
+      response({ enabled: true, providers: ['creem'] })
     )
     apiMocks.getD2SLicenses.mockResolvedValue(
       response({
@@ -307,6 +307,7 @@ describe('D2S wallet purchase flow', () => {
   it('renders every supported checkout provider returned by the server', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
       response({
+        enabled: true,
         providers: [
           'alipay',
           'paymentfm',
@@ -354,7 +355,7 @@ describe('D2S wallet purchase flow', () => {
 
   it('never renders unsupported PayPal or Paddle checkout controls', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['paypal', 'paddle', 'stripe'] })
+      response({ enabled: true, providers: ['paypal', 'paddle', 'stripe'] })
     )
 
     renderWorkspace()
@@ -407,7 +408,7 @@ describe('D2S wallet purchase flow', () => {
 
   it('marks the purchase controls busy and disables competing checkouts while pending', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['balance', 'stripe'] })
+      response({ enabled: true, providers: ['balance', 'stripe'] })
     )
     renderWorkspace()
 
@@ -436,7 +437,7 @@ describe('D2S wallet purchase flow', () => {
 
   it('disables external checkout while a balance order is being priced', async () => {
     apiMocks.getD2SCheckoutProviders.mockResolvedValue(
-      response({ providers: ['balance', 'stripe'] })
+      response({ enabled: true, providers: ['balance', 'stripe'] })
     )
     apiMocks.previewD2SOrder.mockReturnValue(new Promise(() => {}))
     renderWorkspace()
@@ -481,5 +482,25 @@ describe('D2S wallet purchase flow', () => {
     const firstKey = apiMocks.createD2SOrder.mock.calls[0][0].idempotency_key
     const retryKey = apiMocks.createD2SOrder.mock.calls[1][0].idempotency_key
     expect(firstKey).toBe(retryKey)
+  })
+
+  it('keeps purchases unavailable when the server feature gate is closed', async () => {
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue(
+      response({ enabled: false, providers: ['balance', 'stripe'] })
+    )
+    renderWorkspace()
+
+    expect(
+      await screen.findByText('Purchases are currently unavailable.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('combobox', { name: 'Purchase type' })
+    ).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: 'Buy with balance' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Pay with Stripe' })
+    ).not.toBeInTheDocument()
   })
 })

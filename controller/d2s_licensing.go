@@ -95,6 +95,8 @@ func d2sError(c *gin.Context, err error) {
 		status, code = http.StatusBadRequest, "payment_mismatch"
 	case errors.Is(err, model.ErrD2SCheckoutUnavailable):
 		status, code = http.StatusServiceUnavailable, "checkout_unavailable"
+	case errors.Is(err, model.ErrD2SPurchasesDisabled):
+		status, code = http.StatusServiceUnavailable, "purchases_disabled"
 	}
 	c.JSON(status, gin.H{
 		"version": 1, "success": false, "request_id": d2sRequestID(c),
@@ -414,7 +416,7 @@ func D2SAdminLicenses(c *gin.Context) {
 		query = query.Where("user_id = ?", value)
 	}
 	if err := query.Find(&rows).Error; err != nil {
-		d2sError(c, err)
+		respondD2SAdminAuditedFailure(c, "VIEW_LICENSES", "d2s_licenses", "query_failed", http.StatusInternalServerError, "LICENSE_QUERY_FAILED")
 		return
 	}
 	userIDs := make([]int, 0, len(rows))
@@ -425,7 +427,7 @@ func D2SAdminLicenses(c *gin.Context) {
 	if len(userIDs) > 0 {
 		var profileRows []model.D2SUserProfile
 		if err := model.DB.Where("user_id IN ?", userIDs).Find(&profileRows).Error; err != nil {
-			d2sError(c, err)
+			respondD2SAdminAuditedFailure(c, "VIEW_LICENSES", "d2s_licenses", "profile_query_failed", http.StatusInternalServerError, "LICENSE_QUERY_FAILED")
 			return
 		}
 		for _, profile := range profileRows {
@@ -439,6 +441,12 @@ func D2SAdminLicenses(c *gin.Context) {
 	result := make([]adminLicense, 0, len(rows))
 	for _, row := range rows {
 		result = append(result, adminLicense{D2SLicense: row, Region: profiles[row.UserID]})
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_LICENSES", "d2s_licenses", "SUCCESS", map[string]any{
+		"user_id": strings.TrimSpace(c.Query("user_id")), "limit": 500, "count": len(rows),
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"licenses": result})
 }

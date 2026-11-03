@@ -138,6 +138,14 @@ func D2SAdminSetEmergencyControl(c *gin.Context) {
 	}})
 }
 
+func d2sRejectPurchasesDisabled(c *gin.Context) bool {
+	if common.GetEnvOrDefaultBool("D2S_PURCHASES_ENABLED", false) {
+		return false
+	}
+	d2sError(c, model.ErrD2SPurchasesDisabled)
+	return true
+}
+
 func d2sRejectBlockedPurchase(c *gin.Context, action string) bool {
 	userID := c.GetInt("id")
 	blocked, err := model.IsD2SUserPurchaseBlocked(userID)

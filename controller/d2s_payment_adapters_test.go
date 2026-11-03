@@ -601,6 +601,7 @@ func TestD2SPaymentEventRejectsProviderRegionMismatch(t *testing.T) {
 }
 
 func TestD2SOrderProvidersHidesBalanceUntilRegionIsLocked(t *testing.T) {
+	t.Setenv("D2S_PURCHASES_ENABLED", "true")
 	db, err := gorm.Open(sqlite.Open("file:d2s_provider_visibility_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	previousDB, previousLogDB := model.DB, model.LOG_DB
@@ -662,6 +663,7 @@ func TestD2SEpayCheckoutRetryKeepsStableSignedOrderIdentity(t *testing.T) {
 }
 
 func TestD2SOrderProvidersExposesConfiguredPaymentFM(t *testing.T) {
+	t.Setenv("D2S_PURCHASES_ENABLED", "true")
 	db, err := gorm.Open(sqlite.Open("file:d2s_paymentfm_provider_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	previousDB, previousLogDB := model.DB, model.LOG_DB
@@ -1256,7 +1258,7 @@ func TestWaffoWebhookD2SRejectsInvalidSignatureAndSettlesValidEvent(t *testing.T
 		CreatedAt: now, ExpiresAt: now + 3600,
 	}).Error)
 
-	payload := []byte(`{"eventType":"PAYMENT_NOTIFICATION","result":{"paymentRequestId":"waffo-payment","merchantOrderId":"waffo-webhook-order","orderStatus":"PAY_SUCCESS","orderCurrency":"CNY","orderAmount":"99.00"}}`)
+	payload := []byte(`{"eventType":"PAYMENT_NOTIFICATION","result":{"paymentRequestId":"waffo-payment","merchantOrderId":"waffo-webhook-order","orderStatus":"PAY_SUCCESS","orderCurrency":"CNY","orderAmount":"99.00","paymentInfo":{"payMethodResponse":"{\"maskCardData\":\"XXXX42****XX4242\"}"}}}`)
 	signature, err := waffoutils.Sign(string(payload), keyPair.PrivateKey)
 	require.NoError(t, err)
 	call := func(sig string) *httptest.ResponseRecorder {
@@ -1283,6 +1285,19 @@ func TestWaffoWebhookD2SRejectsInvalidSignatureAndSettlesValidEvent(t *testing.T
 	assert.EqualValues(t, 1, eventCount)
 	require.NoError(t, db.First(&order, "id = ?", "waffo-webhook-order").Error)
 	assert.Equal(t, model.D2SOrderPaid, order.Status)
+	require.NotNil(t, order.PaymentAccountIdentifierHash)
+	var paymentEvent core.PaymentNotification
+	require.NoError(t, json.Unmarshal(payload, &paymentEvent))
+	assert.Equal(t, waffoD2SPaymentAccountIdentifierHash(paymentEvent.Result), *order.PaymentAccountIdentifierHash)
+	assert.NotContains(t, *order.PaymentAccountIdentifierHash, "XXXX42****XX4242")
+}
+
+func TestWaffoD2SPaymentAccountIdentifierHashIgnoresMissingOrInvalidMaskedCard(t *testing.T) {
+	assert.Empty(t, waffoD2SPaymentAccountIdentifierHash(nil))
+	assert.Empty(t, waffoD2SPaymentAccountIdentifierHash(&core.PaymentNotificationResult{}))
+	assert.Empty(t, waffoD2SPaymentAccountIdentifierHash(&core.PaymentNotificationResult{
+		PaymentInfo: map[string]interface{}{"payMethodResponse": `{"maskCardData":`},
+	}))
 }
 
 func TestD2SCheckoutRejectsStripeOutsideINTL(t *testing.T) {

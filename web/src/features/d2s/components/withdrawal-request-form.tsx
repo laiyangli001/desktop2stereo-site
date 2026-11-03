@@ -30,9 +30,7 @@ export function WithdrawalRequestForm(props: WithdrawalRequestFormProps) {
   const { t } = useTranslation()
   const minWithdrawalMinor = props.minWithdrawalMinor ?? 5000
   const form = useForm<D2SWithdrawalFormValues>({
-    resolver: zodResolver(
-      createD2SWithdrawalFormSchema(minWithdrawalMinor)
-    ),
+    resolver: zodResolver(createD2SWithdrawalFormSchema(minWithdrawalMinor)),
     defaultValues: {
       amountMinor: minWithdrawalMinor,
       alipayAccount: '',

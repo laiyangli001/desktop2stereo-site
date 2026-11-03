@@ -303,6 +303,41 @@ func TestD2SAdminReadFailuresRequireAuditableFailure(t *testing.T) {
 	}
 }
 
+func TestD2SAdminPurchaseReadAuditIncludesNormalizedFilters(t *testing.T) {
+	setupD2SAdminExportTestDB(t, "d2s_admin_purchase_read_audit_filters_test", &model.D2SOrder{}, &model.D2SAdminOperationAudit{})
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet,
+		"/api/v1/admin/purchases?user_id=42&email=Buyer%40Example.COM&result_status=success&page=2&page_size=25")
+	D2SAdminPurchaseRecords(context)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var audit model.D2SAdminOperationAudit
+	require.NoError(t, model.DB.Where("operation_type = ? AND result = ?", "VIEW_PURCHASE", "SUCCESS").First(&audit).Error)
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(audit.DetailsJSON), &details))
+	assert.Equal(t, float64(42), details["user_id"])
+	assert.Equal(t, "buyer@example.com", details["email"])
+	assert.Equal(t, "SUCCESS", details["result_status"])
+	assert.Equal(t, float64(2), details["page"])
+	assert.Equal(t, float64(25), details["page_size"])
+}
+
+func TestD2SAdminPurchaseReadDoesNotReturnRecordsWhenAuditFails(t *testing.T) {
+	db := setupD2SAdminExportTestDB(t, "d2s_admin_purchase_read_audit_failure_test", &model.D2SOrder{})
+	require.NoError(t, db.Create(&model.D2SOrder{
+		ID: "private-purchase-audit-failure", UserID: 901, EmailSnapshot: "private-purchase@example.com",
+		Product: "license", Provider: "stripe", Region: model.D2SRegionINTL, Currency: "USD",
+		AmountMinor: 2990, Status: model.D2SOrderPaid, IdempotencyKey: "private-purchase-audit-failure-key",
+		PurchaseTime: 1_800_000_000, CreatedAt: 1_800_000_000,
+	}).Error)
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/purchases?user_id=901")
+	D2SAdminPurchaseRecords(context)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "AUDIT_WRITE_FAILED")
+	assert.NotContains(t, recorder.Body.String(), "private-purchase-audit-failure")
+	assert.NotContains(t, recorder.Body.String(), "private-purchase@example.com")
+}
+
 func TestD2SAdminPendingExportApprovalsReturnsEmptyArray(t *testing.T) {
 	setupD2SAdminExportTestDB(t, "d2s_admin_export_approval_empty_list_test", &model.D2SAdminOperationAudit{})
 	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/audit/export-approvals")

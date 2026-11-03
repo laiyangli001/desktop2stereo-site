@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   getD2SAdminReconciliation: vi.fn(),
   getD2SAdminSigningKeys: vi.fn(),
   getD2SAdminUnbindRequests: vi.fn(),
+  getD2SAdminWithdrawalPayout: vi.fn(),
   getD2SAdminWithdrawals: vi.fn(),
   retireD2SAdminSigningKey: vi.fn(),
   reviewD2SUnbind: vi.fn(),
@@ -29,11 +30,14 @@ function renderAdminWorkspace() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  return render(
-    <QueryClientProvider client={queryClient}>
-      <D2SAdminWorkspace />
-    </QueryClientProvider>
-  )
+  return {
+    ...render(
+      <QueryClientProvider client={queryClient}>
+        <D2SAdminWorkspace />
+      </QueryClientProvider>
+    ),
+    queryClient,
+  }
 }
 
 describe('D2SAdminWorkspace', () => {
@@ -104,9 +108,17 @@ describe('D2SAdminWorkspace', () => {
             id: 'withdrawal-1',
             user_id: 42,
             status: 'pending',
+            currency: 'CNY',
             amount_minor: 5000,
           },
         ],
+      })
+    )
+    apiMocks.getD2SAdminWithdrawalPayout.mockResolvedValue(
+      response({
+        withdrawal_id: 'withdrawal-1',
+        alipay_account: 'payout@example.com',
+        real_name: 'Payout Recipient',
       })
     )
     apiMocks.getD2SAdminUnbindRequests.mockResolvedValue(
@@ -158,28 +170,47 @@ describe('D2SAdminWorkspace', () => {
     expect(screen.getByText(/Negative balances/)).toBeInTheDocument()
     expect(
       screen.getByRole('combobox', { name: 'Order status' })
-    ).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'User ID' })).toBeInTheDocument()
+    ).toHaveAttribute('name', 'order_status')
+    expect(screen.getByRole('textbox', { name: 'User ID' })).toHaveAttribute(
+      'name',
+      'user_id'
+    )
     expect(
       screen.getByRole('button', { name: 'Filter orders' })
     ).toBeInTheDocument()
     expect(screen.getByText(/Paid orders: 0/)).toBeInTheDocument()
     expect(screen.getByText(/Pending expired: 0/)).toBeInTheDocument()
     expect(
-      screen.getByText(/stripe · chargeback · USD 2990/)
+      screen.getByText(/stripe · chargeback · USD\s*29\.90/)
     ).toBeInTheDocument()
+    expect(screen.getAllByText(/chargeback · USD\s*29\.90/)).toHaveLength(2)
+    expect(screen.getByText(/-USD\s*1\.40/)).toBeInTheDocument()
+    expect(screen.getByText(/CNY\s*50\.00/)).toBeInTheDocument()
+    expect(screen.getByText(/withdrawal-1/)).toBeInTheDocument()
+    expect(screen.queryByText('payout@example.com')).not.toBeInTheDocument()
+    expect(screen.queryByText('Payout Recipient')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'View payout details' }))
+    expect(await screen.findByText('payout@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Payout Recipient')).toBeInTheDocument()
+    expect(apiMocks.getD2SAdminWithdrawalPayout).toHaveBeenCalledWith(
+      'withdrawal-1'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Hide payout details' }))
+    expect(screen.queryByText('payout@example.com')).not.toBeInTheDocument()
     expect(
       screen.getByText(/stripe-chargeback-1 · order-chargeback/)
     ).toBeInTheDocument()
     expect(screen.getByText(/Processed at:/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument()
-    expect(
-      screen.getByRole('textbox', { name: 'Event type' })
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('textbox', { name: 'Order ID' })
-    ).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Event type' })).toHaveAttribute(
+      'name',
+      'event_type'
+    )
+    expect(screen.getByRole('textbox', { name: 'Order ID' })).toHaveAttribute(
+      'name',
+      'order_id'
+    )
     expect(
       screen.getByText(/Status: active · Mode: online/)
     ).toBeInTheDocument()
@@ -188,6 +219,9 @@ describe('D2SAdminWorkspace', () => {
     expect(
       screen.getByRole('combobox', { name: 'Region D2S-ADMIN-1' })
     ).toHaveValue('INTL')
+    expect(
+      screen.getByRole('combobox', { name: 'Region D2S-ADMIN-1' })
+    ).toHaveAttribute('name', 'region_license-1')
     const approveButtons = screen.getAllByRole('button', {
       name: /^Approve /,
     })
@@ -215,9 +249,16 @@ describe('D2SAdminWorkspace', () => {
     expect(
       screen.getByRole('button', { name: 'Save region D2S-ADMIN-1' })
     ).toHaveAttribute('type', 'button')
-    expect(
-      screen.getAllByRole('textbox', { name: /^Review note / })
-    ).toHaveLength(2)
+    const reviewNotes = screen.getAllByRole('textbox', {
+      name: /^Review note /,
+    })
+    expect(reviewNotes).toHaveLength(2)
+    expect(reviewNotes.map((input) => input.getAttribute('name'))).toEqual(
+      expect.arrayContaining([
+        'review_note_withdrawal-1',
+        'review_note_unbind-1',
+      ])
+    )
 
     fireEvent.change(screen.getByRole('combobox', { name: 'Order status' }), {
       target: { value: 'paid' },
@@ -261,6 +302,53 @@ describe('D2SAdminWorkspace', () => {
     )
   })
 
+  it('resets an unsaved region draft when the server region changes', async () => {
+    const license = {
+      id: 'license-region-refresh',
+      user_id: 13,
+      license_code: 'D2S-REGION-REFRESH',
+      status: 'active',
+      mode: 'online',
+      region: 'INTL',
+    }
+    apiMocks.getD2SAdminLicenses.mockResolvedValue(
+      response({ licenses: [license] })
+    )
+    apiMocks.getD2SAdminOrders.mockResolvedValue(response({ orders: [] }))
+    apiMocks.getD2SAdminPaymentEvents.mockResolvedValue(
+      response({ events: [] })
+    )
+    apiMocks.getD2SAdminBalances.mockResolvedValue(response({ accounts: [] }))
+    apiMocks.getD2SAdminWithdrawals.mockResolvedValue(
+      response({ withdrawals: [] })
+    )
+    apiMocks.getD2SAdminUnbindRequests.mockResolvedValue(
+      response({ requests: [] })
+    )
+    apiMocks.getD2SAdminSigningKeys.mockResolvedValue(response({ keys: [] }))
+    apiMocks.getD2SAdminReconciliation.mockResolvedValue(
+      response({ mismatches: [] })
+    )
+
+    const { queryClient } = renderAdminWorkspace()
+    const region = await screen.findByRole('combobox', {
+      name: 'Region D2S-REGION-REFRESH',
+    })
+    fireEvent.change(region, { target: { value: '' } })
+    expect(region).toHaveValue('')
+
+    queryClient.setQueryData(
+      ['d2s-admin', 'licenses'],
+      response({ licenses: [{ ...license, region: 'CN' }] })
+    )
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('combobox', { name: 'Region D2S-REGION-REFRESH' })
+      ).toHaveValue('CN')
+    )
+  })
+
   it('keeps region controls disabled while the save request is pending', async () => {
     apiMocks.getD2SAdminLicenses.mockResolvedValue(
       response({
@@ -285,15 +373,17 @@ describe('D2SAdminWorkspace', () => {
       apiMocks.getD2SAdminSigningKeys,
       apiMocks.getD2SAdminReconciliation,
     ]) {
-      query.mockResolvedValue(response({
-        orders: [],
-        events: [],
-        accounts: [],
-        withdrawals: [],
-        requests: [],
-        keys: [],
-        mismatches: [],
-      }))
+      query.mockResolvedValue(
+        response({
+          orders: [],
+          events: [],
+          accounts: [],
+          withdrawals: [],
+          requests: [],
+          keys: [],
+          mismatches: [],
+        })
+      )
     }
     apiMocks.setD2SUserRegion.mockReturnValue(new Promise(() => {}))
 
@@ -377,9 +467,7 @@ describe('D2SAdminWorkspace', () => {
   })
 
   it('submits the correct review status and note for withdrawal and unbind requests', async () => {
-    apiMocks.getD2SAdminLicenses.mockResolvedValue(
-      response({ licenses: [] })
-    )
+    apiMocks.getD2SAdminLicenses.mockResolvedValue(response({ licenses: [] }))
     apiMocks.getD2SAdminOrders.mockResolvedValue(response({ orders: [] }))
     apiMocks.getD2SAdminPaymentEvents.mockResolvedValue(
       response({ events: [] })
@@ -427,7 +515,9 @@ describe('D2SAdminWorkspace', () => {
     fireEvent.click(
       screen.getByRole('button', { name: 'Approve withdrawal-review' })
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Reject unbind-review' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Reject unbind-review' })
+    )
 
     await waitFor(() => {
       expect(apiMocks.reviewD2SWithdrawal).toHaveBeenCalledWith(

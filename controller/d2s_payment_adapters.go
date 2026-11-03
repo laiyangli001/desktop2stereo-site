@@ -135,7 +135,7 @@ func d2sPaymentAccountIdentifierHash(provider, kind, identifier string) string {
 	provider = strings.ToLower(strings.TrimSpace(provider))
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	identifier = strings.TrimSpace(identifier)
-	if provider == "" || identifier == "" || (kind != "customer" && kind != "email") {
+	if provider == "" || identifier == "" || (kind != "customer" && kind != "email" && kind != "payment_method") {
 		return ""
 	}
 	if kind == "email" {
@@ -188,6 +188,23 @@ func waffoPancakeD2SPaymentAccountIdentifierHash(event *service.WaffoPancakeWebh
 		return ""
 	}
 	return d2sPaymentAccountIdentifierHash("waffo_pancake", "email", event.Data.BuyerEmail)
+}
+
+func waffoD2SPaymentAccountIdentifierHash(result *core.PaymentNotificationResult) string {
+	if result == nil || result.PaymentInfo == nil {
+		return ""
+	}
+	response, ok := result.PaymentInfo["payMethodResponse"].(string)
+	if !ok || strings.TrimSpace(response) == "" {
+		return ""
+	}
+	var paymentResponse struct {
+		MaskCardData string `json:"maskCardData"`
+	}
+	if err := common.Unmarshal([]byte(response), &paymentResponse); err != nil {
+		return ""
+	}
+	return d2sPaymentAccountIdentifierHash("waffo", "payment_method", paymentResponse.MaskCardData)
 }
 
 func processStripeD2SPayment(event stripe.Event, payload []byte) (bool, error) {
@@ -322,6 +339,7 @@ func processWaffoD2SPayment(result *core.PaymentNotificationResult, payload []by
 	return processVerifiedD2SPayment(
 		"waffo", eventID, result.MerchantOrderID, eventType,
 		minorValue, strings.ToUpper(strings.TrimSpace(result.OrderCurrency)), payload,
+		waffoD2SPaymentAccountIdentifierHash(result),
 	)
 }
 

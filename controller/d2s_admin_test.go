@@ -29,7 +29,7 @@ func TestD2SAdminLicensesIncludesUserRegion(t *testing.T) {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SUserProfile{}, &model.D2SLicense{}))
+	require.NoError(t, db.AutoMigrate(&model.D2SUserProfile{}, &model.D2SLicense{}, &model.D2SAdminOperationAudit{}))
 	require.NoError(t, db.Create(&model.D2SUserProfile{UserID: 701, Region: model.D2SRegionINTL}).Error)
 	require.NoError(t, db.Create(&model.D2SUserProfile{UserID: 702, Region: ""}).Error)
 	require.NoError(t, db.Create(&model.D2SLicense{ID: "region-license-intl", LicenseCode: "D2S-INTL", UserID: 701, Product: model.D2SProductDesktop2Stereo, Kind: model.D2SLicenseKindPaid, Status: model.D2SLicenseStatusActive, Mode: model.D2SLicenseModeUnbound}).Error)
@@ -37,6 +37,8 @@ func TestD2SAdminLicensesIncludesUserRegion(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/licenses", nil)
 	D2SAdminLicenses(context)
 
@@ -72,12 +74,14 @@ func TestD2SAdminSigningKeysMarksCurrentKey(t *testing.T) {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SSigningKey{}))
+	require.NoError(t, db.AutoMigrate(&model.D2SSigningKey{}, &model.D2SAdminOperationAudit{}))
 	require.NoError(t, db.Create(&model.D2SSigningKey{KeyID: "current-admin-key", Algorithm: "ES256", PublicJWK: "{}", Status: "active", CreatedAt: 1}).Error)
 	require.NoError(t, db.Create(&model.D2SSigningKey{KeyID: "old-admin-key", Algorithm: "ES256", PublicJWK: "{}", Status: "active", CreatedAt: 2}).Error)
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/signing-keys", nil)
 	D2SAdminSigningKeys(context)
 
@@ -111,13 +115,15 @@ func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SBalanceAccount{}))
+	require.NoError(t, db.AutoMigrate(&model.D2SBalanceAccount{}, &model.D2SAdminOperationAudit{}))
 	require.NoError(t, db.Create(&model.D2SBalanceAccount{ID: "negative-balance", UserID: 801, Currency: "USD", AvailableMinor: -140}).Error)
 	require.NoError(t, db.Create(&model.D2SBalanceAccount{ID: "positive-balance", UserID: 802, Currency: "USD", AvailableMinor: 140}).Error)
 
 	call := func(path string) []model.D2SBalanceAccount {
 		recorder := httptest.NewRecorder()
 		context, _ := gin.CreateTestContext(recorder)
+		context.Set("d2s_admin_id", 77)
+		context.Set("d2s_admin_email", "operator@example.com")
 		context.Request = httptest.NewRequest(http.MethodGet, path, nil)
 		D2SAdminBalances(context)
 		assert.Equal(t, http.StatusOK, recorder.Code)
@@ -139,8 +145,11 @@ func TestD2SAdminBalancesDefaultsToNegativeAccounts(t *testing.T) {
 }
 
 func TestD2SAdminBalancesRejectsInvalidUserFilter(t *testing.T) {
+	setupD2SAdminBillingAuditDB(t)
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/balances?user_id=not-a-number", nil)
 	D2SAdminBalances(context)
 
@@ -158,13 +167,15 @@ func TestD2SAdminOrdersSupportsStatusAndUserFilters(t *testing.T) {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}))
+	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}, &model.D2SAdminOperationAudit{}))
 	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-paid", UserID: 901, Status: model.D2SOrderPaid, IdempotencyKey: "admin-paid-key", CreatedAt: 3}).Error)
 	require.NoError(t, db.Create(&model.D2SOrder{ID: "admin-order-pending", UserID: 901, Status: model.D2SOrderPending, IdempotencyKey: "admin-pending-key", CreatedAt: 2}).Error)
 	require.NoError(t, db.Create(&model.D2SOrder{ID: "other-user-paid", UserID: 902, Status: model.D2SOrderPaid, IdempotencyKey: "other-paid-key", CreatedAt: 1}).Error)
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?status=paid&user_id=901", nil)
 	D2SAdminOrders(context)
 
@@ -180,8 +191,11 @@ func TestD2SAdminOrdersSupportsStatusAndUserFilters(t *testing.T) {
 }
 
 func TestD2SAdminOrdersRejectsInvalidUserFilter(t *testing.T) {
+	setupD2SAdminBillingAuditDB(t)
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?user_id=not-a-number", nil)
 	D2SAdminOrders(context)
 
@@ -189,8 +203,11 @@ func TestD2SAdminOrdersRejectsInvalidUserFilter(t *testing.T) {
 }
 
 func TestD2SAdminOrdersRejectsInvalidStatusFilter(t *testing.T) {
+	setupD2SAdminBillingAuditDB(t)
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/orders?status=unknown", nil)
 	D2SAdminOrders(context)
 
@@ -208,7 +225,7 @@ func TestD2SAdminPaymentEventsSupportsOperationalFilters(t *testing.T) {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SPaymentEvent{}))
+	require.NoError(t, db.AutoMigrate(&model.D2SPaymentEvent{}, &model.D2SAdminOperationAudit{}))
 	require.NoError(t, db.Create(&model.D2SPaymentEvent{
 		ID: "admin-event-1", Provider: "stripe", ProviderEventID: "stripe-chargeback-1",
 		OrderID: "admin-order-1", EventType: "chargeback", AmountMinor: 2990, Currency: "USD",
@@ -222,6 +239,8 @@ func TestD2SAdminPaymentEventsSupportsOperationalFilters(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
+	context.Set("d2s_admin_id", 77)
+	context.Set("d2s_admin_email", "operator@example.com")
 	context.Request = httptest.NewRequest(http.MethodGet, "/api/v1/admin/payment-events?provider=STRIPE&event_type=CHARGEBACK", nil)
 	D2SAdminPaymentEvents(context)
 

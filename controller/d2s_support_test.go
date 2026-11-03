@@ -6,7 +6,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -28,7 +30,12 @@ func TestD2SSupportSubmissionRequiresAuthenticatedAccount(t *testing.T) {
 
 func TestD2SSupportSubmissionPersistsAuthenticatedOwner(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	db := setupD2SAdminExportTestDB(t, "d2s_support_submission_test", &model.D2SSupportTicket{})
+	db := setupD2SAdminExportTestDB(t, "d2s_support_submission_test", &model.User{}, &model.D2SSupportTicket{})
+	require.NoError(t, db.Create(&model.User{
+		Id: 37, Username: "support-owner", Password: "unused-hash", Email: "user@example.com",
+		EmailVerifiedAt: time.Now().UTC().Unix(), AffCode: "support-owner", Role: common.RoleCommonUser,
+		Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+	}).Error)
 	recorder := httptest.NewRecorder()
 	context, _ := gin.CreateTestContext(recorder)
 	context.Set("id", 37)
@@ -55,6 +62,29 @@ func TestD2SSupportSubmissionPersistsAuthenticatedOwner(t *testing.T) {
 	require.Equal(t, "user@example.com", ticket.ContactEmail)
 	require.Equal(t, "support-test-agent", ticket.UserAgent)
 	require.Equal(t, model.D2SSupportOpen, ticket.Status)
+}
+
+func TestD2SSupportSubmissionRejectsInactiveAccount(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupD2SAdminExportTestDB(t, "d2s_support_inactive_submission_test", &model.User{}, &model.D2SSupportTicket{})
+	require.NoError(t, db.Create(&model.User{
+		Id: 38, Username: "support-disabled", Password: "unused-hash", Email: "disabled@example.com",
+		Role: common.RoleCommonUser, Status: common.UserStatusDisabled, Group: "default", AuthVersion: 1,
+	}).Error)
+	recorder := httptest.NewRecorder()
+	context, _ := gin.CreateTestContext(recorder)
+	context.Set("id", 38)
+	context.Request = httptest.NewRequest(http.MethodPost, "/api/v1/support/tickets", strings.NewReader(
+		`{"category":"ACCOUNT","contact_email":"disabled@example.com","subject":"Account help","message":"Please help me resolve this account issue."}`,
+	))
+
+	D2SSubmitSupportTicket(context)
+
+	require.Equal(t, http.StatusForbidden, recorder.Code, recorder.Body.String())
+	require.Contains(t, recorder.Body.String(), "ACCOUNT_NOT_ACTIVE")
+	var count int64
+	require.NoError(t, db.Model(&model.D2SSupportTicket{}).Count(&count).Error)
+	require.Zero(t, count)
 }
 
 func TestD2SSupportConfigOnlyReturnsSafeHTTPSURL(t *testing.T) {
@@ -107,4 +137,20 @@ func TestD2SAdminSupportTicketQueryFailureReturnsServerErrorAndAudits(t *testing
 	require.NoError(t, db.First(&audit).Error)
 	require.Equal(t, "VIEW_SUPPORT_TICKETS", audit.OperationType)
 	require.Equal(t, "FAILURE", audit.Result)
+}
+
+func TestD2SAdminSupportTicketRejectsInvalidStatusAndAudits(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupD2SAdminExportTestDB(t, "d2s_admin_support_invalid_status_test", &model.D2SAdminOperationAudit{})
+	context, recorder := newD2SAdminExportTestContext(http.MethodGet, "/api/v1/admin/support/tickets?status=INVALID")
+
+	D2SAdminSupportTickets(context)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "INVALID_STATUS")
+	var audit model.D2SAdminOperationAudit
+	require.NoError(t, db.First(&audit).Error)
+	require.Equal(t, "VIEW_SUPPORT_TICKETS", audit.OperationType)
+	require.Equal(t, "FAILURE", audit.Result)
+	require.Contains(t, audit.DetailsJSON, "invalid_status")
 }

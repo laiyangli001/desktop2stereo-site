@@ -7,7 +7,8 @@ export function D2SSupportFloatingButton() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
-  const [open, setOpen] = useState(false)
+  const [openPath, setOpenPath] = useState<string | null>(null)
+  const open = openPath === pathname
   const [wechatURL, setWechatURL] = useState('')
 
   useEffect(() => {
@@ -68,7 +69,9 @@ export function D2SSupportFloatingButton() {
           open ? t('Close support options') : t('Complaints and support')
         }
         className='bg-primary text-primary-foreground ml-auto flex min-h-12 items-center justify-center rounded-full px-4 text-sm font-medium shadow-lg hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2'
-        onClick={() => setOpen((current) => !current)}
+        onClick={() =>
+          setOpenPath((current) => (current === pathname ? null : pathname))
+        }
         type='button'
       >
         {t('Complaints and support')}

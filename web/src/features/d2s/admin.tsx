@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -7,6 +7,7 @@ import { SectionPageLayout } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { toIntlLocale } from '@/i18n/languages'
 
 import {
   getD2SAdminBalances,
@@ -16,17 +17,14 @@ import {
   getD2SAdminSigningKeys,
   getD2SAdminReconciliation,
   getD2SAdminUnbindRequests,
+  getD2SAdminWithdrawalPayout,
   getD2SAdminWithdrawals,
   retireD2SAdminSigningKey,
   reviewD2SUnbind,
   reviewD2SWithdrawal,
   setD2SUserRegion,
 } from './api'
-
-function formatPaymentEventDate(timestamp: number): string {
-  if (!timestamp) return '—'
-  return new Date(timestamp * 1000).toLocaleString()
-}
+import { formatD2SDate, formatD2SMoney } from './lib/format'
 
 function ReviewActions(props: {
   id: string
@@ -56,9 +54,10 @@ function ReviewActions(props: {
     <div className='flex min-w-52 gap-2' aria-busy={mutation.isPending}>
       <Input
         aria-label={`${t('Review note')} ${props.id}`}
+        autoComplete='off'
+        name={`review_note_${props.id}`}
         value={note}
         onChange={(event) => setNote(event.target.value)}
-        placeholder={t('Review note')}
       />
       <Button
         type='button'
@@ -85,8 +84,70 @@ function ReviewActions(props: {
   )
 }
 
-export function D2SAdminWorkspace() {
+function WithdrawalPayoutReveal(props: { withdrawalID: string }) {
   const { t } = useTranslation()
+  const [details, setDetails] = useState<{
+    alipay_account: string
+    real_name: string
+  } | null>(null)
+  const payout = useMutation({
+    mutationFn: () => getD2SAdminWithdrawalPayout(props.withdrawalID),
+    onSuccess: (result) => {
+      if (result.success && result.data) {
+        setDetails(result.data)
+      }
+    },
+  })
+
+  return (
+    <div className='space-y-2'>
+      {details ? (
+        <>
+          <dl className='grid gap-x-2 sm:grid-cols-[auto_1fr]'>
+            <dt className='text-muted-foreground'>{t('Alipay account')}</dt>
+            <dd className='break-all'>{details.alipay_account}</dd>
+            <dt className='text-muted-foreground'>{t('Real name')}</dt>
+            <dd className='break-words'>{details.real_name}</dd>
+          </dl>
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            onClick={() => setDetails(null)}
+          >
+            {t('Hide payout details')}
+          </Button>
+        </>
+      ) : (
+        <Button
+          type='button'
+          size='sm'
+          variant='outline'
+          disabled={payout.isPending}
+          onClick={() => payout.mutate()}
+        >
+          {payout.isPending
+            ? t('Loading payout details')
+            : t('View payout details')}
+        </Button>
+      )}
+      {payout.isError && (
+        <p role='alert' className='text-destructive text-sm'>
+          {t('Unable to load payout details')}
+        </p>
+      )}
+      {payout.isSuccess && !payout.data?.success && !details && (
+        <p role='alert' className='text-destructive text-sm'>
+          {t('Unable to load payout details')}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function D2SAdminWorkspace() {
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage || i18n.language)
   const queryClient = useQueryClient()
   const [eventFilters, setEventFilters] = useState({
     provider: '',
@@ -208,6 +269,8 @@ export function D2SAdminWorkspace() {
                 >
                   <select
                     aria-label={t('Order status')}
+                    autoComplete='off'
+                    name='order_status'
                     value={orderFilters.status}
                     onChange={(event) =>
                       setOrderFilters((current) => ({
@@ -225,6 +288,8 @@ export function D2SAdminWorkspace() {
                   </select>
                   <Input
                     aria-label={t('User ID')}
+                    autoComplete='off'
+                    name='user_id'
                     placeholder={t('User ID')}
                     inputMode='numeric'
                     value={orderFilters.user_id}
@@ -260,7 +325,12 @@ export function D2SAdminWorkspace() {
                       {order.id} · user {order.user_id} · {order.provider}
                     </span>
                     <span>
-                      {order.status} · {order.currency} {order.amount_minor}
+                      {order.status} ·{' '}
+                      {formatD2SMoney(
+                        order.amount_minor,
+                        order.currency,
+                        locale
+                      )}
                     </span>
                   </div>
                 ))}
@@ -283,7 +353,11 @@ export function D2SAdminWorkspace() {
                       user {account.user_id} · {account.currency}
                     </span>
                     <span className='text-destructive'>
-                      {account.available_minor}
+                      {formatD2SMoney(
+                        account.available_minor,
+                        account.currency,
+                        locale
+                      )}
                     </span>
                   </div>
                 ))}
@@ -312,6 +386,8 @@ export function D2SAdminWorkspace() {
                 >
                   <Input
                     aria-label={t('Provider')}
+                    autoComplete='off'
+                    name='provider'
                     placeholder={t('Provider')}
                     value={eventFilters.provider}
                     onChange={(event) =>
@@ -323,6 +399,8 @@ export function D2SAdminWorkspace() {
                   />
                   <Input
                     aria-label={t('Event type')}
+                    autoComplete='off'
+                    name='event_type'
                     placeholder={t('Event type')}
                     value={eventFilters.event_type}
                     onChange={(event) =>
@@ -334,6 +412,8 @@ export function D2SAdminWorkspace() {
                   />
                   <Input
                     aria-label={t('Order ID')}
+                    autoComplete='off'
+                    name='order_id'
                     placeholder={t('Order ID')}
                     value={eventFilters.order_id}
                     onChange={(event) =>
@@ -369,15 +449,19 @@ export function D2SAdminWorkspace() {
                     className='space-y-1 border-b pb-2 last:border-0'
                   >
                     <div>
-                      {event.provider} · {event.event_type} · {event.currency}{' '}
-                      {event.amount_minor}
+                      {event.provider} · {event.event_type} ·{' '}
+                      {formatD2SMoney(
+                        event.amount_minor,
+                        event.currency,
+                        locale
+                      )}
                     </div>
                     <div className='text-muted-foreground font-mono text-xs'>
                       {event.provider_event_id} · {event.order_id}
                     </div>
                     <div className='text-muted-foreground text-xs'>
                       {t('Processed at')}:{' '}
-                      {formatPaymentEventDate(event.processed_at)}
+                      {formatD2SDate(event.processed_at, locale)}
                     </div>
                   </div>
                 ))}
@@ -398,7 +482,7 @@ export function D2SAdminWorkspace() {
             >
               {(licenses.data?.data?.licenses || []).map((license) => (
                 <RegionRow
-                  key={license.id}
+                  key={`${license.id}-${license.region || ''}`}
                   license={license}
                   saving={regionMutation.isPending}
                   onSave={(region) =>
@@ -414,6 +498,7 @@ export function D2SAdminWorkspace() {
             <ReviewCard
               title={t('Withdrawal review')}
               rows={withdrawals.data?.data?.withdrawals || []}
+              locale={locale}
               kind='withdrawal'
               onDone={refresh}
             />
@@ -537,9 +622,6 @@ function RegionRow(props: {
 }) {
   const { t } = useTranslation()
   const [region, setRegion] = useState(props.license.region || '')
-  useEffect(() => {
-    setRegion(props.license.region || '')
-  }, [props.license.region])
   return (
     <div className='flex flex-wrap items-center gap-2 border-b pb-2'>
       <div
@@ -563,6 +645,8 @@ function RegionRow(props: {
       </div>
       <select
         aria-label={`${t('Region')} ${props.license.license_code}`}
+        autoComplete='off'
+        name={`region_${props.license.id}`}
         value={region}
         onChange={(event) => setRegion(event.target.value)}
         disabled={props.saving}
@@ -592,8 +676,10 @@ function ReviewCard(props: {
     user_id?: number
     status: string
     amount_minor?: number
+    currency?: string
     reason?: string
   }>
+  locale?: string
   kind: 'unbind' | 'withdrawal'
   onDone: () => void
 }) {
@@ -607,8 +693,13 @@ function ReviewCard(props: {
           <div key={row.id} className='space-y-2 border-b pb-3'>
             <div>
               {row.id} · user {row.user_id} · {row.status}{' '}
-              {row.amount_minor ?? row.reason}
+              {row.amount_minor !== undefined && row.currency
+                ? formatD2SMoney(row.amount_minor, row.currency, props.locale)
+                : (row.amount_minor ?? row.reason)}
             </div>
+            {props.kind === 'withdrawal' && row.status === 'pending' && (
+              <WithdrawalPayoutReveal withdrawalID={row.id} />
+            )}
             {row.status === 'pending' && (
               <ReviewActions
                 id={row.id}

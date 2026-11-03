@@ -145,6 +145,7 @@ export function D2SSupportPage() {
             <input
               autoComplete='email'
               className='bg-background rounded-md border px-3 py-2'
+              spellCheck={false}
               type='email'
               aria-invalid={Boolean(form.formState.errors.contact_email)}
               {...form.register('contact_email')}
@@ -167,6 +168,7 @@ export function D2SSupportPage() {
           <label className='grid gap-2 text-sm'>
             <span>{t('Subject')}</span>
             <input
+              autoComplete='off'
               className='bg-background rounded-md border px-3 py-2'
               maxLength={200}
               aria-invalid={Boolean(form.formState.errors.subject)}
@@ -181,6 +183,7 @@ export function D2SSupportPage() {
           <label className='grid gap-2 text-sm'>
             <span>{t('Describe the issue')}</span>
             <textarea
+              autoComplete='off'
               className='bg-background min-h-40 rounded-md border px-3 py-2'
               maxLength={5000}
               aria-invalid={Boolean(form.formState.errors.message)}

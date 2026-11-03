@@ -219,10 +219,12 @@ export function D2SAdminConsole() {
         if (value.trim()) query.set(key, value.trim())
       })
     } else {
-      if (filters.start_time.trim())
+      if (filters.start_time.trim()) {
         query.set('start_time', filters.start_time.trim())
-      if (filters.end_time.trim())
+      }
+      if (filters.end_time.trim()) {
         query.set('end_time', filters.end_time.trim())
+      }
     }
     return query
   }
@@ -714,7 +716,7 @@ export function D2SAdminConsole() {
                   </p>
                   <div className='flex flex-wrap gap-2'>
                     <button
-                      className='hover:bg-muted/70 rounded border px-3 py-2'
+                      className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                       disabled={busy}
                       onClick={refreshExportApproval}
                       type='button'
@@ -722,7 +724,7 @@ export function D2SAdminConsole() {
                       刷新审批状态
                     </button>
                     <button
-                      className='hover:bg-muted/70 rounded border px-3 py-2'
+                      className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                       disabled={busy || exportApproval.status !== 'APPROVED'}
                       onClick={() => downloadApprovedExport(section)}
                       type='button'
@@ -741,7 +743,7 @@ export function D2SAdminConsole() {
                 <div className='flex items-center justify-between gap-3'>
                   <h3 className='font-medium'>待审批导出</h3>
                   <button
-                    className='hover:bg-muted/70 rounded border px-3 py-2'
+                    className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                     disabled={busy}
                     onClick={loadPendingApprovals}
                     type='button'
@@ -777,7 +779,7 @@ export function D2SAdminConsole() {
                       </p>
                       <div className='flex flex-wrap gap-2'>
                         <button
-                          className='hover:bg-muted/70 rounded border px-3 py-2'
+                          className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                           disabled={
                             busy ||
                             approval.requested_by_email.toLowerCase() ===
@@ -791,7 +793,7 @@ export function D2SAdminConsole() {
                           批准
                         </button>
                         <button
-                          className='hover:bg-muted/70 rounded border px-3 py-2'
+                          className='hover:bg-muted/70 focus-visible:ring-ring rounded border px-3 py-2 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none'
                           disabled={
                             busy ||
                             approval.requested_by_email.toLowerCase() ===

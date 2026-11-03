@@ -18,15 +18,23 @@ type d2sAdminLoginRequest struct {
 }
 
 func writeD2SAdminAudit(c *gin.Context, operationType, target, result string, details map[string]any) error {
-	detailsJSON, err := common.Marshal(details)
+	audit, err := d2SAdminAuditEntry(c, operationType, target, result, details)
 	if err != nil {
 		return err
 	}
-	return model.RecordD2SAdminOperationAudit(&model.D2SAdminOperationAudit{
+	return model.RecordD2SAdminOperationAudit(audit)
+}
+
+func d2SAdminAuditEntry(c *gin.Context, operationType, target, result string, details map[string]any) (*model.D2SAdminOperationAudit, error) {
+	detailsJSON, err := common.Marshal(details)
+	if err != nil {
+		return nil, err
+	}
+	return &model.D2SAdminOperationAudit{
 		OperatorID: c.GetInt("d2s_admin_id"), OperatorEmail: c.GetString("d2s_admin_email"),
 		OperationType: operationType, OperationTime: time.Now().UTC().Unix(),
 		TargetResource: target, SourceIP: c.ClientIP(), Result: result, DetailsJSON: string(detailsJSON),
-	})
+	}, nil
 }
 
 func respondD2SAdminAuditedFailure(c *gin.Context, operationType, target, reason string, status int, code string) {

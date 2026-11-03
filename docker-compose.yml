@@ -60,6 +60,7 @@ services:
       - SESSION_COOKIE_TRUSTED_URL=${SESSION_COOKIE_TRUSTED_URL:?SESSION_COOKIE_TRUSTED_URL must be set}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-172.16.0.0/12}
       - BATCH_UPDATE_ENABLED=true  # 是否启用批量更新 (Whether to enable batch update)
+      - D2S_PURCHASES_ENABLED=${D2S_PURCHASES_ENABLED:-false}
       - D2S_UPDATE_ENABLED=${D2S_UPDATE_ENABLED:-false}
       - D2S_UPDATE_REQUEST_FILE=${D2S_UPDATE_REQUEST_FILE:-/app/update-requests/request}
       - NODE_NAME=new-api-node-1  # 节点名称，用于审计日志中标识节点身份；多节点/容器部署时建议设置 (Node name used in audit logs; recommended when running multiple instances or in containers)

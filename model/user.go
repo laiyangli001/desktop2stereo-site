@@ -531,6 +531,110 @@ func HardDeleteUserById(id int) error {
 	return user.HardDelete()
 }
 
+// AnonymizeAndDeleteUserAccount removes active profile data and credentials while retaining purpose-bound records.
+func AnonymizeAndDeleteUserAccount(id int, actionInput D2SActionLogInput) error {
+	if id <= 0 {
+		return errors.New("invalid user id")
+	}
+	randomPassword, err := common.GenerateRandomKey(48)
+	if err != nil {
+		return fmt.Errorf("generate deleted account credential: %w", err)
+	}
+	passwordHash, err := common.Password2Hash(randomPassword)
+	if err != nil {
+		return fmt.Errorf("hash deleted account credential: %w", err)
+	}
+	suffix, err := common.GenerateRandomCharsKey(6)
+	if err != nil {
+		return fmt.Errorf("generate deleted account identifiers: %w", err)
+	}
+
+	username := fmt.Sprintf("d%d%s", id, suffix)
+	email := fmt.Sprintf("deleted+%d-%s@d2s.invalid", id, suffix)
+	affCode := fmt.Sprintf("d%d%s", id, suffix)
+	var tokens []Token
+	var deletedAuthVersion int64
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		var user User
+		if err := lockForUpdate(tx).Where("id = ?", id).First(&user).Error; err != nil {
+			return err
+		}
+		if user.Role == common.RoleRootUser {
+			return errors.New("root account cannot be deleted")
+		}
+		userID := user.Id
+		actionInput.UserID = &userID
+		actionInput.Email = user.Email
+		actionInput.ActionType = D2SActionProfileUpdate
+		actionInput.ResultStatus = D2SActionResultSuccess
+		actionInput.RequestPath = "/api/user/self"
+		if err := recordD2SUserAction(tx, actionInput); err != nil {
+			return err
+		}
+		if tx.Migrator().HasTable(&D2SSupportTicket{}) {
+			closedAt := time.Now().UTC().Unix()
+			if err := tx.Model(&D2SSupportTicket{}).
+				Where("user_id = ? AND status <> ?", id, D2SSupportClosed).
+				Updates(map[string]any{"status": D2SSupportClosed, "closed_at": closedAt, "updated_at": closedAt}).Error; err != nil {
+				return fmt.Errorf("close support tickets for deleted account: %w", err)
+			}
+		}
+		var err error
+		deletedAuthVersion, err = IncrementUserAuthVersionWithTx(tx, id)
+		if err != nil {
+			return err
+		}
+		if common.RedisEnabled {
+			if err := tx.Unscoped().Select("id", commonKeyCol).Where("user_id = ?", id).Find(&tokens).Error; err != nil {
+				return err
+			}
+		}
+		if err := deleteUserAuthenticationData(tx, id); err != nil {
+			return err
+		}
+
+		updates := map[string]any{
+			"username": username, "password": passwordHash, "display_name": "",
+			"role": common.RoleCommonUser, "status": common.UserStatusDisabled,
+			"email": email, "email_verified_at": 0,
+			"github_id": "", "discord_id": "", "oidc_id": "", "wechat_id": "",
+			"telegram_id": "", "linux_do_id": "", "access_token": nil,
+			"setting": "", "remark": "", "stripe_customer": "",
+			"aff_code": affCode, "inviter_id": 0, "last_login_at": 0,
+		}
+		if err := tx.Model(&User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Delete(&User{Id: id}).Error; err != nil {
+			return err
+		}
+		for _, profile := range []any{&D2SUserProfile{}, &D2SUserSecurityControl{}} {
+			if err := tx.Where("user_id = ?", id).Delete(profile).Error; err != nil {
+				return err
+			}
+		}
+		if tx.Migrator().HasTable(&D2SIdentityVerification{}) {
+			if err := tx.Where("user_id = ?", id).Delete(&D2SIdentityVerification{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if err := publishCommittedUserAuthVersion(id, deletedAuthVersion); err != nil {
+		common.SysError(fmt.Sprintf("failed to publish auth tombstone after anonymizing user %d: %v", id, err))
+	}
+	if err := invalidateTokensCache(tokens); err != nil {
+		common.SysError(fmt.Sprintf("failed to invalidate token cache after anonymizing user %d: %v", id, err))
+	}
+	if err := invalidateUserCache(id); err != nil {
+		common.SysError(fmt.Sprintf("failed to invalidate user cache after anonymizing user %d: %v", id, err))
+	}
+	return nil
+}
+
 func inviteUser(inviterId int) error {
 	result := DB.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
 		"aff_count":   gorm.Expr("aff_count + ?", 1),

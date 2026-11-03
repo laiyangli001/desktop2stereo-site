@@ -598,6 +598,21 @@ func TestD2SPaymentEventRejectsUnsupportedPaymentAccountHashProvider(t *testing.
 	require.ErrorIs(t, err, ErrD2SOrderInvalid)
 }
 
+func TestD2SPaymentEventAcceptsWaffoPaymentAccountHash(t *testing.T) {
+	useD2STestDB(t)
+	user := createD2STestUser(t, "d2s-waffo-account-hash")
+	const now = int64(2_000_900_101)
+	quote, err := QuoteD2SOrder(user.Id, D2SOrderProductLicense, "", "waffo", now)
+	require.NoError(t, err)
+	order, err := CreateD2SOrder(user.Id, quote, 0, "waffo-account-hash", now)
+	require.NoError(t, err)
+	digest := strings.Repeat("a", 64)
+	updated, err := ProcessD2SPaymentEvent("waffo", "waffo-account-hash-event", order.ID, "paid", quote.AmountMinor, quote.Currency, "payload-hash", now+1, digest)
+	require.NoError(t, err)
+	require.NotNil(t, updated.PaymentAccountIdentifierHash)
+	assert.Equal(t, digest, *updated.PaymentAccountIdentifierHash)
+}
+
 func TestD2SPaymentEventLifecycleMatrix(t *testing.T) {
 	tests := []struct {
 		name       string

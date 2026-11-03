@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
@@ -69,6 +70,10 @@ func D2SSubmitSupportTicket(c *gin.Context) {
 		Subject: request.Subject, Message: request.Message, SourceIP: c.ClientIP(), UserAgent: c.Request.UserAgent(),
 	}
 	if err := model.CreateD2SSupportTicket(ticket); err != nil {
+		if errors.Is(err, model.ErrD2SSupportOwnerUnavailable) {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "code": "ACCOUNT_NOT_ACTIVE"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "SUPPORT_SUBMISSION_FAILED"})
 		return
 	}
@@ -118,6 +123,14 @@ func D2SAdminSupportTickets(c *gin.Context) {
 		return
 	}
 	status := strings.ToUpper(strings.TrimSpace(c.Query("status")))
+	if status != "" {
+		switch status {
+		case model.D2SSupportOpen, model.D2SSupportInProgress, model.D2SSupportResolved, model.D2SSupportClosed:
+		default:
+			respondD2SAdminAuditedFailure(c, "VIEW_SUPPORT_TICKETS", "d2s_support_tickets", "invalid_status", http.StatusBadRequest, "INVALID_STATUS")
+			return
+		}
+	}
 	tickets, total, err := model.ListD2SSupportTickets(status, page, pageSize)
 	if err != nil {
 		respondD2SAdminAuditedFailure(c, "VIEW_SUPPORT_TICKETS", "d2s_support_tickets", "query_failed", http.StatusInternalServerError, "SUPPORT_QUERY_FAILED")
@@ -136,17 +149,12 @@ func D2SAdminUpdateSupportTicket(c *gin.Context) {
 		Reply  string `json:"admin_reply"`
 	}
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || !model.ValidD2SSupportReplyLength(request.Reply) {
-		respondD2SAdminAuditedFailure(c, "UPDATE_SUPPORT_TICKET", "d2s_support_tickets:"+c.Param("id"), "invalid_request", http.StatusBadRequest, "INVALID_REQUEST")
+		respondD2SAdminAuditedFailureDetails(c, "UPDATE_SUPPORT_TICKET", "", nil, http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	details, err := common.Marshal(map[string]any{"status": request.Status, "reply_length": len(request.Reply)})
+	ticket, err := model.UpdateD2SSupportTicketWithAudit(c.Param("id"), request.Status, request.Reply, c.GetInt("d2s_admin_id"), c.GetString("d2s_admin_email"), c.ClientIP())
 	if err != nil {
-		respondD2SAdminAuditedFailure(c, "UPDATE_SUPPORT_TICKET", "d2s_support_tickets:"+c.Param("id"), "audit_details_failed", http.StatusInternalServerError, "AUDIT_WRITE_FAILED")
-		return
-	}
-	ticket, err := model.UpdateD2SSupportTicketWithAudit(c.Param("id"), request.Status, request.Reply, c.GetInt("d2s_admin_id"), c.GetString("d2s_admin_email"), c.ClientIP(), string(details))
-	if err != nil {
-		if auditErr := writeD2SAdminAudit(c, "UPDATE_SUPPORT_TICKET", "d2s_support_tickets:"+c.Param("id"), "FAILURE", map[string]any{"reason": err.Error()}); auditErr != nil {
+		if auditErr := writeD2SAdminAudit(c, "UPDATE_SUPPORT_TICKET", "", "FAILURE", nil); auditErr != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 			return
 		}

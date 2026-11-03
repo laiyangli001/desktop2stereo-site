@@ -59,6 +59,10 @@ func createD2SAdminOperationAudit(tx *gorm.DB, entry *D2SAdminOperationAudit) er
 	return tx.Create(entry).Error
 }
 
+func RecordD2SAdminOperationAuditTx(tx *gorm.DB, entry *D2SAdminOperationAudit) error {
+	return createD2SAdminOperationAudit(tx, entry)
+}
+
 func CreateD2SAdminExportApprovalWithAudit(approval *D2SAdminExportApproval, audit *D2SAdminOperationAudit) error {
 	if approval == nil || !validD2SExportApprovalType(approval.ExportType) || len(approval.FilterHash) != 64 || approval.FilterSnapshot == "" || strings.TrimSpace(approval.RequestReason) == "" || approval.RequestedByID <= 0 || strings.TrimSpace(approval.RequestedByEmail) == "" || approval.RequestedAt <= 0 || approval.ExpiresAt <= approval.RequestedAt {
 		return ErrD2SExportApprovalInvalid

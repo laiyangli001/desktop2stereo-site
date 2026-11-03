@@ -88,7 +88,7 @@ describe('D2SWorkspace data status', () => {
     })
     apiMocks.getD2SCheckoutProviders.mockResolvedValue({
       success: true,
-      data: { providers: ['paymentfm'] },
+      data: { enabled: true, providers: ['paymentfm'] },
     })
     apiMocks.getD2SInvite.mockResolvedValue({
       success: true,

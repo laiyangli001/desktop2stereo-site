@@ -130,14 +130,18 @@ describe('LicenseCard', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: 'Online mode D2S-TEST-0001' }))
-      .toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Offline mode D2S-TEST-0001' }))
-      .toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Make permanent D2S-TEST-0001' }))
-      .toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Free revoke D2S-TEST-0001' }))
-      .toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Online mode D2S-TEST-0001' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Offline mode D2S-TEST-0001' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Make permanent D2S-TEST-0001' })
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: 'Free revoke D2S-TEST-0001' })
+    ).toBeDisabled()
     expect(
       screen.getByRole('combobox', { name: 'Offline period D2S-TEST-0001' })
     ).toBeDisabled()

@@ -29,29 +29,33 @@ func D2STrackDownload(c *gin.Context) {
 	}
 
 	userID := c.GetInt("id")
-	if blocked, err := model.IsD2SUserLoginBlocked(userID); err != nil {
-		d2sError(c, err)
-		return
-	} else if blocked {
-		c.JSON(http.StatusLocked, gin.H{
-			"version": 1, "success": false, "request_id": d2sRequestID(c),
-			"error": gin.H{"code": "account_login_blocked"},
-		})
-		return
-	}
+	var user *model.User
+	if userID > 0 {
+		if blocked, err := model.IsD2SUserLoginBlocked(userID); err != nil {
+			d2sError(c, err)
+			return
+		} else if blocked {
+			c.JSON(http.StatusLocked, gin.H{
+				"version": 1, "success": false, "request_id": d2sRequestID(c),
+				"error": gin.H{"code": "account_login_blocked"},
+			})
+			return
+		}
 
-	user, err := model.GetUserById(userID, false)
-	if err != nil {
-		d2sError(c, err)
-		return
-	}
-	if user == nil {
-		d2sError(c, errors.New("download account was not found"))
-		return
-	}
-	if user.EmailVerifiedAt <= 0 {
-		d2sError(c, model.ErrD2SEmailVerificationRequired)
-		return
+		var err error
+		user, err = model.GetUserById(userID, false)
+		if err != nil {
+			d2sError(c, err)
+			return
+		}
+		if user == nil {
+			d2sError(c, errors.New("download account was not found"))
+			return
+		}
+		if user.EmailVerifiedAt <= 0 {
+			d2sError(c, model.ErrD2SEmailVerificationRequired)
+			return
+		}
 	}
 
 	if err := recordD2SDownloadClick(c, user, target); err != nil {
@@ -63,7 +67,13 @@ func D2STrackDownload(c *gin.Context) {
 }
 
 func recordD2SDownloadClick(c *gin.Context, user *model.User, target string) error {
-	userID := user.Id
+	var userID *int
+	email := ""
+	if user != nil {
+		userIDValue := user.Id
+		userID = &userIDValue
+		email = user.Email
+	}
 	sourcePort := common.ClientSourcePort(c.Request.RemoteAddr, c.RemoteIP(), c.ClientIP())
 
 	var destinationIP *string
@@ -79,7 +89,7 @@ func recordD2SDownloadClick(c *gin.Context, user *model.User, target string) err
 
 	// Device fingerprint is unavailable in the current browser/server contract.
 	return model.RecordD2SUserAction(model.D2SActionLogInput{
-		UserID: &userID, Email: user.Email, ActionType: model.D2SActionDownload,
+		UserID: userID, Email: email, ActionType: model.D2SActionDownload,
 		EventTime: time.Now().UTC().Unix(), SourceIP: c.ClientIP(), SourcePort: sourcePort,
 		DestinationIP: destinationIP, DestinationPort: destinationPort,
 		UserAgent: c.Request.UserAgent(), RequestPath: "/api/v1/downloads/" + target + "/track",

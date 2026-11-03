@@ -4809,7 +4809,7 @@
     "Third-party-only plugins become unavailable immediately. In-flight tasks will be handled by timeout cleanup.": "純第三方外掛將立即不可用，進行中的任務將由逾時清理處理。",
     "Factory and custom plugins all stop serving immediately. In-flight tasks will be handled by timeout cleanup.": "出廠外掛與自訂外掛將立即停止服務。進行中的任務將由逾時清理處理。",
     "This action cannot be undone.": "此操作無法撤銷。",
-    "This action cannot be undone. This will permanently delete your account and remove all your data from our servers.": "此操作無法撤銷。這將永久刪除您的用戶並從我們的伺服器中移除您的所有數據。",
+    "This action cannot be undone. Your account profile will be anonymized and sign-in credentials removed. Security records are retained for at least 366 days, and support tickets until 6 months after closure.": "此操作無法復原。您的帳戶資料將匿名化，登入憑證將移除。安全紀錄至少保留 366 天；工單保留至關閉後 6 個月。",
     "This action will permanently remove 2FA protection from your account.": "此操作將永久移除您用戶的 2FA 保護。",
     "This announcement will be removed from the list.": "此公告將從列表中移除。",
     "This API shortcut will be removed from the list.": "此 API 快捷方式將從列表中移除。",
@@ -5563,6 +5563,7 @@
     "Approving…": "正在批准…",
     "Approve device": "批准裝置",
     "Purchase a license": "購買正式授權",
+    "Purchases are currently unavailable.": "目前尚未開放購買。",
     "Use your locked-region balance for a full payment.": "使用已鎖定區域的餘額全額支付。",
     "Buy with balance": "使用餘額購買",
     "Creating order…": "正在建立訂單…",
@@ -5669,6 +5670,10 @@
     "Support ticket pages": "工單分頁",
     "Page {{page}} of {{pages}}": "第 {{page}} 頁，共 {{pages}} 頁",
     "Sending…": "正在提交…",
-    "In progress": "處理中"
+    "In progress": "處理中",
+    "View payout details": "查看提款收款資料",
+    "Hide payout details": "隱藏提款收款資料",
+    "Loading payout details": "正在載入提款收款資料",
+    "Unable to load payout details": "無法載入提款收款資料"
   }
 }

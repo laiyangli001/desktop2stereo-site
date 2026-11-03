@@ -50,7 +50,7 @@ func d2SWaffoPaymentRequestID(orderID string) string {
 }
 
 func D2SOrderCheckout(c *gin.Context) {
-	if d2sRejectBlockedPurchase(c, "checkout") {
+	if d2sRejectPurchasesDisabled(c) || d2sRejectBlockedPurchase(c, "checkout") {
 		return
 	}
 	var order model.D2SOrder

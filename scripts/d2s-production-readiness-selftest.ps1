@@ -186,6 +186,48 @@ try {
     }
     Write-Host "PASS rejected empty privacy policy"
 
+    $privacyDraftPath = Join-Path $PSScriptRoot "..\docs\privacy-policy-draft.md"
+    $privacyDraft = Get-Content -LiteralPath $privacyDraftPath -Raw -Encoding UTF8
+    $privacyDraftRejected = $false
+    try {
+        Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true $privacyDraft
+    } catch {
+        $privacyDraftRejected = $_.Exception.Message -like "*contains unresolved placeholder text*"
+    }
+    if (-not $privacyDraftRejected) {
+        throw "Production readiness accepted the internal privacy-policy draft."
+    }
+    Write-Host "PASS rejected the repository's internal privacy-policy draft"
+
+    foreach ($placeholderPolicy in @(
+        "Privacy policy draft: 【待填写】运营主体名称",
+        "Privacy policy draft: contact details TODO",
+        "隐私联系渠道：[填写可持续接收请求的邮箱或其他渠道]",
+        "更新日期：[待确定]",
+        "[负责人必须核实并完成评估]",
+        "[须依据生产配置和合同逐项填写]",
+        "运营主体：[运营主体完整名称]",
+        "隐私联系渠道：[隐私联系邮箱/渠道]",
+        "注册地址：[注册地址]"
+    )) {
+        $placeholderRejected = $false
+        try {
+            Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true $placeholderPolicy
+        } catch {
+            $placeholderRejected = $_.Exception.Message -like "*contains unresolved placeholder text*"
+        }
+        if (-not $placeholderRejected) {
+            throw "Production readiness accepted privacy policy placeholder content: $placeholderPolicy"
+        }
+    }
+    Write-Host "PASS rejected privacy policy placeholder text"
+
+    Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
+        "请参阅 [个人信息保护法](https://example.org/privacy) 相关说明。"
+    Invoke-ReadinessMock "https://work.weixin.qq.com/ca/cawcde40faa1d08998" $true `
+        "订单处于[待付款]状态时，用户仍可查询订单状态。"
+    Write-Host "PASS accepted a bracketed legal reference without placeholders"
+
     foreach ($case in @(
         @{ Name = "unapproved host"; Url = "https://support.example/ca/contact"; Available = $true },
         @{ Name = "wrong path"; Url = "https://work.weixin.qq.com/contact"; Available = $true },
