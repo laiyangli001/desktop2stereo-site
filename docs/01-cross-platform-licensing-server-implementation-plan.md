@@ -156,6 +156,7 @@ GORM 维护以下表：
 - 2026-11-03 当前工作树全仓 `go vet -p 1 ./...`、Windows 原生 `go build -p 1 ./...`、Linux/amd64 与 macOS/arm64 交叉构建全部通过（同一固定 GOCACHE/GOTMPDIR）。全仓 Go 测试仍未完成，因此 S1 不据此改为 `verified`。
 - 2026-11-03 当前工作树重新执行 `go list ./...` 枚举的全部 39 个含测试包，使用 `scripts/d2s-fixed-go-test.ps1` 固定路径编译并逐包运行，全部通过（含此前受 Windows 临时 EXE 启动限制的 `e2e`、`middleware`、`relay/channel/ollama` 和 `pkg/billingexpr`）；`go vet -p 1 ./...`、`go build -p 1 ./...` 及 `scripts/d2s-sensitive-scan.ps1` 均通过，敏感扫描覆盖 7,843 个跟踪/未跟踪工作树文件。360 托盘进程仍在，但本轮未发现 `360Safe` 进程，测试 EXE 均保留并执行完成。此项更新取代本节较早的“全仓测试未完成”检查点记录；Windows 原生、Linux/amd64 和 macOS/arm64 构建结果仍以此前记录为准。
 - 2026-11-03 经用户授权修复批量账户解锁失败审计类型错误：原实现把所有执行失败固定记为 `EMERGENCY_LOCK`，即使预览中的操作是解锁。新增 selection-changed 失败回归，先确认其失败并显示实际记录为错误类型；现根据已验证的预览动作确定类型，并让失败审计沿用该类型。回归转绿后，固定路径 `controller` 全包测试、39 个含测试包的固定路径全量测试、根模块 `go vet -p 1 ./...`、`go build -p 1 ./...`、敏感信息扫描（7,843 个工作树文件）及 `git diff --check` 均通过。PR #1 的 `Backend vet, build, and test` 工作流又在 Ubuntu 上通过根模块与 relaykit 检查、构建和测试。
+- 2026-11-03 在提交 `9737a9c` 上复跑 `go list ./...` 枚举的全部 39 个含测试 Go 包，固定路径 runner 全部通过；`go vet -p 1 ./...` 与 `go build -p 1 ./...` 也通过。此次测试过程中 360 未移除或阻止任何固定路径测试程序。对应 PR #1 五项 GitHub Actions 检查均通过。该复验覆盖当前服务器代码，不替代支付沙箱、生产闭环或外部法律意见。
 
 - 导入 new-api、保留上游和 AGPL-3.0 信息。
 - 增加 D2S 模型、迁移、路由、授权状态机、设备码、ES256 和在线租约。
