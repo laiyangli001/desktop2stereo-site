@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -398,7 +398,7 @@ export function D2SAdminWorkspace() {
             >
               {(licenses.data?.data?.licenses || []).map((license) => (
                 <RegionRow
-                  key={license.id}
+                  key={`${license.id}-${license.region || ''}`}
                   license={license}
                   saving={regionMutation.isPending}
                   onSave={(region) =>
@@ -537,9 +537,6 @@ function RegionRow(props: {
 }) {
   const { t } = useTranslation()
   const [region, setRegion] = useState(props.license.region || '')
-  useEffect(() => {
-    setRegion(props.license.region || '')
-  }, [props.license.region])
   return (
     <div className='flex flex-wrap items-center gap-2 border-b pb-2'>
       <div
