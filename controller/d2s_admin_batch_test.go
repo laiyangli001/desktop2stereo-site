@@ -194,6 +194,52 @@ func TestD2SAdminBatchExpiredUnlockFailureAuditUsesUnlockOperationType(t *testin
 	require.Contains(t, audits[0].DetailsJSON, "batch_apply_failed")
 }
 
+func TestD2SAdminBatchConsumedUnlockFailureAuditUsesUnlockOperationType(t *testing.T) {
+	db := setupD2SAdminExportTestDB(t, "d2s_admin_batch_consumed_unlock_audit_test",
+		&model.User{}, &model.D2SRegistrationRecord{}, &model.D2SAdminBatchPreview{},
+		&model.D2SUserSecurityControl{}, &model.D2SAdminOperationAudit{},
+	)
+	now := time.Now().UTC().Unix()
+	loginBlocked := false
+	selectorJSON, err := json.Marshal(d2SBatchSelector{EmailDomain: "example.com"})
+	require.NoError(t, err)
+	actionJSON, err := json.Marshal(d2SBatchActions{LoginBlocked: &loginBlocked, Reason: "incident resolved"})
+	require.NoError(t, err)
+	preview := model.D2SAdminBatchPreview{
+		ID: "batch-consumed-unlock-preview-test", AdminID: 42,
+		SelectorJSON: string(selectorJSON), ActionJSON: string(actionJSON),
+		MatchCount: 1, CreatedAt: now - 300, ExpiresAt: now + 300, ConsumedAt: now - 60,
+	}
+	require.NoError(t, db.Create(&preview).Error)
+
+	recorder, context := postD2SAdminBatchApply(preview.ID)
+	D2SAdminBatchEmergencyApply(context)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var audits []model.D2SAdminOperationAudit
+	require.NoError(t, db.Find(&audits).Error)
+	require.Len(t, audits, 1)
+	require.Equal(t, "EMERGENCY_UNLOCK", audits[0].OperationType)
+	require.Equal(t, "FAILURE", audits[0].Result)
+	require.Contains(t, audits[0].DetailsJSON, "batch_apply_failed")
+}
+
+func TestD2SAdminBatchApplyWithoutPreviewUsesGenericFailureAuditType(t *testing.T) {
+	db := setupD2SAdminExportTestDB(t, "d2s_admin_batch_missing_preview_audit_test",
+		&model.D2SAdminBatchPreview{}, &model.D2SAdminOperationAudit{},
+	)
+
+	recorder, context := postD2SAdminBatchApply("missing-batch-preview")
+	D2SAdminBatchEmergencyApply(context)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	var audits []model.D2SAdminOperationAudit
+	require.NoError(t, db.Find(&audits).Error)
+	require.Len(t, audits, 1)
+	require.Equal(t, "BATCH_EMERGENCY_APPLY", audits[0].OperationType)
+	require.Equal(t, "FAILURE", audits[0].Result)
+}
+
 func TestD2SAdminBatchPreviewRollsBackWhenSuccessAuditCannotBeWritten(t *testing.T) {
 	db := setupD2SAdminExportTestDB(t, "d2s_admin_batch_preview_audit_failure_test",
 		&model.User{}, &model.D2SRegistrationRecord{}, &model.D2SAdminBatchPreview{}, &model.D2SAdminOperationAudit{},
