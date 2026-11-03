@@ -363,6 +363,7 @@ GORM 维护以下表：
 - 2026-11-03 加强生产隐私政策 readiness 门禁：除非非空外，拒绝常见未完成占位文本（例如“待填写”、`TODO` 和 `{{...}}`）；自测覆盖中文和英文占位项，PowerShell AST 及 `scripts/d2s-production-readiness-selftest.ps1` 全部通过。该检测仅排除明显草稿标记，不验证政策事实准确性或法律充分性；生产政策仍为空，readiness 继续失败。
 - 2026-11-03 审查暂存改动时发现 Waffo 掩码卡付款标识调用了不接受 `payment_method` 的 HMAC helper，修正允许的标识类型并补足购买查询审计成功用例缺失的审计表测试夹具。`scripts/d2s-fixed-go-test.ps1 -Package ./controller` 固定路径全套 controller 测试通过，包含 Waffo Webhook 掩码标识及审计过滤器回归；360 进程当时仍运行，但测试二进制未被隔离。MySQL/PostgreSQL 数据库矩阵和其余包测试仍未在本轮重跑。
 - 2026-11-03 本地 Playwright/Edge 使用模拟 API 完成支持工单前端流程验收：已登录账户提交工单并自动使用会话邮箱、访问“我的工单”读取客服回复；请求携带 Bearer，客户端未发送 `user_id`；访客从浮动入口进入时被重定向到登录页。390px 视口无横向溢出，浏览器无 JS 错误。验收发现客服浮动菜单在路由切换后仍展开并遮挡页面，现改为路径变化时关闭，并通过 `support.test.tsx` 的 8 项组件测试。该检查的 API 为 mock，不能证明生产登录提交、账户隔离或后台处理闭环；这些生产门槛仍未验收。
+- 2026-11-03 提交 `ffd61ad` 后 Draft PR 全部 5 项 CI 检查通过：后端 Go vet/build/test、前端类型与测试、D2S 类型/测试/构建、D2S 单元及适配器测试、MySQL/PostgreSQL 迁移。`d2s-production-readiness-selftest.ps1` 全套自测通过；只读重跑生产 readiness 时，运行 SHA `d11d0cc1da5070bc65b57ff72181ed2865043833`、签名公钥和企业微信配置均匹配，但因隐私政策为空而拒绝就绪。此电脑没有 Docker、可用 Python 运行时或 WSL Linux 发行版，Linux/Python 更新器回滚演练仍待在合适的 Linux 环境完成；没有进行生产写操作或部署。
 - 首发 +30 天离线延长包价格已确定：CN ¥19.90、INTL $2.99；生产环境变量仍需部署并验证。
 - PayPal、Paddle 没有当前基线的原生适配器，已移出首发范围；后续如实现官方适配器再单独评估接入。
 - 统一支付桥不是渠道官方 Webhook 验签的替代品；各开放渠道适配器已有统一入口回归，真实第三方沙箱异常矩阵和日终对账仍待完成。
