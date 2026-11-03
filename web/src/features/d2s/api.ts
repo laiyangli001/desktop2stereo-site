@@ -97,6 +97,21 @@ export async function getD2SAdminWithdrawals() {
   return response.data as D2SResponse<{ withdrawals: D2SWithdrawal[] }>
 }
 
+export type D2SWithdrawalPayoutDetails = {
+  withdrawal_id: string
+  alipay_account: string
+  real_name: string
+}
+
+export async function getD2SAdminWithdrawalPayout(
+  withdrawalID: string
+): Promise<D2SResponse<D2SWithdrawalPayoutDetails>> {
+  const response = await api.get(
+    `/api/v1/admin/withdrawals/${encodeURIComponent(withdrawalID)}/payout`
+  )
+  return response.data
+}
+
 export async function getD2SAdminUnbindRequests() {
   const response = await api.get('/api/v1/admin/unbind-requests')
   return response.data as D2SResponse<{ requests: D2SUnbindRequest[] }>

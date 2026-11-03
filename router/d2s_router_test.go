@@ -28,6 +28,7 @@ func TestD2SRoutesExposeAuthenticatedSupportAndNoIdentityEntryAPI(t *testing.T) 
 	require.True(t, paths[http.MethodGet+" /api/v1/admin/audit/export-approvals/:id"])
 	require.True(t, paths[http.MethodGet+" /api/v1/admin/audit/export-approvals"])
 	require.True(t, paths[http.MethodPut+" /api/v1/admin/audit/export-approvals/:id"])
+	require.True(t, paths[http.MethodGet+" /api/v1/admin/withdrawals/:id/payout"])
 	for route := range paths {
 		require.False(t, strings.Contains(route, "/identity"), "identity collection route is disabled: %s", route)
 	}

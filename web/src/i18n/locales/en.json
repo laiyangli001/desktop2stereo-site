@@ -5762,6 +5762,10 @@
     "Support ticket pages": "Support ticket pages",
     "Page {{page}} of {{pages}}": "Page {{page}} of {{pages}}",
     "Sending…": "Sending…",
-    "In progress": "In progress"
+    "In progress": "In progress",
+    "View payout details": "View payout details",
+    "Hide payout details": "Hide payout details",
+    "Loading payout details": "Loading payout details",
+    "Unable to load payout details": "Unable to load payout details"
   }
 }

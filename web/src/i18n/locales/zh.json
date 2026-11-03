@@ -5798,6 +5798,10 @@
     "Support ticket pages": "工单分页",
     "Previous page": "上一页",
     "Next page": "下一页",
-    "Page {{page}} of {{pages}}": "第 {{page}} 页，共 {{pages}} 页"
+    "Page {{page}} of {{pages}}": "第 {{page}} 页，共 {{pages}} 页",
+    "View payout details": "查看提现收款信息",
+    "Hide payout details": "隐藏提现收款信息",
+    "Loading payout details": "正在加载提现收款信息",
+    "Unable to load payout details": "无法加载提现收款信息"
   }
 }

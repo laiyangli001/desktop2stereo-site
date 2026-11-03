@@ -5669,6 +5669,10 @@
     "Support ticket pages": "Pages des demandes d’assistance",
     "Page {{page}} of {{pages}}": "Page {{page}} sur {{pages}}",
     "Sending…": "Envoi en cours…",
-    "In progress": "En cours"
+    "In progress": "En cours",
+    "View payout details": "Voir les coordonnées de paiement",
+    "Hide payout details": "Masquer les coordonnées de paiement",
+    "Loading payout details": "Chargement des coordonnées de paiement",
+    "Unable to load payout details": "Impossible de charger les coordonnées de paiement"
   }
 }

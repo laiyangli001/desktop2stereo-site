@@ -92,7 +92,7 @@ access token。
 - `POST /api/v1/orders/:id/checkout`：为已创建的 Stripe、Creem、Waffo、Waffo Pancake 或易支付订单生成 Checkout 信息；服务端再次校验订单归属、状态、过期时间、渠道和网关金额。易支付 provider 包括 `alipay`、`wechat` 和可配置的 `paymentfm`，其中 `wechat` 映射到网关的 `wxpay` 参数；Creem 还要求已配置与服务器报价完全匹配的 USD 商品，Waffo/Waffo Pancake 使用服务器价格快照；易支付返回服务端签名的 `POST` 地址和参数，客户端不得自行改写。
 - `GET /api/v1/invite/info`、`GET /api/v1/invite/records`
 - `GET /api/v1/balance/info`、`GET /api/v1/balance/transactions`
-- `POST /api/v1/withdrawal/request`、`GET /api/v1/withdrawal/status`
+- `POST /api/v1/withdrawal/request`、`GET /api/v1/withdrawal/status`：用户响应不回传收款支付宝账号或姓名。
 
 `product` 支持 `license`、`paid_revoke` 和 `offline_extension`。金额全部使用最小货币单位。
 正式授权固定为 CN/CNY 9900、INTL/USD 2990；付费撤销按 1/2/3 次分别为
@@ -134,7 +134,7 @@ PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 - `GET /api/v1/admin/signing-keys`（仅公开 JWK，不返回私钥）
 - `PUT /api/v1/admin/signing-keys/:id`（请求 `{"status":"retired"}`；当前活动键不可退休）
 - `GET /api/v1/admin/reconciliation[?start_at=&end_at=]`（默认上一 UTC 日）
-- `GET|PUT /api/v1/admin/withdrawals[/:id]`
+- `GET /api/v1/admin/withdrawals`：列表不返回收款账号和姓名；`GET /api/v1/admin/withdrawals/:id/payout` 按单读取待处理申请的收款资料，并在响应前写入 `VIEW_WITHDRAWAL_PAYOUT` 审计；`PUT /api/v1/admin/withdrawals/:id` 审核申请。
 - `GET|PUT /api/v1/admin/unbind-requests[/:id]`
 - `PUT /api/v1/admin/users/:id/region`
 

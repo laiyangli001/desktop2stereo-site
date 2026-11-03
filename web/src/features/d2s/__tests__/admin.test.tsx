@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   getD2SAdminReconciliation: vi.fn(),
   getD2SAdminSigningKeys: vi.fn(),
   getD2SAdminUnbindRequests: vi.fn(),
+  getD2SAdminWithdrawalPayout: vi.fn(),
   getD2SAdminWithdrawals: vi.fn(),
   retireD2SAdminSigningKey: vi.fn(),
   reviewD2SUnbind: vi.fn(),
@@ -113,6 +114,13 @@ describe('D2SAdminWorkspace', () => {
         ],
       })
     )
+    apiMocks.getD2SAdminWithdrawalPayout.mockResolvedValue(
+      response({
+        withdrawal_id: 'withdrawal-1',
+        alipay_account: 'payout@example.com',
+        real_name: 'Payout Recipient',
+      })
+    )
     apiMocks.getD2SAdminUnbindRequests.mockResolvedValue(
       response({
         requests: [
@@ -178,6 +186,17 @@ describe('D2SAdminWorkspace', () => {
     expect(screen.getAllByText(/chargeback · USD\s*29\.90/)).toHaveLength(2)
     expect(screen.getByText(/-USD\s*1\.40/)).toBeInTheDocument()
     expect(screen.getByText(/CNY\s*50\.00/)).toBeInTheDocument()
+    expect(screen.getByText(/withdrawal-1/)).toBeInTheDocument()
+    expect(screen.queryByText('payout@example.com')).not.toBeInTheDocument()
+    expect(screen.queryByText('Payout Recipient')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'View payout details' }))
+    expect(await screen.findByText('payout@example.com')).toBeInTheDocument()
+    expect(screen.getByText('Payout Recipient')).toBeInTheDocument()
+    expect(apiMocks.getD2SAdminWithdrawalPayout).toHaveBeenCalledWith(
+      'withdrawal-1'
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Hide payout details' }))
+    expect(screen.queryByText('payout@example.com')).not.toBeInTheDocument()
     expect(
       screen.getByText(/stripe-chargeback-1 · order-chargeback/)
     ).toBeInTheDocument()

@@ -5669,6 +5669,10 @@
     "Support ticket pages": "Trang yêu cầu hỗ trợ",
     "Page {{page}} of {{pages}}": "Trang {{page}} trên {{pages}}",
     "Sending…": "Đang gửi…",
-    "In progress": "Đang xử lý"
+    "In progress": "Đang xử lý",
+    "View payout details": "Xem thông tin nhận tiền",
+    "Hide payout details": "Ẩn thông tin nhận tiền",
+    "Loading payout details": "Đang tải thông tin nhận tiền",
+    "Unable to load payout details": "Không thể tải thông tin nhận tiền"
   }
 }

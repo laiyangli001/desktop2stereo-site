@@ -277,7 +277,7 @@ func D2SWithdrawalCreate(c *gin.Context) {
 
 func D2SWithdrawalStatus(c *gin.Context) {
 	var rows []model.D2SWithdrawalRequest
-	if err := model.DB.Where("user_id = ?", c.GetInt("id")).Order("created_at DESC").Find(&rows).Error; err != nil {
+	if err := model.DB.Select("id", "user_id", "currency", "amount_minor", "status", "reviewed_by", "review_note", "created_at", "updated_at", "paid_at").Where("user_id = ?", c.GetInt("id")).Order("created_at DESC").Find(&rows).Error; err != nil {
 		d2sError(c, err)
 		return
 	}
@@ -330,7 +330,7 @@ func D2SPaymentWebhook(c *gin.Context) {
 
 func D2SAdminWithdrawals(c *gin.Context) {
 	var rows []model.D2SWithdrawalRequest
-	query := model.DB.Order("created_at DESC").Limit(500)
+	query := model.DB.Select("id", "user_id", "currency", "amount_minor", "status", "reviewed_by", "review_note", "created_at", "updated_at", "paid_at").Order("created_at DESC").Limit(500)
 	status := strings.TrimSpace(c.Query("status"))
 	if status != "" {
 		query = query.Where("status = ?", status)
@@ -346,6 +346,34 @@ func D2SAdminWithdrawals(c *gin.Context) {
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"withdrawals": rows})
+}
+
+func D2SAdminWithdrawalPayout(c *gin.Context) {
+	withdrawalID := strings.TrimSpace(c.Param("id"))
+	if withdrawalID == "" {
+		respondD2SAdminAuditedFailure(c, "VIEW_WITHDRAWAL_PAYOUT", "d2s_withdrawal_requests", "invalid_id", http.StatusBadRequest, "INVALID_WITHDRAWAL_ID")
+		return
+	}
+	var row model.D2SWithdrawalRequest
+	if err := model.DB.Select("id", "alipay_account", "real_name").Where("id = ? AND status = ?", withdrawalID, "pending").Take(&row).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respondD2SAdminAuditedFailure(c, "VIEW_WITHDRAWAL_PAYOUT", "d2s_withdrawal_requests:"+withdrawalID, "not_found", http.StatusNotFound, "WITHDRAWAL_NOT_FOUND")
+			return
+		}
+		respondD2SAdminAuditedFailure(c, "VIEW_WITHDRAWAL_PAYOUT", "d2s_withdrawal_requests:"+withdrawalID, "query_failed", http.StatusInternalServerError, "WITHDRAWAL_QUERY_FAILED")
+		return
+	}
+	if err := writeD2SAdminAudit(c, "VIEW_WITHDRAWAL_PAYOUT", "d2s_withdrawal_requests:"+withdrawalID, "SUCCESS", map[string]any{
+		"withdrawal_id": withdrawalID,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
+		return
+	}
+	d2sSuccess(c, http.StatusOK, gin.H{
+		"withdrawal_id":  row.ID,
+		"alipay_account": row.AlipayAccount,
+		"real_name":      row.RealName,
+	})
 }
 
 func D2SAdminOrders(c *gin.Context) {

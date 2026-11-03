@@ -313,8 +313,8 @@ type D2SWithdrawalRequest struct {
 	UserID        int    `json:"user_id" gorm:"not null;index"`
 	Currency      string `json:"currency" gorm:"type:char(3);not null"`
 	AmountMinor   int64  `json:"amount_minor" gorm:"type:bigint;not null"`
-	AlipayAccount string `json:"alipay_account" gorm:"type:varchar(128);not null"`
-	RealName      string `json:"real_name" gorm:"type:varchar(128);not null"`
+	AlipayAccount string `json:"-" gorm:"type:varchar(128);not null"`
+	RealName      string `json:"-" gorm:"type:varchar(128);not null"`
 	Status        string `json:"status" gorm:"type:varchar(16);not null;index"`
 	ReviewedBy    int    `json:"reviewed_by" gorm:"not null"`
 	ReviewNote    string `json:"review_note" gorm:"type:text"`

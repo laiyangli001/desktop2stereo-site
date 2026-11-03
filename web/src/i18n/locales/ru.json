@@ -5669,6 +5669,10 @@
     "Support ticket pages": "Страницы обращений",
     "Page {{page}} of {{pages}}": "Страница {{page}} из {{pages}}",
     "Sending…": "Отправка…",
-    "In progress": "В процессе"
+    "In progress": "В процессе",
+    "View payout details": "Показать реквизиты выплаты",
+    "Hide payout details": "Скрыть реквизиты выплаты",
+    "Loading payout details": "Загрузка реквизитов выплаты",
+    "Unable to load payout details": "Не удалось загрузить реквизиты выплаты"
   }
 }

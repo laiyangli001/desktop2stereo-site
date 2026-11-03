@@ -8,7 +8,7 @@
 
 2026-11-03 增加 CSV 导出双人审批与离线管理员开通命令。全量 Go 测试、审批/导出专项回归、`go vet`、`go build`、前端 Vitest 76 文件/476 项、`tsgo -b` 和 Rsbuild 构建通过。审批前端拒绝同邮箱管理员执行自批操作，服务端仍按管理员 ID 校验；精确筛选范围、30 分钟期限、一次性消费和审批 ID 审计关联已覆盖。本轮没有配置 MySQL/PostgreSQL DSN，也未执行生产数据库或生产账号验收。
 
-2026-11-03 补齐高权限财务/授权后台的审计缺口：订单、支付事件、余额、提现、授权、解绑申请和签名公钥的查看记录筛选条件与结果条数；审计写入失败时敏感列表接口不返回数据；提现审核、人工解绑审核、用户区域修改和签名密钥退役将成功审计与业务变更放入同一事务，失败尝试单独追加失败审计。SQLite controller/model 回归通过；当前环境未配置 MySQL/PostgreSQL 测试 DSN，也未运行数据库实例，跨数据库矩阵和生产验收未验证。2026-11-03 又将提现及人工解绑列表的审计失败响应统一为 `AUDIT_WRITE_FAILED`，新增 fail-closed 回归通过固定路径 controller 测试套件；Waffo 掩码卡标识的 HMAC 类型也已补齐并由 Waffo 专项回归覆盖。随后重跑的 `go vet -p 1 ./controller ./model ./service`、`go build -p 1 ./controller ./model ./service` 均通过。
+2026-11-03 补齐高权限财务/授权后台的审计缺口：订单、支付事件、余额、提现、授权、解绑申请和签名公钥的查看记录筛选条件与结果条数；审计写入失败时敏感列表接口不返回数据；提现审核、人工解绑审核、用户区域修改和签名密钥退役将成功审计与业务变更放入同一事务，失败尝试单独追加失败审计。SQLite controller/model 回归通过；当前环境未配置 MySQL/PostgreSQL 测试 DSN，也未运行数据库实例，跨数据库矩阵和生产验收未验证。2026-11-03 又将提现及人工解绑列表的审计失败响应统一为 `AUDIT_WRITE_FAILED`，新增 fail-closed 回归通过固定路径 controller 测试套件；Waffo 掩码卡标识的 HMAC 类型也已补齐并由 Waffo 专项回归覆盖。随后重跑的 `go vet -p 1 ./controller ./model ./service`、`go build -p 1 ./controller ./model ./service` 均通过。2026-11-03 为减少提现资料暴露，用户提现创建/状态响应及管理员列表查询排除支付宝账号和姓名；`super_admin` 仅能对待处理申请调用逐单资料接口，且审计成功后才返回，审计详情不含资料明文。该保护限制 API 暴露面，不代表数据库静态加密；提现字段仍以明文存储，生产访问控制仍待验收。
 
 2026-11-03 修复批量紧急处置失败审计操作类型：失败的解锁操作此前会被记录为 `EMERGENCY_LOCK`。新增 selection-changed 失败回归先验证错误可复现；现根据管理员确认的预览动作写入 `EMERGENCY_LOCK` 或 `EMERGENCY_UNLOCK`。回归通过，固定路径 controller 全包测试及 39 个含测试包的全量 Go 测试、`go vet -p 1 ./controller`、`go build -p 1 ./controller` 和 `git diff --check` 通过。
 
@@ -129,7 +129,8 @@
 | `GET /api/v1/admin/orders` | `super_admin` | 查询订单；记录状态/用户筛选条件和返回数量 |
 | `GET /api/v1/admin/payment-events` | `super_admin` | 查询渠道支付事件；记录渠道/订单/事件筛选条件和返回数量 |
 | `GET /api/v1/admin/balances` | `super_admin` | 查询账户余额；记录用户过滤、是否仅负余额及返回数量 |
-| `GET /api/v1/admin/withdrawals` | `super_admin` | 查看提现申请及收款资料；记录状态过滤与返回数量 |
+| `GET /api/v1/admin/withdrawals` | `super_admin` | 查看提现申请列表，不返回收款账号和姓名；记录状态过滤与返回数量 |
+| `GET /api/v1/admin/withdrawals/:id/payout` | `super_admin` | 按单查看提现收款账号和姓名；只在审计成功后返回资料，审计记录不包含资料明文 |
 | `PUT /api/v1/admin/withdrawals/:id` | `super_admin` | 审核提现；余额释放/结算、申请状态和成功审计同事务提交；失败单独审计 |
 | `GET /api/v1/admin/unbind-requests` | `super_admin` | 查看人工解绑申请；记录状态过滤与返回数量 |
 | `PUT /api/v1/admin/unbind-requests/:id` | `super_admin` | 审核人工解绑；申请、授权变更和成功审计同事务提交；失败单独审计 |

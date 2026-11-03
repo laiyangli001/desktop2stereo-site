@@ -17,6 +17,7 @@ import {
   getD2SAdminSigningKeys,
   getD2SAdminReconciliation,
   getD2SAdminUnbindRequests,
+  getD2SAdminWithdrawalPayout,
   getD2SAdminWithdrawals,
   retireD2SAdminSigningKey,
   reviewD2SUnbind,
@@ -79,6 +80,67 @@ function ReviewActions(props: {
       >
         {t('Reject')}
       </Button>
+    </div>
+  )
+}
+
+function WithdrawalPayoutReveal(props: { withdrawalID: string }) {
+  const { t } = useTranslation()
+  const [details, setDetails] = useState<{
+    alipay_account: string
+    real_name: string
+  } | null>(null)
+  const payout = useMutation({
+    mutationFn: () => getD2SAdminWithdrawalPayout(props.withdrawalID),
+    onSuccess: (result) => {
+      if (result.success && result.data) {
+        setDetails(result.data)
+      }
+    },
+  })
+
+  return (
+    <div className='space-y-2'>
+      {details ? (
+        <>
+          <dl className='grid gap-x-2 sm:grid-cols-[auto_1fr]'>
+            <dt className='text-muted-foreground'>{t('Alipay account')}</dt>
+            <dd className='break-all'>{details.alipay_account}</dd>
+            <dt className='text-muted-foreground'>{t('Real name')}</dt>
+            <dd className='break-words'>{details.real_name}</dd>
+          </dl>
+          <Button
+            type='button'
+            size='sm'
+            variant='outline'
+            onClick={() => setDetails(null)}
+          >
+            {t('Hide payout details')}
+          </Button>
+        </>
+      ) : (
+        <Button
+          type='button'
+          size='sm'
+          variant='outline'
+          disabled={payout.isPending}
+          onClick={() => payout.mutate()}
+        >
+          {payout.isPending
+            ? t('Loading payout details')
+            : t('View payout details')}
+        </Button>
+      )}
+      {payout.isError && (
+        <p role='alert' className='text-destructive text-sm'>
+          {t('Unable to load payout details')}
+        </p>
+      )}
+      {payout.isSuccess && !payout.data?.success && !details && (
+        <p role='alert' className='text-destructive text-sm'>
+          {t('Unable to load payout details')}
+        </p>
+      )}
     </div>
   )
 }
@@ -635,6 +697,9 @@ function ReviewCard(props: {
                 ? formatD2SMoney(row.amount_minor, row.currency, props.locale)
                 : (row.amount_minor ?? row.reason)}
             </div>
+            {props.kind === 'withdrawal' && row.status === 'pending' && (
+              <WithdrawalPayoutReveal withdrawalID={row.id} />
+            )}
             {row.status === 'pending' && (
               <ReviewActions
                 id={row.id}

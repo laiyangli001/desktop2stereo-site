@@ -5669,6 +5669,10 @@
     "Support ticket pages": "工單分頁",
     "Page {{page}} of {{pages}}": "第 {{page}} 頁，共 {{pages}} 頁",
     "Sending…": "正在提交…",
-    "In progress": "處理中"
+    "In progress": "處理中",
+    "View payout details": "查看提款收款資料",
+    "Hide payout details": "隱藏提款收款資料",
+    "Loading payout details": "正在載入提款收款資料",
+    "Unable to load payout details": "無法載入提款收款資料"
   }
 }

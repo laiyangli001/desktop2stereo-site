@@ -5669,6 +5669,10 @@
     "Support ticket pages": "お問い合わせ一覧のページ",
     "Page {{page}} of {{pages}}": "{{pages}}ページ中{{page}}ページ目",
     "Sending…": "送信中…",
-    "In progress": "進行中"
+    "In progress": "進行中",
+    "View payout details": "振込先情報を表示",
+    "Hide payout details": "振込先情報を隠す",
+    "Loading payout details": "振込先情報を読み込み中",
+    "Unable to load payout details": "振込先情報を読み込めません"
   }
 }

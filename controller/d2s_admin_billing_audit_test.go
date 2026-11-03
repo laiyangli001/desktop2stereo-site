@@ -85,6 +85,22 @@ func TestD2SAdminBillingMutationsAndSensitiveReadsAreAudited(t *testing.T) {
 	context, recorder := d2sAdminBillingAuditContext(http.MethodGet, "/api/v1/admin/withdrawals", "")
 	D2SAdminWithdrawals(context)
 	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.NotContains(t, recorder.Body.String(), "user@example.com")
+	assert.NotContains(t, recorder.Body.String(), "Test User")
+
+	context, recorder = d2sAdminBillingAuditContext(http.MethodGet, "/api/v1/admin/withdrawals/admin-audit-withdrawal/payout", "")
+	context.Params = gin.Params{{Key: "id", Value: "admin-audit-withdrawal"}}
+	D2SAdminWithdrawalPayout(context)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "user@example.com")
+	assert.Contains(t, recorder.Body.String(), "Test User")
+
+	context, recorder = d2sAdminBillingAuditContext(http.MethodGet, "/api/v1/withdrawal/status", "")
+	context.Set("id", 9001)
+	D2SWithdrawalStatus(context)
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.NotContains(t, recorder.Body.String(), "user@example.com")
+	assert.NotContains(t, recorder.Body.String(), "Test User")
 	for _, test := range []struct {
 		path   string
 		handle gin.HandlerFunc
@@ -131,7 +147,7 @@ func TestD2SAdminBillingMutationsAndSensitiveReadsAreAudited(t *testing.T) {
 		assert.Equal(t, "SUCCESS", audit.Result)
 	}
 	for _, operation := range []string{
-		"VIEW_WITHDRAWALS", "VIEW_ADMIN_ORDERS", "VIEW_PAYMENT_EVENTS", "VIEW_BALANCES",
+		"VIEW_WITHDRAWALS", "VIEW_WITHDRAWAL_PAYOUT", "VIEW_ADMIN_ORDERS", "VIEW_PAYMENT_EVENTS", "VIEW_BALANCES",
 		"VIEW_LICENSES", "VIEW_UNBIND_REQUESTS", "VIEW_SIGNING_KEYS",
 		"REVIEW_WITHDRAWAL", "REVIEW_MANUAL_UNBIND", "SET_USER_REGION", "RETIRE_SIGNING_KEY",
 	} {
@@ -252,4 +268,32 @@ func TestD2SAdminSensitiveListReadsFailClosedWhenAuditCannotBeStored(t *testing.
 		assert.NotContains(t, recorder.Body.String(), test.marker, test.path)
 		assert.NotContains(t, recorder.Body.String(), "Private Name", test.path)
 	}
+	context, recorder := d2sAdminBillingAuditContext(http.MethodGet, "/api/v1/admin/withdrawals/admin-audit-fail-closed-withdrawal/payout", "")
+	context.Params = gin.Params{{Key: "id", Value: "admin-audit-fail-closed-withdrawal"}}
+	D2SAdminWithdrawalPayout(context)
+	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), `"code":"AUDIT_WRITE_FAILED"`)
+	assert.NotContains(t, recorder.Body.String(), "private@example.com")
+	assert.NotContains(t, recorder.Body.String(), "Private Name")
+}
+
+func TestD2SAdminWithdrawalPayoutDoesNotReturnClosedRequestDetails(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupD2SAdminBillingAuditDB(t)
+	require.NoError(t, db.Create(&model.D2SWithdrawalRequest{
+		ID: "closed-withdrawal", UserID: 9101, Currency: "CNY", AmountMinor: 5000,
+		AlipayAccount: "closed@example.com", RealName: "Closed Recipient", Status: "paid", CreatedAt: 2_000_500_200,
+	}).Error)
+
+	context, recorder := d2sAdminBillingAuditContext(http.MethodGet, "/api/v1/admin/withdrawals/closed-withdrawal/payout", "")
+	context.Params = gin.Params{{Key: "id", Value: "closed-withdrawal"}}
+	D2SAdminWithdrawalPayout(context)
+	assert.Equal(t, http.StatusNotFound, recorder.Code)
+	assert.NotContains(t, recorder.Body.String(), "closed@example.com")
+	assert.NotContains(t, recorder.Body.String(), "Closed Recipient")
+
+	var audit model.D2SAdminOperationAudit
+	require.NoError(t, db.Where("operation_type = ?", "VIEW_WITHDRAWAL_PAYOUT").Take(&audit).Error)
+	assert.Equal(t, "FAILURE", audit.Result)
+	assert.Contains(t, audit.DetailsJSON, "not_found")
 }
