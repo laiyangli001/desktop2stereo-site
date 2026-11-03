@@ -181,7 +181,7 @@ export async function getD2SOrders(): Promise<
 
 export async function getD2SCheckoutProviders() {
   const response = await api.get('/api/v1/orders/providers')
-  return response.data as D2SResponse<{ providers: string[] }>
+  return response.data as D2SResponse<{ enabled: boolean; providers: string[] }>
 }
 
 export type D2SOrderRequest = {

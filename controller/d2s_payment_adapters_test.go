@@ -601,6 +601,7 @@ func TestD2SPaymentEventRejectsProviderRegionMismatch(t *testing.T) {
 }
 
 func TestD2SOrderProvidersHidesBalanceUntilRegionIsLocked(t *testing.T) {
+	t.Setenv("D2S_PURCHASES_ENABLED", "true")
 	db, err := gorm.Open(sqlite.Open("file:d2s_provider_visibility_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	previousDB, previousLogDB := model.DB, model.LOG_DB
@@ -662,6 +663,7 @@ func TestD2SEpayCheckoutRetryKeepsStableSignedOrderIdentity(t *testing.T) {
 }
 
 func TestD2SOrderProvidersExposesConfiguredPaymentFM(t *testing.T) {
+	t.Setenv("D2S_PURCHASES_ENABLED", "true")
 	db, err := gorm.Open(sqlite.Open("file:d2s_paymentfm_provider_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	previousDB, previousLogDB := model.DB, model.LOG_DB

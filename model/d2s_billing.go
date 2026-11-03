@@ -37,6 +37,7 @@ var (
 	ErrD2SQuoteChanged         = errors.New("order quote has changed")
 	ErrD2SOrderNotFound        = errors.New("order not found")
 	ErrD2SOrderState           = errors.New("order state does not allow this operation")
+	ErrD2SPurchasesDisabled    = errors.New("D2S purchases are currently disabled")
 	ErrD2SPaidRevokeLimit      = errors.New("monthly paid revoke limit reached")
 	ErrD2SPaidRevokePending    = errors.New("another paid revoke order is pending")
 	ErrD2SInsufficientBalance  = errors.New("insufficient balance")

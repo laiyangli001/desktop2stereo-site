@@ -61,12 +61,15 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 			})
 
 			models := []any{
+				&Token{}, &TwoFA{}, &TwoFABackupCode{}, &UserSession{}, &AuthFlow{},
+				&PasskeyCredential{}, &UserOAuthBinding{}, &ExternalIdentityClaim{},
 				&User{}, &D2SUserProfile{}, &D2SLicense{}, &D2SDeviceBinding{}, &D2SLicenseEvent{},
 				&D2SDeviceCode{}, &D2SOfflineEntitlement{}, &D2SOnlineLease{}, &D2SFreeRevokeCooldown{},
 				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
 				&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
 				&D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
 				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{}, &D2SAdminExportApproval{}, &D2SUserSecurityControl{}, &D2SSupportTicket{},
+				&D2SIdentityVerification{}, // Simulate an older database that still has the deprecated table.
 			}
 			require.NoError(t, db.AutoMigrate(models...))
 			require.NoError(t, db.AutoMigrate(models...), "migration must be idempotent")
@@ -142,7 +145,7 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 
 			updatedTicket, err := UpdateD2SSupportTicketWithAudit(
 				ticket.ID, D2SSupportInProgress, "We received your request.", 1,
-				"matrix-admin@example.com", "192.0.2.10", `{"status":"IN_PROGRESS"}`,
+				"matrix-admin@example.com", "192.0.2.10",
 			)
 			require.NoError(t, err)
 			assert.Equal(t, D2SSupportInProgress, updatedTicket.Status)
@@ -151,10 +154,11 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 			require.Len(t, userTickets, 1)
 			assert.Equal(t, "We received your request.", userTickets[0].AdminReply)
 			var supportAudit D2SAdminOperationAudit
-			require.NoError(t, db.Where("operation_type = ? AND target_resource = ?", "UPDATE_SUPPORT_TICKET", "d2s_support_tickets:"+ticket.ID).First(&supportAudit).Error)
+			require.NoError(t, db.Where("operation_type = ? AND target_resource = ?", "UPDATE_SUPPORT_TICKET", "").First(&supportAudit).Error)
 			assert.Equal(t, "SUCCESS", supportAudit.Result)
 			assert.Equal(t, 1, supportAudit.OperatorID)
 			assert.Equal(t, "192.0.2.10", supportAudit.SourceIP)
+			assert.Empty(t, supportAudit.DetailsJSON)
 
 			auditTime := time.Now().UTC().Unix()
 			var profile D2SUserProfile
@@ -236,6 +240,90 @@ func TestD2SSchemaConfiguredDatabases(t *testing.T) {
 			reconciliation, err := ReconcileD2SPayments(reconcileNow-1, reconcileNow+30)
 			require.NoError(t, err)
 			assert.Contains(t, reconciliation.Mismatches, D2SReconciliationMismatch{OrderID: order.ID, Kind: "pending_expired"})
+
+			deletedEmail := "delete-" + test.name + "-" + shortSuffix + "@example.com"
+			deletedUser := User{
+				Username: "deleted-" + shortSuffix, Password: "unused-hash", AffCode: "del-" + test.name + "-" + shortSuffix,
+				Email: deletedEmail, EmailVerifiedAt: time.Now().UTC().Unix(),
+				Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+			}
+			require.NoError(t, db.Create(&deletedUser).Error)
+			require.NoError(t, db.Create(&D2SUserProfile{UserID: deletedUser.Id, Region: D2SRegionINTL, EmailVerified: true}).Error)
+			require.NoError(t, db.Create(&D2SUserSecurityControl{UserID: deletedUser.Id, Reason: "matrix private note", UpdatedAt: reconcileNow}).Error)
+			require.NoError(t, db.Create(&D2SIdentityVerification{
+				UserID: deletedUser.Id, IDDocumentNumberHash: strings.Repeat("a", 64),
+				IDDocumentCountry: "US", Status: "PENDING",
+			}).Error)
+			require.NoError(t, db.Create(&D2SRegistrationRecord{
+				ID: "matrix-registration-" + suffix, UserID: deletedUser.Id, Email: deletedEmail,
+				RegisterIP: "192.0.2.11", RegisterTime: reconcileNow,
+				EmailVerified: true, EmailVerifiedAt: reconcileNow,
+			}).Error)
+			deletedTicket := &D2SSupportTicket{
+				UserID: deletedUser.Id, Category: "ACCOUNT", ContactEmail: deletedEmail,
+				Subject: "Account deletion matrix test", Message: "Retain this ticket according to its own schedule.",
+			}
+			require.NoError(t, CreateD2SSupportTicket(deletedTicket))
+			require.NoError(t, db.Create(&Token{UserId: deletedUser.Id, Key: "matrix-delete-token-" + suffix}).Error)
+			require.NoError(t, db.Create(&TwoFA{UserId: deletedUser.Id, Secret: "matrix-private-2fa-secret"}).Error)
+			require.NoError(t, db.Create(&TwoFABackupCode{UserId: deletedUser.Id, CodeHash: "matrix-private-backup-hash"}).Error)
+			require.NoError(t, db.Create(&UserSession{
+				SID: "matrix-delete-session-" + suffix, UserID: deletedUser.Id,
+				Version: 1, UserAuthVersion: 1, Status: UserSessionStatusActive,
+				RefreshHash: strings.Repeat("b", 64), LoginMethod: "password",
+				LastActiveAt: reconcileNow, ExpiresAt: reconcileNow + 3600,
+			}).Error)
+			require.NoError(t, db.Create(&AuthFlow{
+				TokenHash: strings.Repeat("c", 64), Purpose: AuthFlowPurposeTwoFALogin,
+				UserId: deletedUser.Id, ExpiresAt: time.Now().Add(time.Minute),
+			}).Error)
+			require.NoError(t, db.Create(&PasskeyCredential{
+				UserID: deletedUser.Id, CredentialID: "matrix-delete-credential-" + suffix, PublicKey: "matrix-public-key",
+			}).Error)
+			require.NoError(t, db.Create(&UserOAuthBinding{
+				UserId: deletedUser.Id, ProviderId: 9001, ProviderUserId: "matrix-delete-provider-" + suffix,
+			}).Error)
+			require.NoError(t, db.Create(&ExternalIdentityClaim{
+				Provider: ExternalIdentityProviderTelegram, Subject: "matrix-delete-subject-" + suffix, UserId: deletedUser.Id,
+			}).Error)
+
+			previousRedisEnabled := common.RedisEnabled
+			common.RedisEnabled = false
+			deleteErr := AnonymizeAndDeleteUserAccount(deletedUser.Id, D2SActionLogInput{SourceIP: "192.0.2.11", UserAgent: "database-matrix"})
+			common.RedisEnabled = previousRedisEnabled
+			require.NoError(t, deleteErr)
+
+			var anonymized User
+			require.NoError(t, db.Unscoped().First(&anonymized, "id = ?", deletedUser.Id).Error)
+			assert.True(t, anonymized.DeletedAt.Valid)
+			assert.Equal(t, common.UserStatusDisabled, anonymized.Status)
+			assert.NotEqual(t, deletedEmail, anonymized.Email)
+			assert.Contains(t, anonymized.Email, "@d2s.invalid")
+			for _, record := range []any{
+				&Token{}, &TwoFA{}, &TwoFABackupCode{}, &UserSession{}, &AuthFlow{},
+				&PasskeyCredential{}, &UserOAuthBinding{}, &ExternalIdentityClaim{},
+				&D2SUserProfile{}, &D2SUserSecurityControl{}, &D2SIdentityVerification{},
+			} {
+				var count int64
+				require.NoError(t, db.Unscoped().Model(record).Where("user_id = ?", deletedUser.Id).Count(&count).Error)
+				assert.Zero(t, count)
+			}
+			var retainedRegistration D2SRegistrationRecord
+			require.NoError(t, db.First(&retainedRegistration, "user_id = ?", deletedUser.Id).Error)
+			assert.Equal(t, deletedEmail, retainedRegistration.Email)
+			var retainedTicket D2SSupportTicket
+			require.NoError(t, db.First(&retainedTicket, "id = ?", deletedTicket.ID).Error)
+			assert.Equal(t, deletedEmail, retainedTicket.ContactEmail)
+			assert.Equal(t, D2SSupportClosed, retainedTicket.Status)
+			assert.Greater(t, retainedTicket.ClosedAt, int64(0))
+			var deletionLog D2SUserActionLog
+			require.NoError(t, db.Where("user_id = ? AND action_type = ?", deletedUser.Id, D2SActionProfileUpdate).First(&deletionLog).Error)
+			assert.Equal(t, deletedEmail, deletionLog.Email)
+			assert.Equal(t, D2SActionResultSuccess, deletionLog.ResultStatus)
+			validHash, err := VerifyD2SUserActionLogHash(deletionLog.ID)
+			require.NoError(t, err)
+			assert.True(t, validHash)
+			require.NoError(t, EnsureEmailAvailable(deletedEmail, 0))
 		})
 	}
 }
@@ -275,11 +363,13 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 			})
 
 			models := []any{
-				&User{}, &D2SUserProfile{}, &D2SLicense{}, &D2SDeviceBinding{}, &D2SLicenseEvent{},
+				&User{}, &Token{}, &TwoFA{}, &TwoFABackupCode{}, &UserSession{}, &AuthFlow{},
+				&PasskeyCredential{}, &UserOAuthBinding{}, &ExternalIdentityClaim{},
+				&D2SUserProfile{}, &D2SLicense{}, &D2SDeviceBinding{}, &D2SLicenseEvent{},
 				&D2SDeviceCode{}, &D2SOfflineEntitlement{}, &D2SOnlineLease{}, &D2SFreeRevokeCooldown{},
-				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
-				&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
-				&D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
+				&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SSupportTicket{},
+				&D2SPaymentEvent{}, &D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{},
+				&D2SWithdrawalRequest{}, &D2SSigningKey{}, &D2SUserActionLog{}, &D2SRegistrationRecord{},
 				&D2SAdminOperationAudit{}, &D2SAuditRetentionRun{}, &D2SUserSecurityControl{},
 			}
 			require.NoError(t, db.AutoMigrate(models...))
@@ -465,6 +555,57 @@ func TestD2SConcurrentCriticalPaths(t *testing.T) {
 			unbindUser := User{Username: "unbind-" + test.name + "-" + strconv.FormatInt(suffix, 10), Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(), Email: "unbind-" + test.name + "-" + strconv.FormatInt(suffix, 10) + "@example.com", AffCode: "unbind-" + strconv.FormatInt(suffix, 10), Role: common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1}
 			require.NoError(t, db.Create(&unbindUser).Error)
 			assertOnlyOneConcurrentManualUnbindApproval(t, unbindUser.Id)
+
+			previousRedisEnabled := common.RedisEnabled
+			common.RedisEnabled = false
+			t.Cleanup(func() { common.RedisEnabled = previousRedisEnabled })
+			for attempt := 0; attempt < 5; attempt++ {
+				tracingSuffix := strconv.FormatInt(suffix+int64(attempt), 10)
+				raceUser := User{
+					Username: "support-delete-race-" + test.name + "-" + tracingSuffix,
+					Password: "unused-hash", EmailVerifiedAt: time.Now().UTC().Unix(),
+					Email:   "support-delete-race-" + test.name + "-" + tracingSuffix + "@example.com",
+					AffCode: "sdr" + tracingSuffix,
+					Role:    common.RoleCommonUser, Status: common.UserStatusEnabled, Group: "default", AuthVersion: 1,
+				}
+				require.NoError(t, db.Create(&raceUser).Error)
+				raceTicket := &D2SSupportTicket{
+					UserID: raceUser.Id, Category: "ACCOUNT", ContactEmail: raceUser.Email,
+					Subject: "Concurrent account deletion", Message: "Verify ticket closure races with account deletion.",
+				}
+				start := make(chan struct{})
+				type submissionResult struct {
+					err error
+					id  string
+				}
+				submission := make(chan submissionResult, 1)
+				deletion := make(chan error, 1)
+				go func() {
+					<-start
+					err := CreateD2SSupportTicket(raceTicket)
+					submission <- submissionResult{err: err, id: raceTicket.ID}
+				}()
+				go func() {
+					<-start
+					deletion <- AnonymizeAndDeleteUserAccount(raceUser.Id, D2SActionLogInput{
+						SourceIP: "192.0.2.12", UserAgent: "database-matrix-race",
+					})
+				}()
+				close(start)
+				createResult := <-submission
+				require.NoError(t, <-deletion)
+				if createResult.err == nil {
+					var storedTicket D2SSupportTicket
+					require.NoError(t, db.First(&storedTicket, "id = ?", createResult.id).Error)
+					assert.Equal(t, D2SSupportClosed, storedTicket.Status)
+					assert.Greater(t, storedTicket.ClosedAt, int64(0))
+				} else {
+					assert.ErrorIs(t, createResult.err, ErrD2SSupportOwnerUnavailable)
+					var ticketCount int64
+					require.NoError(t, db.Model(&D2SSupportTicket{}).Where("user_id = ?", raceUser.Id).Count(&ticketCount).Error)
+					assert.Zero(t, ticketCount)
+				}
+			}
 		})
 	}
 }

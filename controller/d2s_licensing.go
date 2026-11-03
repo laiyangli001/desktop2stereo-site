@@ -95,6 +95,8 @@ func d2sError(c *gin.Context, err error) {
 		status, code = http.StatusBadRequest, "payment_mismatch"
 	case errors.Is(err, model.ErrD2SCheckoutUnavailable):
 		status, code = http.StatusServiceUnavailable, "checkout_unavailable"
+	case errors.Is(err, model.ErrD2SPurchasesDisabled):
+		status, code = http.StatusServiceUnavailable, "purchases_disabled"
 	}
 	c.JSON(status, gin.H{
 		"version": 1, "success": false, "request_id": d2sRequestID(c),

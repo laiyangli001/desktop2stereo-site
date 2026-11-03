@@ -32,7 +32,7 @@ type d2sOrderRequest struct {
 }
 
 func D2SOrderPreview(c *gin.Context) {
-	if d2sRejectBlockedPurchase(c, "preview") {
+	if d2sRejectPurchasesDisabled(c) || d2sRejectBlockedPurchase(c, "preview") {
 		return
 	}
 	var request d2sOrderRequest
@@ -73,7 +73,7 @@ func replayD2SOrder(c *gin.Context, userID int, request d2sOrderRequest) bool {
 }
 
 func createD2SOrder(c *gin.Context, requiredProduct string) {
-	if d2sRejectBlockedPurchase(c, "create") {
+	if d2sRejectPurchasesDisabled(c) || d2sRejectBlockedPurchase(c, "create") {
 		return
 	}
 	var request d2sOrderRequest
@@ -148,6 +148,10 @@ func D2SOrderList(c *gin.Context) {
 }
 
 func D2SOrderProviders(c *gin.Context) {
+	if !common.GetEnvOrDefaultBool("D2S_PURCHASES_ENABLED", false) {
+		d2sSuccess(c, http.StatusOK, gin.H{"enabled": false, "providers": []string{}})
+		return
+	}
 	var profile model.D2SUserProfile
 	if err := model.DB.Where("user_id = ?", c.GetInt("id")).First(&profile).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		d2sError(c, err)
@@ -197,7 +201,7 @@ func D2SOrderProviders(c *gin.Context) {
 			}
 		}
 	}
-	d2sSuccess(c, http.StatusOK, gin.H{"providers": providers})
+	d2sSuccess(c, http.StatusOK, gin.H{"enabled": true, "providers": providers})
 }
 
 func D2SLicensePaidRevoke(c *gin.Context) {

@@ -104,7 +104,7 @@ export function DeleteAccountDialog({
         </>
       }
       description={t(
-        'This action cannot be undone. This will permanently delete your account and remove all your data from our servers.'
+        'This action cannot be undone. Your account profile will be anonymized and sign-in credentials removed. Security records are retained for at least 366 days, and support tickets until 6 months after closure.'
       )}
       contentClassName='sm:max-w-md'
       titleClassName='text-destructive flex items-center gap-2'

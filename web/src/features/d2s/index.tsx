@@ -453,7 +453,10 @@ export function D2SWorkspace(
       orders: orderRows,
     })
   }, [orderRows, onWalletSummaryChange, view])
-  const enabledCheckoutProviders = checkoutProviders.data?.data?.providers ?? []
+  const purchaseEnabled = checkoutProviders.data?.data?.enabled === true
+  const enabledCheckoutProviders = purchaseEnabled
+    ? (checkoutProviders.data?.data?.providers ?? [])
+    : []
   const quoteMutation = useMutation({
     mutationFn: async (request: {
       provider: D2SPurchaseProvider
@@ -630,6 +633,11 @@ export function D2SWorkspace(
             <CardDescription>
               {t('Use your locked-region balance for a full payment.')}
             </CardDescription>
+            {!purchaseEnabled && (
+              <p role='status' className='text-muted-foreground text-sm'>
+                {t('Purchases are currently unavailable.')}
+              </p>
+            )}
           </CardHeader>
           <CardContent
             className='flex flex-wrap items-center gap-3'
@@ -642,7 +650,7 @@ export function D2SWorkspace(
                 autoComplete='off'
                 className='h-8 rounded-lg border bg-transparent px-2 text-sm'
                 name='purchase_type'
-                disabled={purchasePending}
+                disabled={!purchaseEnabled || purchasePending}
                 value={purchaseProduct}
                 onChange={(event) =>
                   setPurchaseProduct(event.target.value as D2SPurchaseProduct)
@@ -663,7 +671,7 @@ export function D2SWorkspace(
                   autoComplete='off'
                   className='h-8 max-w-56 rounded-lg border bg-transparent px-2 text-sm'
                   name='license_id'
-                  disabled={purchasePending}
+                  disabled={!purchaseEnabled || purchasePending}
                   value={purchaseLicenseID}
                   onChange={(event) => setPurchaseLicenseID(event.target.value)}
                 >

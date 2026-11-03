@@ -383,6 +383,7 @@ func InitResources() error {
 
 	service.StartAuthArtifactCleanup()
 	service.StartD2SArtifactCleanup()
+	service.StartD2SSupportTicketRetentionCleanup()
 
 	return nil
 }
