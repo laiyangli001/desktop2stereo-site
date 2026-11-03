@@ -42,8 +42,24 @@ vi.mock('@/lib/auth-session', () => ({
 
 vi.mock('@tanstack/react-router', () => ({
   createFileRoute: () => (options: unknown) => options,
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
+  Link: ({
+    children,
+    onClick,
+    to,
+  }: {
+    children: React.ReactNode
+    onClick?: (event: React.MouseEvent<HTMLAnchorElement>) => void
+    to: string
+  }) => (
+    <a
+      href={to}
+      onClick={(event) => {
+        event.preventDefault()
+        onClick?.(event)
+      }}
+    >
+      {children}
+    </a>
   ),
   redirect: supportMocks.redirect,
   useRouterState: ({
@@ -140,7 +156,7 @@ describe('D2S support form', () => {
       }),
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<D2SSupportFloatingButton />)
+    const { rerender } = render(<D2SSupportFloatingButton />)
 
     const toggle = screen.getByRole('button', {
       name: 'Complaints and support',
@@ -170,9 +186,14 @@ describe('D2S support form', () => {
       cache: 'no-store',
     })
 
-    await user.click(
-      screen.getByRole('button', { name: 'Close support options' })
-    )
+    await user.click(complaintLink)
+    supportMocks.pathname = '/support'
+    rerender(<D2SSupportFloatingButton />)
+    expect(
+      screen.getByRole('button', {
+        name: 'Complaints and support',
+      })
+    ).toHaveAttribute('aria-expanded', 'false')
     expect(
       screen.queryByRole('link', { name: 'Submit a complaint or question' })
     ).not.toBeInTheDocument()
