@@ -224,16 +224,23 @@ func D2SAdminBatchEmergencyPreview(c *gin.Context) {
 func D2SAdminBatchEmergencyApply(c *gin.Context) {
 	var request d2SBatchApplyRequest
 	if err := common.DecodeJson(c.Request.Body, &request); err != nil || !request.Confirmed || request.ConfirmationCount < 0 {
-		respondD2SAdminAuditedFailure(c, "EMERGENCY_LOCK", "user_accounts:batch", "explicit_confirmation_required", http.StatusBadRequest, "EXPLICIT_CONFIRMATION_REQUIRED")
+		respondD2SAdminAuditedFailure(c, "BATCH_EMERGENCY_APPLY", "user_accounts:batch", "explicit_confirmation_required", http.StatusBadRequest, "EXPLICIT_CONFIRMATION_REQUIRED")
 		return
 	}
 	now := time.Now().UTC().Unix()
 	var count int64
 	var previewCount, currentCount int64
-	operationType := "EMERGENCY_LOCK"
+	operationType := "BATCH_EMERGENCY_APPLY"
 	err := model.DB.Transaction(func(tx *gorm.DB) error {
 		var preview model.D2SAdminBatchPreview
 		if err := tx.Where("id = ? AND admin_id = ? AND consumed_at = 0 AND expires_at > ?", strings.TrimSpace(request.PreviewID), c.GetInt("d2s_admin_id"), now).First(&preview).Error; err != nil {
+			var auditPreview model.D2SAdminBatchPreview
+			if auditErr := tx.Where("id = ? AND admin_id = ?", strings.TrimSpace(request.PreviewID), c.GetInt("d2s_admin_id")).First(&auditPreview).Error; auditErr == nil {
+				var actions d2SBatchActions
+				if common.Unmarshal([]byte(auditPreview.ActionJSON), &actions) == nil {
+					operationType = d2SBatchEmergencyOperationType(actions)
+				}
+			}
 			return err
 		}
 		previewCount = preview.MatchCount
