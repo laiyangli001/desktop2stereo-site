@@ -30,7 +30,7 @@ func TestD2SOrderCreateRejectsChangedServerQuoteBeforeCreatingOrder(t *testing.T
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(
+	require.NoError(t, db.AutoMigrate(&model.Option{},
 		&model.User{}, &model.D2SUserProfile{}, &model.D2SLicense{}, &model.D2SLicenseEvent{},
 		&model.D2SOrder{}, &model.D2SUserSecurityControl{}, &model.D2SUserActionLog{},
 	))
@@ -103,7 +103,7 @@ func TestD2SOrderCreateReplaysHistoricalQuoteSnapshot(t *testing.T) {
 			_ = sqlDB.Close()
 		}
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SOrder{}, &model.D2SUserSecurityControl{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.D2SOrder{}, &model.D2SUserSecurityControl{}))
 	historicalOrder := model.D2SOrder{
 		ID: "historical-quote-order", UserID: 1402, Product: model.D2SOrderProductLicense,
 		ProductID: model.D2SOrderProductLicense, Provider: "stripe", PaymentMethod: "stripe",
@@ -138,7 +138,7 @@ func TestD2SSpecializedOrderEndpointsRejectWrongProduct(t *testing.T) {
 	previousDB := model.DB
 	db, err := gorm.Open(sqlite.Open("file:d2s_specialized_order_product_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.D2SUserSecurityControl{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.D2SUserSecurityControl{}))
 	model.DB = db
 	t.Cleanup(func() {
 		model.DB = previousDB
@@ -174,6 +174,12 @@ func TestD2SSpecializedOrderEndpointsRejectWrongProduct(t *testing.T) {
 }
 
 func TestD2SPurchaseGateDefaultsClosed(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.Option{}))
+	previousDB := model.DB
+	model.DB = db
+	t.Cleanup(func() { model.DB = previousDB })
 	gin.SetMode(gin.TestMode)
 	t.Setenv("D2S_PURCHASES_ENABLED", "")
 
@@ -234,7 +240,7 @@ func TestD2SEmergencyPurchaseBlockRejectsEveryPaidEntryPoint(t *testing.T) {
 	previousDB := model.DB
 	db, err := gorm.Open(sqlite.Open("file:d2s_emergency_purchase_block_test?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.D2SUserSecurityControl{}, &model.D2SOrder{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.D2SUserSecurityControl{}, &model.D2SOrder{}))
 	require.NoError(t, db.Create(&model.D2SUserSecurityControl{UserID: 1902, PurchaseBlocked: true}).Error)
 	model.DB = db
 	t.Cleanup(func() {

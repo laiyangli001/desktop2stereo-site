@@ -1,5 +1,10 @@
 {
   "translation": {
+    "Desktop2Stereo purchase master switch": "Desktop2Stereo 購買總開關",
+    "Applies to Desktop2Stereo purchases across all payment channels. Changes take effect immediately. Disabling blocks new quotes, orders and checkout; existing payment notifications and refunds continue.": "統一控制 Desktop2Stereo 各支付渠道的購買入口，修改後立即生效。關閉後停止新的報價、下單和結帳，已付款訂單的通知及退款處理不受影響。",
+    "Purchase settings saved": "購買設定已儲存",
+    "Unable to save purchase settings": "無法儲存購買設定",
+    "Unable to load purchase settings": "無法載入購買設定",
     "Alipay settings saved": "支付寶設定已儲存",
     "Using server environment settings": "已切換為伺服器環境變數設定",
     "Alipay PC payment configuration": "支付寶電腦網站支付設定",

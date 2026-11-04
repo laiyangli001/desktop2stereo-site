@@ -8,6 +8,9 @@ import (
 
 // The parent option group uses the same RootAuth as the other payment settings.
 func registerSystemAlipayRoutes(options *gin.RouterGroup) {
+	purchases := options.Group("/d2s-purchases", middleware.D2SSystemPaymentIdentity())
+	purchases.GET("", controller.D2SSystemPurchaseSettings)
+	purchases.PUT("", controller.D2SSystemPurchaseSettings)
 	alipay := options.Group("/alipay", middleware.D2SSystemPaymentIdentity())
 	alipay.GET("/settings", controller.D2SAdminAlipayPCSettings)
 	alipay.PUT("/settings", controller.D2SAdminAlipayPCSettings)

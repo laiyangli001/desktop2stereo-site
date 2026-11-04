@@ -147,6 +147,9 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	switch option.Key {
+	case model.D2SPurchasesEnabledOption:
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请通过支付设置页的购买总开关修改"})
+		return
 	case "D2SUpdateRepository":
 		if !projectUpdateRepositoryPattern.MatchString(strings.TrimSpace(option.Value.(string))) {
 			common.ApiErrorMsg(c, "更新仓库必须是 owner/repository 格式")

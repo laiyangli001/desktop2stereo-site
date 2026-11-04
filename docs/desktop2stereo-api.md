@@ -126,6 +126,14 @@ CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置�
 的已规范化订单事件直接送入同一 D2S 事务处理器；普通 new-api 充值仍沿用原有回调逻辑。
 PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 
+## 系统支付购买开关
+
+- `GET /api/option/d2s-purchases`：返回 `{"success":true,"data":{"enabled":false}}`。
+- `PUT /api/option/d2s-purchases`：请求 `{"enabled":true|false}`，布尔字段必填；与其他支付设置一样，仅允许普通系统 root 管理员，独立安全后台 Cookie 不可授权。
+- 修改和 `UPDATE_PURCHASE_SETTINGS` 审计在同一事务保存，包含操作者、来源 IP、时间、启停状态及 `operator_realm=system_admin`。通用 option 写接口禁止修改该键。
+- 保存的 `D2SPurchasesEnabled` 优先于旧环境变量 `D2S_PURCHASES_ENABLED`；未保存时沿用环境变量（默认关闭）。每次请求读取数据库，跨节点生效。数据库读取错误拒绝购买，返回 HTTP 503。
+- 关闭会拒绝新报价、下单和结账；支付通知、已付款履约、退款和对账继续处理。
+
 ## 管理 API
 
 - `GET /api/v1/admin/licenses`（每项包含当前用户区域 `region`；空字符串表示尚未锁定）

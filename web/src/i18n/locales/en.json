@@ -1,5 +1,10 @@
 {
   "translation": {
+    "Desktop2Stereo purchase master switch": "Desktop2Stereo purchase master switch",
+    "Applies to Desktop2Stereo purchases across all payment channels. Changes take effect immediately. Disabling blocks new quotes, orders and checkout; existing payment notifications and refunds continue.": "Applies to Desktop2Stereo purchases across all payment channels. Changes take effect immediately. Disabling blocks new quotes, orders and checkout; existing payment notifications and refunds continue.",
+    "Purchase settings saved": "Purchase settings saved",
+    "Unable to save purchase settings": "Unable to save purchase settings",
+    "Unable to load purchase settings": "Unable to load purchase settings",
     "Alipay settings saved": "Alipay settings saved",
     "Using server environment settings": "Using server environment settings",
     "Alipay PC payment configuration": "Alipay PC payment configuration",

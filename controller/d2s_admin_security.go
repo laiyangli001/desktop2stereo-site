@@ -139,7 +139,12 @@ func D2SAdminSetEmergencyControl(c *gin.Context) {
 }
 
 func d2sRejectPurchasesDisabled(c *gin.Context) bool {
-	if common.GetEnvOrDefaultBool("D2S_PURCHASES_ENABLED", false) {
+	enabled, err := model.D2SPurchasesEnabled()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "code": "PURCHASE_SETTINGS_UNAVAILABLE"})
+		return true
+	}
+	if enabled {
 		return false
 	}
 	d2sError(c, model.ErrD2SPurchasesDisabled)

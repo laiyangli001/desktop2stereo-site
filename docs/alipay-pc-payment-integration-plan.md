@@ -30,6 +30,8 @@
 
 ### 4. 前台支付选择和配置文档
 
+- 普通系统后台支付设置页顶部提供“Desktop2Stereo 购买总开关”，由系统 root 管理员操作。保存后立即控制各渠道的新报价、下单和结账；不停止已有支付通知、结算、退款或对账。设置保存到现有 `options` 表的 `D2SPurchasesEnabled`，与 `UPDATE_PURCHASE_SETTINGS` 审计在同一事务提交。未保存时沿用 `D2S_PURCHASES_ENABLED`（默认 false）；保存后数据库值优先，无需重启。后台配置加载失败时开关不可操作，购买请求读取失败时服务端拒绝放行。
+
 - 支付宝渠道保持首位、标准 Logo 和“推荐”标识；渠道可用时默认选中支付宝，用户可切换已开放渠道。
 - 普通系统后台提供支付宝配置表单：App ID、Seller ID、正式/沙箱网关、支付通知地址、返回地址、RSA2 商户私钥、支付宝公钥、渠道开关和二维码模式。私钥及支付宝公钥使用 AES-GCM 加密存入数据库，读取接口只返回是否已配置；后台操作审计记录修改字段，不记录密钥内容。稳定的 `CRYPTO_SECRET`（缺省从 `SESSION_SECRET` 派生）用于加密，轮换前必须迁移密文。保留环境变量作为回退来源。应用网关地址固定为 `https://d2s.site/api/v1/alipay/app-gateway`，仍需在支付宝开放平台配置。
 - 支付配置入口为普通系统后台 `/system-settings/billing/payment` 的“支付宝”页签，与 Epay、Stripe 等渠道并列，使用普通系统 root 管理员登录及 `/api/option/alipay/*` 接口。独立安全审计后台 `/d2s-admin-console` 不提供支付配置或交易操作入口，其管理员 Cookie 不能调用支付管理接口。

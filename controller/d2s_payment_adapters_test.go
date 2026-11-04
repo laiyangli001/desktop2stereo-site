@@ -612,7 +612,7 @@ func TestD2SOrderProvidersHidesBalanceUntilRegionIsLocked(t *testing.T) {
 		model.DB, model.LOG_DB = previousDB, previousLogDB
 		common.SetDatabaseTypes(previousMainType, previousLogType)
 	})
-	require.NoError(t, db.AutoMigrate(&model.D2SUserProfile{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.D2SUserProfile{}))
 	require.NoError(t, db.Create(&model.D2SUserProfile{UserID: 1201, Region: "", CreatedAt: 1, UpdatedAt: 1}).Error)
 	require.NoError(t, db.Create(&model.D2SUserProfile{UserID: 1202, Region: model.D2SRegionCN, RegionLockedAt: 2, CreatedAt: 1, UpdatedAt: 2}).Error)
 
@@ -669,7 +669,7 @@ func TestD2SOrderProvidersExposesConfiguredPaymentFM(t *testing.T) {
 	previousDB, previousLogDB := model.DB, model.LOG_DB
 	model.DB, model.LOG_DB = db, db
 	t.Cleanup(func() { model.DB, model.LOG_DB = previousDB, previousLogDB })
-	require.NoError(t, db.AutoMigrate(&model.D2SUserProfile{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.D2SUserProfile{}))
 	require.NoError(t, db.Create(&model.D2SUserProfile{UserID: 1203, Region: model.D2SRegionCN, RegionLockedAt: 2, CreatedAt: 1, UpdatedAt: 2}).Error)
 
 	confirmPaymentComplianceForTest(t)

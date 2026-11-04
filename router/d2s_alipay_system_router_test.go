@@ -19,7 +19,7 @@ func TestSystemAlipayRequiresSystemRootAndAuditsItsIdentity(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&model.User{}, &model.Log{}, &model.D2SAlipayPCSettings{}, &model.D2SAdminOperationAudit{}))
+	require.NoError(t, db.AutoMigrate(&model.Option{}, &model.User{}, &model.Log{}, &model.D2SAlipayPCSettings{}, &model.D2SAdminOperationAudit{}))
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
@@ -58,7 +58,7 @@ func TestSystemAlipayRequiresSystemRootAndAuditsItsIdentity(t *testing.T) {
 		{"admin-payment-test-token", http.StatusForbidden},
 		{"root-payment-test-token", http.StatusOK},
 	} {
-		request := httptest.NewRequest(http.MethodGet, "/api/option/alipay/settings", nil)
+		request := httptest.NewRequest(http.MethodGet, "/api/option/d2s-purchases", nil)
 		request.AddCookie(&http.Cookie{Name: "d2s_admin_session", Value: "independent-security-cookie"})
 		if test.token != "" {
 			request.Header.Set("Authorization", "Bearer "+test.token)
@@ -67,6 +67,27 @@ func TestSystemAlipayRequiresSystemRootAndAuditsItsIdentity(t *testing.T) {
 		engine.ServeHTTP(response, request)
 		require.Equal(t, test.status, response.Code, response.Body.String())
 	}
+	for _, enabled := range []bool{true, false} {
+		body := "{\"enabled\":false}"
+		if enabled {
+			body = "{\"enabled\":true}"
+		}
+		request := httptest.NewRequest(http.MethodPut, "/api/option/d2s-purchases", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer root-payment-test-token")
+		response := httptest.NewRecorder()
+		engine.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+		actual, err := model.D2SPurchasesEnabled()
+		require.NoError(t, err)
+		require.Equal(t, enabled, actual)
+	}
+	var settingAudits []model.D2SAdminOperationAudit
+	require.NoError(t, db.Where("operation_type = ?", "UPDATE_PURCHASE_SETTINGS").Find(&settingAudits).Error)
+	require.Len(t, settingAudits, 2)
+	require.Equal(t, 91001, settingAudits[0].OperatorID)
+	require.Contains(t, settingAudits[0].DetailsJSON, `"operator_realm":"system_admin"`)
+	require.NotEmpty(t, settingAudits[0].SourceIP)
+
 	request := httptest.NewRequest(http.MethodPut, "/api/option/alipay/config", strings.NewReader(`{"qr_pay_mode":"2"}`))
 	request.Header.Set("Authorization", "Bearer root-payment-test-token")
 	request.Header.Set("Content-Type", "application/json")

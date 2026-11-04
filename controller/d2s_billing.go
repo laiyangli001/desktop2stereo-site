@@ -148,7 +148,12 @@ func D2SOrderList(c *gin.Context) {
 }
 
 func D2SOrderProviders(c *gin.Context) {
-	if !common.GetEnvOrDefaultBool("D2S_PURCHASES_ENABLED", false) {
+	enabled, err := model.D2SPurchasesEnabled()
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "code": "PURCHASE_SETTINGS_UNAVAILABLE"})
+		return
+	}
+	if !enabled {
 		d2sSuccess(c, http.StatusOK, gin.H{"enabled": false, "providers": []string{}})
 		return
 	}
