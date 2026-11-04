@@ -107,7 +107,7 @@ export function D2SSupportFloatingButton() {
   const viewportHeight =
     typeof window === 'undefined' ? 768 : window.innerHeight
   const buttonTop =
-    position?.top ?? Math.max(viewportMargin, (viewportHeight - 48) / 2)
+    position?.top ?? Math.max(viewportMargin, viewportHeight - 48 - 80)
   const panelOpensDown = buttonTop < viewportHeight / 2
   const panelAlignsLeft = position ? position.left < viewportWidth / 2 : false
   const panelMaxHeight = Math.max(
@@ -212,9 +212,7 @@ export function D2SSupportFloatingButton() {
 
   return (
     <aside
-      className={
-        position ? 'fixed z-50' : 'fixed top-1/2 right-4 z-50 -translate-y-1/2'
-      }
+      className={position ? 'fixed z-50' : 'fixed right-4 bottom-20 z-50'}
       data-support-floating-button-container
       style={position ? { left: position.left, top: position.top } : undefined}
     >

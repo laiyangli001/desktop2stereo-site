@@ -215,6 +215,9 @@ describe('D2S support form', () => {
     const button = screen.getByRole('button', {
       name: 'Complaints and support',
     })
+    expect(
+      document.querySelector('[data-support-floating-button-container]')
+    ).toHaveClass('fixed', 'right-4', 'bottom-20')
     vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
       x: 800,
       y: 300,
