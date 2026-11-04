@@ -148,18 +148,24 @@ curl -H 'Authorization: Bearer <D2S_RECONCILIATION_TOKEN>' \
 4. 灰度上一版本镜像，确认回调、租约和错误率恢复正常；不删除已接收支付事件。
 5. 记录切换耗时、RTO、RPO、回滚触发条件和最终操作者。
 
-Docker 部署可先用仓库脚本在隔离的 PostgreSQL 容器中验证备份可恢复；脚本使用固定容器名，
-不会连接或修改生产 `postgres` 容器，验证完成后自动删除隔离容器：
+Docker 部署可先将 COS 备份下载到本地，并在隔离 PostgreSQL 容器中验证恢复。以 root 执行以下命令，从权限为 `0600` 的 `/etc/desktop2stereo/backup.env` 读取目标地域；COSCLI 从 `/root/.cos.yaml` 读取 root-only 凭据。校验通过前不会把文件写入目标备份目录：
 
 ```bash
+set -a
+. /etc/desktop2stereo/backup.env
+set +a
+deploy/desktop2stereo-db-download-cos.sh \
+  cos://<bucket-name>-<appid>/<fixed-prefix>/pre-<commit-sha>-<timestamp>.dump \
+  /opt/desktop2stereo-site/backups
 export D2S_RECOVERY_POSTGRES_PASSWORD='<recovery-only-password>'
 deploy/desktop2stereo-db-restore-verify-docker.sh \
   /opt/desktop2stereo-site/backups/pre-<commit-sha>-<timestamp>.dump
 ```
 
-执行前必须确认对应 `.sha256` 文件存在；恢复密码只能注入当前进程或 Secret 管理器，不能写入
-仓库、备份文件或日志。该脚本只证明备份可在隔离库恢复，仍需记录真实 COS 跨故障域复制和
-恢复库数据核对结果。
+下载前确认 `.dump` 和 `.sha256` 对象均存在；下载脚本校验清单文件名和 SHA-256。恢复密码只能
+注入当前进程或 Secret 管理器，不能写入仓库、备份文件或日志。恢复脚本使用固定隔离容器名，
+不会连接或修改生产 `postgres` 容器，并在退出时删除隔离容器。演练还需记录 COS 桶地域/加密
+配置、下载耗时、恢复耗时以及恢复库数据核对结果。
 
 ## 6. Windows/Linux/macOS 授权端到端验收
 

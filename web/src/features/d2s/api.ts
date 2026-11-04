@@ -80,6 +80,77 @@ export async function getD2SAdminPaymentEvents(filters?: {
   return response.data as D2SResponse<{ events: D2SPaymentEvent[] }>
 }
 
+export async function getD2SAdminAlipayPCSettings() {
+  const response = await api.get('/api/v1/admin/alipay/settings')
+  return response.data as D2SResponse<{
+    qr_pay_mode: string
+    updated_at: number
+  }>
+}
+
+export async function setD2SAdminAlipayQRPayMode(qrPayMode: string) {
+  const response = await api.put('/api/v1/admin/alipay/settings', {
+    qr_pay_mode: qrPayMode,
+  })
+  return response.data as D2SResponse<{
+    qr_pay_mode: string
+    updated_at: number
+  }>
+}
+
+export async function getD2SAdminAlipayRefunds(orderID: string) {
+  const response = await api.get(
+    `/api/v1/admin/alipay/orders/${encodeURIComponent(orderID)}/refunds`
+  )
+  return response.data as D2SResponse<{
+    refunds: Array<{
+      id: string
+      order_id: string
+      out_request_no: string
+      amount_minor: number
+      reason: string
+      status: string
+      created_at: number
+    }>
+  }>
+}
+
+export async function createD2SAdminAlipayRefund(
+  orderID: string,
+  input: { amount_minor: number; reason: string; idempotency_key: string }
+) {
+  const response = await api.post(
+    `/api/v1/admin/alipay/orders/${encodeURIComponent(orderID)}/refunds`,
+    input
+  )
+  return response.data as D2SResponse<{
+    status: string
+    out_request_no: string
+  }>
+}
+
+export async function reconcileD2SAdminAlipayRefund(outRequestNo: string) {
+  const response = await api.post(
+    `/api/v1/admin/alipay/refunds/${encodeURIComponent(outRequestNo)}/reconcile`
+  )
+  return response.data as D2SResponse<{ status: string }>
+}
+
+export async function closeD2SAdminAlipayOrder(orderID: string) {
+  const response = await api.post(
+    `/api/v1/admin/alipay/orders/${encodeURIComponent(orderID)}/close`
+  )
+  return response.data as D2SResponse<unknown>
+}
+
+export async function downloadD2SAdminAlipayBill(date: string) {
+  const response = await api.get('/api/v1/admin/alipay/bill', {
+    params: { date },
+    responseType: 'blob',
+  })
+  return response.data as Blob
+}
+
 export async function getD2SAdminLicenses() {
   const response = await api.get('/api/v1/admin/licenses')
   return response.data as D2SResponse<{ licenses: D2SLicense[] }>
@@ -227,6 +298,8 @@ export async function createD2SOrderCheckout(orderID: string) {
     checkout_url: string
     method?: 'GET' | 'POST'
     params?: Record<string, string>
+    display_mode?: 'iframe'
+    qr_pay_mode?: string
   }>
 }
 

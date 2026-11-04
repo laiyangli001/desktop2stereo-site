@@ -14,6 +14,13 @@ import {
   getD2SAdminLicenses,
   getD2SAdminOrders,
   getD2SAdminPaymentEvents,
+  getD2SAdminAlipayPCSettings,
+  setD2SAdminAlipayQRPayMode,
+  closeD2SAdminAlipayOrder,
+  createD2SAdminAlipayRefund,
+  downloadD2SAdminAlipayBill,
+  getD2SAdminAlipayRefunds,
+  reconcileD2SAdminAlipayRefund,
   getD2SAdminSigningKeys,
   getD2SAdminReconciliation,
   getD2SAdminUnbindRequests,
@@ -25,6 +32,188 @@ import {
   setD2SUserRegion,
 } from './api'
 import { formatD2SDate, formatD2SMoney } from './lib/format'
+
+function AlipayOrderActions(props: {
+  orderID: string
+  status: string
+  onDone: () => void
+}) {
+  const { t } = useTranslation()
+  const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
+  const refunds = useQuery({
+    queryKey: ['d2s-admin', 'alipay-refunds', props.orderID],
+    queryFn: () => getD2SAdminAlipayRefunds(props.orderID),
+  })
+  const refundMutation = useMutation({
+    mutationFn: (input: {
+      amount_minor: number
+      reason: string
+      idempotency_key: string
+    }) => createD2SAdminAlipayRefund(props.orderID, input),
+    onSuccess: (result) => {
+      void refunds.refetch()
+      props.onDone()
+      if (result.success && result.data?.status === 'pending') {
+        toast.info(t('Refund is pending provider confirmation'))
+      } else if (result.success) {
+        toast.success(t('Refund submitted'))
+      } else {
+        toast.error(result.error?.message || t('Operation failed'))
+      }
+    },
+    onError: () => toast.error(t('Operation failed')),
+  })
+  const closeMutation = useMutation({
+    mutationFn: () => closeD2SAdminAlipayOrder(props.orderID),
+    onSuccess: (result) => {
+      props.onDone()
+      if (result.success) toast.success(t('Order closed'))
+      else toast.error(result.error?.message || t('Operation failed'))
+    },
+    onError: () => toast.error(t('Operation failed')),
+  })
+  const reconcileMutation = useMutation({
+    mutationFn: reconcileD2SAdminAlipayRefund,
+    onSuccess: (result) => {
+      void refunds.refetch()
+      props.onDone()
+      if (result.success && result.data?.status === 'completed') {
+        toast.success(t('Refund confirmed'))
+      } else {
+        toast.info(t('Refund is still pending provider confirmation'))
+      }
+    },
+    onError: () => toast.error(t('Operation failed')),
+  })
+  const hasPendingRefund = (refunds.data?.data?.refunds || []).some(
+    (refund) => refund.status === 'pending'
+  )
+
+  return (
+    <div className='w-full space-y-2 border-t pt-2'>
+      {props.status === 'paid' && (
+        <form
+          className='flex flex-wrap items-end gap-2'
+          onSubmit={(event) => {
+            event.preventDefault()
+            const amountMinor = Math.round(Number(amount) * 100)
+            if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return
+            if (!window.confirm(t('Confirm this Alipay refund?'))) return
+            refundMutation.mutate({
+              amount_minor: amountMinor,
+              reason: reason.trim(),
+              idempotency_key: `d2s-refund-${globalThis.crypto.randomUUID()}`,
+            })
+          }}
+        >
+          <Input
+            aria-label={t('Refund amount in CNY')}
+            type='number'
+            min='0.01'
+            step='0.01'
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            placeholder={t('Amount CNY')}
+            disabled={refundMutation.isPending || hasPendingRefund}
+          />
+          <Input
+            aria-label={t('Refund reason')}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={t('Reason')}
+            disabled={refundMutation.isPending || hasPendingRefund}
+          />
+          <Button
+            type='submit'
+            size='sm'
+            disabled={refundMutation.isPending || hasPendingRefund}
+          >
+            {t('Refund')}
+          </Button>
+        </form>
+      )}
+      {props.status === 'pending' && (
+        <Button
+          type='button'
+          size='sm'
+          variant='outline'
+          disabled={closeMutation.isPending}
+          onClick={() => {
+            if (window.confirm(t('Confirm closing this Alipay order?'))) {
+              closeMutation.mutate()
+            }
+          }}
+        >
+          {t('Close Alipay order')}
+        </Button>
+      )}
+      {(refunds.data?.data?.refunds || []).map((refund) => (
+        <div
+          key={refund.id}
+          className='flex flex-wrap items-center gap-2 text-xs'
+        >
+          <span>
+            {formatD2SMoney(refund.amount_minor, 'CNY', 'zh-CN')} ·{' '}
+            {refund.status} · {refund.out_request_no}
+          </span>
+          {refund.status === 'pending' && (
+            <Button
+              type='button'
+              size='sm'
+              variant='outline'
+              disabled={reconcileMutation.isPending}
+              onClick={() => reconcileMutation.mutate(refund.out_request_no)}
+            >
+              {t('Query refund status')}
+            </Button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function AlipayBillDownload() {
+  const { t } = useTranslation()
+  const [date, setDate] = useState(() => {
+    const today = new Date()
+    const month = String(today.getMonth() + 1).padStart(2, '0')
+    const day = String(today.getDate()).padStart(2, '0')
+    return `${today.getFullYear()}-${month}-${day}`
+  })
+  const mutation = useMutation({
+    mutationFn: downloadD2SAdminAlipayBill,
+    onSuccess: (blob) => {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `alipay_trade_bill_${date.replaceAll('-', '')}.zip`
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+    },
+    onError: () => toast.error(t('Unable to download bill')),
+  })
+  return (
+    <form
+      className='flex flex-wrap items-center gap-2 border-t pt-3'
+      onSubmit={(event) => {
+        event.preventDefault()
+        mutation.mutate(date)
+      }}
+    >
+      <Input
+        aria-label={t('Bill date')}
+        type='date'
+        value={date}
+        onChange={(event) => setDate(event.target.value)}
+      />
+      <Button type='submit' size='sm' disabled={mutation.isPending}>
+        {t('Download Alipay bill')}
+      </Button>
+    </form>
+  )
+}
 
 function ReviewActions(props: {
   id: string
@@ -174,6 +363,10 @@ export function D2SAdminWorkspace() {
     queryKey: ['d2s-admin', 'payment-events', activeEventFilters],
     queryFn: () => getD2SAdminPaymentEvents(activeEventFilters),
   })
+  const alipaySettings = useQuery({
+    queryKey: ['d2s-admin', 'alipay-settings'],
+    queryFn: getD2SAdminAlipayPCSettings,
+  })
   const balances = useQuery({
     queryKey: ['d2s-admin', 'balances'],
     queryFn: () => getD2SAdminBalances(),
@@ -198,6 +391,7 @@ export function D2SAdminWorkspace() {
     licenses,
     orders,
     paymentEvents,
+    alipaySettings,
     balances,
     withdrawals,
     unbinds,
@@ -230,6 +424,20 @@ export function D2SAdminWorkspace() {
       }
       toast.success(t('Signing key retired'))
       void queryClient.invalidateQueries({ queryKey: ['d2s-admin', 'keys'] })
+    },
+    onError: () => toast.error(t('Operation failed')),
+  })
+  const alipayQRModeMutation = useMutation({
+    mutationFn: setD2SAdminAlipayQRPayMode,
+    onSuccess: (result) => {
+      if (!result.success) {
+        toast.error(result.error?.message || t('Operation failed'))
+        return
+      }
+      void queryClient.invalidateQueries({
+        queryKey: ['d2s-admin', 'alipay-settings'],
+      })
+      toast.success(t('Alipay QR display mode updated'))
     },
     onError: () => toast.error(t('Operation failed')),
   })
@@ -317,21 +525,27 @@ export function D2SAdminWorkspace() {
                   </Button>
                 </form>
                 {(orders.data?.data?.orders || []).map((order) => (
-                  <div
-                    key={order.id}
-                    className='flex flex-wrap justify-between gap-2 border-b pb-2'
-                  >
-                    <span>
-                      {order.id} · user {order.user_id} · {order.provider}
-                    </span>
-                    <span>
-                      {order.status} ·{' '}
-                      {formatD2SMoney(
-                        order.amount_minor,
-                        order.currency,
-                        locale
-                      )}
-                    </span>
+                  <div key={order.id} className='border-b pb-2'>
+                    <div className='flex flex-wrap justify-between gap-2'>
+                      <span>
+                        {order.id} · user {order.user_id} · {order.provider}
+                      </span>
+                      <span>
+                        {order.status} ·{' '}
+                        {formatD2SMoney(
+                          order.amount_minor,
+                          order.currency,
+                          locale
+                        )}
+                      </span>
+                    </div>
+                    {order.provider === 'alipay_pc' && (
+                      <AlipayOrderActions
+                        orderID={order.id}
+                        status={order.status}
+                        onDone={refresh}
+                      />
+                    )}
                   </div>
                 ))}
                 {!orders.data?.data?.orders?.length && (
@@ -370,9 +584,39 @@ export function D2SAdminWorkspace() {
             </Card>
             <Card>
               <CardHeader>
+                <CardTitle>{t('Alipay PC QR display')}</CardTitle>
+              </CardHeader>
+              <CardContent className='space-y-3 text-sm'>
+                <label className='flex flex-wrap items-center gap-3'>
+                  <span>{t('QR display mode')}</span>
+                  <select
+                    aria-label={t('QR display mode')}
+                    className='bg-background h-9 rounded-md border px-3'
+                    disabled={
+                      alipayQRModeMutation.isPending || alipaySettings.isPending
+                    }
+                    value={alipaySettings.data?.data?.qr_pay_mode || '4'}
+                    onChange={(event) =>
+                      alipayQRModeMutation.mutate(event.target.value)
+                    }
+                  >
+                    <option value='0'>0 · {t('Compact landscape')}</option>
+                    <option value='1'>1 · {t('Portrait')}</option>
+                    <option value='3'>3 · {t('Mini')}</option>
+                    <option value='4'>4 · {t('Embedded QR')}</option>
+                  </select>
+                </label>
+                <p className='text-muted-foreground'>
+                  {t('This setting applies to all Alipay PC checkouts.')}
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
                 <CardTitle>{t('Payment events')}</CardTitle>
               </CardHeader>
               <CardContent className='space-y-3 text-sm'>
+                <AlipayBillDownload />
                 <form
                   className='grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto_auto]'
                   onSubmit={(event) => {

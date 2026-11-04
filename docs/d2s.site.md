@@ -7,11 +7,11 @@ Desktop2Stereo 授权服务部署要求。服务器端开发计划见
 [`01-cross-platform-licensing-server-implementation-plan.md`](01-cross-platform-licensing-server-implementation-plan.md)。
 上线前与季度恢复演练按 [`d2s-production-drill.md`](d2s-production-drill.md) 执行。
 
-生产原则是“腾讯云承载权威状态，Cloudflare 提供公网边缘防护和支付回调中转”：
+生产原则是“腾讯云承载权威状态，腾讯云 EdgeOne 提供网站边缘加速与防护；支付回调桥仅在支付渠道实际开通后启用”：
 
 - PostgreSQL 中的账号、订单、账务和授权记录是唯一权威状态。
 - Redis 只用于会话、限流、缓存和多节点协调，不保存最终授权事实。
-- Cloudflare 不保存 D1 授权状态，也不直接修改订单或授权。
+- EdgeOne 只提供公网边缘服务，不保存授权权威状态，也不直接修改订单或授权。
 - SQLite 仅用于本地开发；生产使用 PostgreSQL，MySQL 是受支持的替代方案。
 - SQLite 的 D2S 写事务对短暂的 `database is locked/deadlocked` 进行有限重试；这只提高本地开发并发稳定性，生产仍必须使用 PostgreSQL 或 MySQL。
 
@@ -69,10 +69,10 @@ Go 或前端工具在固定父目录内部生成的编译子目录仍可能带�
 
 ```mermaid
 flowchart TD
-    CN[国内用户] --> CF[Cloudflare DNS / CDN / WAF]
-    INTL[海外用户] --> CF
-    PAY[支付渠道] --> WORKER[Cloudflare Worker\n渠道验签与回调中转]
-    CF --> ORIGIN[腾讯云 CLB 或 Cloudflare Tunnel]
+    CN[国内用户] --> EDGE[腾讯云 EdgeOne / CDN / WAF]
+    INTL[海外用户] --> EDGE
+    PAY[支付渠道（开通后）] --> WORKER[Cloudflare Worker\n渠道验签与回调中转（计划）]
+    EDGE --> ORIGIN[腾讯云源站 Nginx]
     WORKER -->|渠道验签后 + 内部 HMAC| ORIGIN
     ORIGIN --> NGINX[Nginx / HTTPS]
     NGINX --> APP1[desktop2stereo-site 1]
@@ -90,12 +90,16 @@ flowchart TD
 
 ## 3. 域名、网络与 TLS
 
-- 正式域名：`d2s.site`，DNS 托管在 Cloudflare，并开启代理、WAF、DDoS 防护和限流。
-- TLS：Cloudflare 使用“完全（严格）”，源站安装可信证书或 Cloudflare Origin Certificate。
-- 源站：优先用 Cloudflare Tunnel 隐藏公网入口；如使用 CLB/CVM 公网 IP，仅开放 80/443，
-  且 80 只跳转 HTTPS。
+- 当前服务域名为 `d2s.site` 与 `d2s.top`，负责人确认两者承载相同功能；ICP备案号分别为 `鲁ICP备2026064880号-1`（d2s.site）和 `鲁ICP备2026064880号-2`（d2s.top）。
+- 负责人确认网站使用腾讯云 EdgeOne 提供边缘加速/防护。2026-11-04 公网观察到 d2s.site 的 DNS CNAME 指向 EdgeOne，d2s.top 的响应头显示直接到达源站 Nginx；域名解析和控制台策略仍应以腾讯云配置核验。
+- 生产源站系统 Nginx 配置位于 `/etc/nginx/sites-enabled/d2s.site`，`server_name` 包含 d2s.site、www.d2s.site、d2s.top、www.d2s.top，并反代到 `127.0.0.1:3000`。该站点配置不在宝塔 `/www/server/panel/vhost/nginx` 目录中维护。
+- 2026-11-04 只读诊断：源站用固定回环和正确 Host/SNI 请求 `/api/status`、`/api/v1/support/config`、`/business-license.png` 均为 200；公网 d2s.top 的两个 API 连续 4 次为 200，但公网 d2s.site 经 EdgeOne 的 `/api/status`、`/api/v1/support/config` 连续 4 次为 404，`/business-license.png` 也为 404。应用源站资源正常，故障已缩小到 d2s.site 的 EdgeOne/边缘转发路径，需核验 EdgeOne 源站、回源 Host/SNI 与路径转发规则。检查未修改生产配置。
+- 2026-11-04 再次无凭据只读 GET：d2s.site 的 `/api/status`、`/api/privacy-policy`、`/api/v1/support/config` 均为 404；d2s.top 的对应接口均为 200，但隐私政策 `data` 仍为空，客服配置正常。负责人将核对 EdgeOne 源站地址、回源 Host 和回源协议；收到这三项配置前不修改边缘或生产配置。
+- 2026-11-04 在生产源站 SSH 会话中执行回源对照：`hk-source.callback.cloudses.com` 解析至 `43.129.115.212`，其响应头标识 Tencent SES `SesCallback` RPC 服务；使用该地址时 A（Host 同源站域名）=404、B（Host `www.d2s.site`）=404、C（HTTP 80）=308。该地址不是网站源站。`d2s.top` 解析至 `118.89.79.159`；以 `d2s.site`/`www.d2s.site` 为 TLS SNI 并直连该地址，严格证书校验通过，`/`、`/api/status`、`/api/privacy-policy`、`/api/v1/support/config`、`/business-license.png` 均为 200。网站 EdgeOne 源站候选应为 `118.89.79.159`（或经核实指向该 IP 的源站域名），回源 Host 建议 `d2s.site`，回源协议 HTTPS/443。未修改 EdgeOne 或生产配置；隐私政策接口虽为 200，内容仍为空。
+- 2026-11-04 按负责人补充的实际源站 80 端口探测：在源站机执行 `curl http://118.89.79.159/ -H 'Host: www.d2s.site'` 返回 301，`Location: https://www.d2s.site/`；`/api/status` 同样返回 301。源站 80 强制跳 HTTPS，不满足协议跟随下两种协议直接返回业务内容的条件。回源固定 HTTPS/443 可用且严格 TLS 已验证，建议选择 HTTPS 回源以避免 HTTP 重定向往返。未改生产配置。
+- 2026-11-04 负责人报告 EdgeOne 回源修复后，无缓存 GET 复验 `d2s.site` 与 `d2s.top` 的 `/api/status`、`/api/v1/support/config` 均为 200；运行版本为 `d11d0cc1da5070bc65b57ff72181ed2865043833`。两个域名的 `/api/privacy-policy` 返回 200 但 `data` 为空，状态接口的 `privacy_policy_enabled` 为 false。`/business-license.png` 虽返回 200，但 Content-Type 是 `text/html` 且正文为 SPA 回退页；生产 SHA `d11d0cc1da5070bc65b57ff72181ed2865043833` 的 Git 树不含该 PNG。当前工作树已新增 `/business-license` 展示页并将首页链接改为站内路由，生产需在新版本发布后复验页面和 PNG 内容类型。
+- HTTPS 与源站证书应覆盖上述域名；源站 HTTP 仅跳转 HTTPS。正式修复前，不能把 EdgeOne 返回 404 描述成应用路由缺失，也不能将 d2s.top 直连状态视为完成了同等边缘防护。
 - 数据库 5432/3306 和 Redis 6379 只允许应用子网访问。
-- `www.d2s.site` 作为正式域名别名时必须保持同等 TLS、WAF 和访问控制策略，不能绕过 WAF。
 - Nginx 只信任实际负载均衡/代理地址传入的客户端 IP；`TRUSTED_PROXIES` 不得配置为全网。
 
 ## 4. 支付回调链路
@@ -111,7 +115,7 @@ flowchart TD
 `(provider, provider_event_id)` 幂等处理。Worker 不能直接写数据库，也不能仅依靠来源 IP
 证明回调可信。建议再用 Cloudflare Access 服务令牌或 mTLS 限制桥接入口。
 
-当前 Go 服务也提供已验签渠道的直接适配入口：Stripe、Creem、易支付、Waffo 和 Waffo
+当前 Go 服务也提供已验签渠道的直接适配入口：Stripe、Creem、易支付、支付宝电脑网站支付、Waffo 和 Waffo
 Pancake 回调在本地完成官方验签后进入同一 D2S 事件处理器；这不改变通用桥接接口的用途。
 PayPal/Paddle 在完成适配器前不开放。
 
@@ -165,6 +169,21 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 - `TRUSTED_PROXIES`：实际 CLB、Nginx 或 Tunnel 网络范围。
 
 授权与商业配置：
+
+- `D2S_PURCHASES_ENABLED=false`：服务端购买和下单总开关，默认关闭；关闭时订单预览、创建、结账以及付费解绑、离线延长等付费订单入口返回 503，支付渠道发现接口返回空列表。前端同步隐藏支付渠道、禁用购买选项并提示暂未开放。生产环境应明确保持 `false`；只有支付沙箱、合规审查和端到端验收完成后，才可显式设为 `true`。
+- 支付宝电脑网站支付需单独配置 `D2S_ALIPAY_PC_ENABLED=true`、`D2S_ALIPAY_APP_ID`、`D2S_ALIPAY_SELLER_ID`、`D2S_ALIPAY_PRIVATE_KEY_PEM`、`D2S_ALIPAY_PUBLIC_KEY_PEM`、`D2S_ALIPAY_NOTIFY_URL` 和 `D2S_ALIPAY_RETURN_URL`；`D2S_ALIPAY_PUBLIC_KEY_PEM` 必须是支付宝公钥，不能填商户应用公钥。`D2S_ALIPAY_GATEWAY_URL` 可选，默认正式网关。沙箱请按支付宝控制台选择 OpenAPI 沙箱网关（如 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`）和对应密钥，不能使用旧国际 MAPI 网关，也不能混用正式与沙箱凭据。私钥只通过受限 Secret 注入。支付宝电脑网站支付由后台设置二维码展示模式（0、1、3、4），支付表单在本站页面的支付宝 iframe 中打开；模式 4 的二维码宽度由服务端固定。后台设置及应用网关地址为 `https://d2s.site/api/v1/alipay/app-gateway`，电脑网站支付仍使用独立 `notify_url`。
+
+电脑网站支付的结果通知地址通过支付请求中的 `notify_url` 传入，本站地址为 `https://d2s.site/api/v1/alipay/d2s/notify`。开放平台“应用网关”为 `https://d2s.site/api/v1/alipay/app-gateway`，GET 用于 HTTPS 可访问性检测，POST 仅验签并处理已支持的电脑网站支付通知；它与每笔请求的 `notify_url` 分开配置，其他支付宝产品仍未启用。
+
+支付宝电脑网站支付对照[官方接入指南](https://ideservice.alipay.com/cms/site/0izbjt)的检查状态（仅针对本站自营软件付款）：
+
+| 环节 | 当前实现与验收要求 |
+| --- | --- |
+| 发起支付 | 已生成 `alipay.trade.page.pay` POST 参数，使用 RSA2；请求签名包含 `sign_type`。`out_trade_no` 使用 `D2S` 加 UUID 的 32 位十六进制字符，符合字符限制；金额取服务端订单快照，`time_expire` 与订单截止时间一致。 |
+| 异步通知 | 已按支付宝通知规则验签（排除 `sign`、`sign_type`），核对 `app_id`、`auth_app_id`、配置的 `seller_id`、订单号、金额及订单渠道；重复同一通知只结算一次。关闭新购买入口后仍可接收已创建订单的有效通知。同步 `return_url` 不触发履约。 |
+| 未收到通知、订单超时 | 已接入经 RSA2 响应验签和身份/金额校验的 `alipay.trade.query` 主动对账。主节点每分钟扫描未完成订单；过期订单先调用 `alipay.trade.close`，仅在支付宝确认关闭后取消本站订单并释放余额预留。通用过期任务会跳过支付宝订单。 |
+| 退款、关单、账单 | 已增加超级管理员退款、主动关单及按日期下载交易账单 API。退款使用幂等号和待核状态，部分退款保留授权，确认全额退款后停用授权；账单即时透传、不在本站存档。后台 UI 和支付宝沙箱验收仍需完成。 |
+| 验收 | 商户应用权限与正式密钥配置、支付宝沙箱支付及签名失败/金额不符/重复通知/通知丢失/过期订单/部分退款/全额退款/账单下载测试仍是生产门禁。购买开关必须保持关闭，直到沙箱与生产等价环境验收完成。 |
 
 - `D2S_DEVICE_VERIFICATION_URI=https://d2s.site/device`。
 - `D2S_LICENSE_KEY_ID`；未显式设置时默认为客户端当前内置公钥对应的
@@ -320,12 +339,30 @@ PostgreSQL 每日全量备份并保留至少 30 天，关键表启用时间点�
 签发记录数量及关联完整性。日志需要脱敏，不能记录访问/刷新令牌、设备原始标识、私钥、
 支付密钥或完整支付资料。
 
-备份脚本支持通过 COSCLI 将每个带 SHA 和时间戳的备份及其 `.sha256` 文件复制到 COS。只有
-配置 `D2S_BACKUP_COS_URI=cos://<bucket>/<fixed-prefix>` 后才会启用上传；脚本会检查 COSCLI
-存在，上传两个对象并用 `stat` 校验对象存在。COSCLI 的认证配置必须由腾讯云 Secret 管理或
-root-only 主机配置提供，不能写入仓库；COS URI 不得以 `/` 结尾，避免把备份写到不明确的路径。
-备份对象使用唯一时间戳文件名，不覆盖既有备份。生产启用前必须先上传一个测试备份并执行
-隔离恢复验证，再把 COS 上传配置交给 systemd/编排环境。
+备份脚本通过 COSCLI 将每个带 SHA-256 和 UTC 时间戳的备份及其 `.sha256` 文件复制到 COS。
+仅配置 `D2S_BACKUP_COS_URI=cos://<bucket>/<fixed-prefix>` 尚不足以启用：还必须设置
+`D2S_BACKUP_SOURCE_REGION=ap-shanghai`（或实际数据库地域）及
+`D2S_BACKUP_COS_REGION=<different-region>`；脚本拒绝目标地域与数据库地域相同的配置，并从该值生成 `cos.<region>.myqcloud.com` endpoint。
+桶 URI 使用 `cos://<bucket-name>-<appid>/<fixed-prefix>`；上传、下载和远端 `stat` 都显式传入 `--endpoint`，不要依赖桶别名配置。
+COSCLI 上传时显式要求 SSE-COS/AES256 服务端加密及完整文件 CRC64 校验，并检查两个远端对象存在。
+COSCLI 认证配置必须由腾讯云角色/临时密钥或 root-only 主机配置提供，不能写入仓库；URI
+不得以 `/` 结尾。备份目录按 root-only 权限创建，备份清单使用可移植的相对文件名。
+
+生产 Docker 更新服务读取可选的 `/etc/desktop2stereo/backup.env`。启用前由 root 创建该文件，
+仅放入备份 URI、源地域和目标地域，不放 COS 密钥；设置 `root:root` 与 `0600` 权限，并
+在 `/root/.cos.yaml` 配置最小权限 COSCLI 临时凭据。示例内容：
+
+```text
+D2S_BACKUP_COS_URI=cos://<bucket>/<fixed-prefix>
+D2S_BACKUP_SOURCE_REGION=ap-shanghai
+D2S_BACKUP_COS_REGION=<different-region>
+D2S_BACKUP_COSCLI=/usr/local/bin/coscli
+```
+
+恢复前先向脚本环境提供同一 `D2S_BACKUP_COS_REGION`，再使用 `deploy/desktop2stereo-db-download-cos.sh` 下载备份和校验文件。该脚本据此派生 endpoint，验证清单
+文件名和 SHA-256，校验通过后才发布到本地备份目录；随后使用隔离恢复脚本验证 PostgreSQL
+恢复及关联完整性。生产启用前必须确认 COS 桶实际位于配置地域、启用私有访问和保留策略，
+上传一个测试备份并完成隔离恢复演练，再把 COS 上传配置交给更新器的 root-only 环境。
 
 ## 10. 上线门禁
 

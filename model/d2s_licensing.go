@@ -243,6 +243,7 @@ type D2SOrder struct {
 	AmountMinor                  int64   `json:"amount_minor" gorm:"type:bigint;not null"`
 	BalanceMinor                 int64   `json:"balance_minor" gorm:"type:bigint;not null"`
 	GatewayMinor                 int64   `json:"gateway_minor" gorm:"type:bigint;not null"`
+	RefundedMinor                int64   `json:"refunded_minor" gorm:"type:bigint;not null;default:0"`
 	RevokeNumber                 int     `json:"revoke_number,omitempty" gorm:"not null"`
 	Status                       string  `json:"status" gorm:"type:varchar(16);not null;index"`
 	ResultStatus                 string  `json:"result_status" gorm:"type:varchar(16);not null;default:'SUCCESS'"`
@@ -269,6 +270,29 @@ type D2SPaymentEvent struct {
 }
 
 func (D2SPaymentEvent) TableName() string { return "d2s_payment_events" }
+
+type D2SAlipayPCSettings struct {
+	ID        string `json:"-" gorm:"type:varchar(32);primaryKey"`
+	QRPayMode string `json:"qr_pay_mode" gorm:"type:char(1);not null;default:'4'"`
+	UpdatedAt int64  `json:"updated_at" gorm:"type:bigint;not null"`
+}
+
+func (D2SAlipayPCSettings) TableName() string { return "d2s_alipay_pc_settings" }
+
+type D2SAlipayRefund struct {
+	ID            string `json:"id" gorm:"type:varchar(64);primaryKey"`
+	OrderID       string `json:"order_id" gorm:"type:varchar(64);not null;index"`
+	OutRequestNo  string `json:"out_request_no" gorm:"type:varchar(128);not null;uniqueIndex"`
+	AmountMinor   int64  `json:"amount_minor" gorm:"type:bigint;not null"`
+	Reason        string `json:"reason" gorm:"type:varchar(500);not null;default:''"`
+	Status        string `json:"status" gorm:"type:varchar(16);not null;index"`
+	ProviderTrade string `json:"provider_trade_no" gorm:"type:varchar(128);not null;default:''"`
+	OperatorID    int    `json:"operator_id" gorm:"not null"`
+	CreatedAt     int64  `json:"created_at" gorm:"type:bigint;not null"`
+	UpdatedAt     int64  `json:"updated_at" gorm:"type:bigint;not null"`
+}
+
+func (D2SAlipayRefund) TableName() string { return "d2s_alipay_refunds" }
 
 type D2SBalanceAccount struct {
 	ID             string `json:"id" gorm:"type:varchar(64);primaryKey"`

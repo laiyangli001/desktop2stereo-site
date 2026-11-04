@@ -1,3 +1,9 @@
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from '@tanstack/react-router'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -13,10 +19,33 @@ import { Desktop2StereoHome } from '../desktop2stereo-home'
 describe('Desktop2StereoHome download tracking', () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
+  const renderHome = () => {
+    const rootRoute = createRootRoute({
+      component: () => <Desktop2StereoHome isAuthenticated={false} />,
+    })
+    const router = createRouter({
+      routeTree: rootRoute,
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+    })
+    return render(<RouterProvider router={router} />)
+  }
+
+  const stubLatestRelease = (tag_name = 'v2.5.0') => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ tag_name }),
+      })
+    )
+  }
+
   it('records an anonymous download click before opening the external release', async () => {
+    stubLatestRelease('v3.1.4')
     const replace = vi.fn()
     const close = vi.fn()
     const popup = { opener: window, location: { replace }, close }
@@ -27,15 +56,18 @@ describe('Desktop2StereoHome download tracking', () => {
     })
     const user = userEvent.setup()
 
-    render(<Desktop2StereoHome isAuthenticated={false} />)
-    await user.click(screen.getByRole('button', { name: 'Download v2.5' }))
+    renderHome()
+    expect(
+      await screen.findByRole('heading', { name: 'Desktop2Stereo v3.1.4' })
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Download' }))
 
     await waitFor(() =>
       expect(apiMocks.trackD2SDownload).toHaveBeenCalledWith('release')
     )
     await waitFor(() =>
       expect(replace).toHaveBeenCalledWith(
-        'https://github.com/lc700x/desktop2stereo/releases/tag/v2.5.0'
+        'https://github.com/lc700x/desktop2stereo/releases/latest'
       )
     )
     expect(popup.opener).toBeNull()
@@ -43,6 +75,7 @@ describe('Desktop2StereoHome download tracking', () => {
   })
 
   it('does not open the external release when the click log cannot be recorded', async () => {
+    stubLatestRelease()
     const close = vi.fn()
     vi.spyOn(window, 'open').mockReturnValue({
       close,
@@ -51,8 +84,9 @@ describe('Desktop2StereoHome download tracking', () => {
     apiMocks.trackD2SDownload.mockRejectedValue(new Error('audit unavailable'))
     const user = userEvent.setup()
 
-    render(<Desktop2StereoHome isAuthenticated={false} />)
-    await user.click(screen.getByRole('button', { name: 'Download v2.5' }))
+    renderHome()
+    await screen.findByRole('button', { name: 'Download' })
+    await user.click(screen.getByRole('button', { name: 'Download' }))
 
     await waitFor(() => expect(close).toHaveBeenCalledOnce())
     expect(toastMocks.error).toHaveBeenCalledOnce()

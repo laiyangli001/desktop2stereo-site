@@ -157,8 +157,8 @@ func D2SOrderProviders(c *gin.Context) {
 		d2sError(c, err)
 		return
 	}
-	providers := make([]string, 0, 7)
-	seenProviders := make(map[string]struct{}, 7)
+	providers := make([]string, 0, 8)
+	seenProviders := make(map[string]struct{}, 8)
 	appendProvider := func(provider string) {
 		if _, seen := seenProviders[provider]; seen {
 			return
@@ -175,6 +175,9 @@ func D2SOrderProviders(c *gin.Context) {
 			providers = append(providers, provider)
 			seenProviders[provider] = struct{}{}
 		}
+	}
+	if isAlipayPCEnabled() {
+		appendProvider("alipay_pc")
 	}
 	appendProvider(model.D2SProviderBalance)
 	if isStripeTopUpEnabled() {

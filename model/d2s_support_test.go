@@ -155,6 +155,41 @@ func TestD2SSupportTicketValidationAndAuditTransaction(t *testing.T) {
 	assert.Zero(t, reopened.ClosedAt)
 }
 
+func TestD2SSupportTicketRetentionCutoffUsesCalendarMonths(t *testing.T) {
+	cases := []struct {
+		name string
+		now  time.Time
+		want time.Time
+	}{
+		{
+			name: "october month end",
+			now:  time.Date(2026, time.October, 31, 12, 34, 56, 0, time.UTC),
+			want: time.Date(2026, time.April, 30, 12, 34, 56, 0, time.UTC),
+		},
+		{
+			name: "non leap february month end",
+			now:  time.Date(2026, time.August, 31, 12, 34, 56, 0, time.UTC),
+			want: time.Date(2026, time.February, 28, 12, 34, 56, 0, time.UTC),
+		},
+		{
+			name: "leap february month end",
+			now:  time.Date(2024, time.August, 31, 12, 34, 56, 0, time.UTC),
+			want: time.Date(2024, time.February, 29, 12, 34, 56, 0, time.UTC),
+		},
+		{
+			name: "march month end",
+			now:  time.Date(2026, time.March, 31, 12, 34, 56, 0, time.UTC),
+			want: time.Date(2025, time.September, 30, 12, 34, 56, 0, time.UTC),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want.Unix(), d2sSupportTicketRetentionCutoff(tc.now))
+		})
+	}
+}
+
 func TestPruneD2SSupportTicketsRetainsOnlyRecentOrOpenTickets(t *testing.T) {
 	useD2STestDB(t)
 	require.NoError(t, DB.AutoMigrate(&D2SSupportTicket{}, &D2SAdminOperationAudit{}))

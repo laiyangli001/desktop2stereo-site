@@ -46,6 +46,105 @@ var (
 	ErrD2SCheckoutUnavailable  = errors.New("payment checkout is unavailable")
 )
 
+func GetD2SAlipayPCSettings() (*D2SAlipayPCSettings, error) {
+	if DB == nil {
+		return &D2SAlipayPCSettings{ID: "default", QRPayMode: "4"}, nil
+	}
+	var settings D2SAlipayPCSettings
+	err := DB.Where("id = ?", "default").First(&settings).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return &D2SAlipayPCSettings{ID: "default", QRPayMode: "4"}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &settings, nil
+}
+
+func SetD2SAlipayPCQRPayMode(mode string, now int64) (*D2SAlipayPCSettings, error) {
+	switch mode {
+	case "0", "1", "3", "4":
+	default:
+		return nil, ErrD2SOrderInvalid
+	}
+	if now <= 0 {
+		now = time.Now().UTC().Unix()
+	}
+	settings := D2SAlipayPCSettings{ID: "default", QRPayMode: mode, UpdatedAt: now}
+	err := DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.Assignments(map[string]any{"qr_pay_mode": mode, "updated_at": now}),
+	}).Create(&settings).Error
+	return &settings, err
+}
+
+func CreateD2SAlipayRefund(refund *D2SAlipayRefund) error {
+	if refund == nil || refund.OrderID == "" || refund.OutRequestNo == "" || refund.AmountMinor <= 0 || refund.OperatorID <= 0 {
+		return ErrD2SOrderInvalid
+	}
+	return d2STransaction(func(tx *gorm.DB) error {
+		var order D2SOrder
+		if err := lockForUpdate(tx).Where("id = ? AND provider = ?", refund.OrderID, "alipay_pc").First(&order).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrD2SOrderNotFound
+			}
+			return err
+		}
+		var pendingRefundMinor int64
+		if err := tx.Model(&D2SAlipayRefund{}).Where("order_id = ? AND status = ?", order.ID, "pending").Select("COALESCE(SUM(amount_minor), 0)").Scan(&pendingRefundMinor).Error; err != nil {
+			return err
+		}
+		if order.Status != D2SOrderPaid || refund.AmountMinor > order.GatewayMinor-order.RefundedMinor-pendingRefundMinor {
+			return ErrD2SOrderState
+		}
+		return tx.Create(refund).Error
+	})
+}
+
+func CompleteD2SAlipayRefund(outRequestNo, providerTradeNo string, now int64) error {
+	if now <= 0 {
+		now = time.Now().UTC().Unix()
+	}
+	return d2STransaction(func(tx *gorm.DB) error {
+		var refund D2SAlipayRefund
+		if err := lockForUpdate(tx).Where("out_request_no = ?", outRequestNo).First(&refund).Error; err != nil {
+			return err
+		}
+		if refund.Status == "completed" {
+			return nil
+		}
+		if refund.Status != "pending" {
+			return ErrD2SOrderState
+		}
+		var order D2SOrder
+		if err := lockForUpdate(tx).Where("id = ?", refund.OrderID).First(&order).Error; err != nil {
+			return err
+		}
+		if order.Provider != "alipay_pc" || order.Status != D2SOrderPaid || refund.AmountMinor > order.GatewayMinor-order.RefundedMinor {
+			return ErrD2SOrderState
+		}
+		refunded := order.RefundedMinor + refund.AmountMinor
+		updates := map[string]any{"refunded_minor": refunded}
+		if refunded == order.GatewayMinor {
+			updates["status"] = D2SOrderChargeback
+			if order.LicenseID != "" {
+				if err := tx.Model(&D2SLicense{}).Where("id = ?", order.LicenseID).Updates(map[string]any{"status": D2SLicenseStatusSuspended, "updated_at": now}).Error; err != nil {
+					return err
+				}
+			}
+			if err := reverseD2SInviteRewardTx(tx, &order, now); err != nil {
+				return err
+			}
+		}
+		if err := tx.Model(&D2SOrder{}).Where("id = ?", order.ID).Updates(updates).Error; err != nil {
+			return err
+		}
+		return tx.Model(&D2SAlipayRefund{}).Where("id = ?", refund.ID).Updates(map[string]any{
+			"status": "completed", "provider_trade": providerTradeNo, "updated_at": now,
+		}).Error
+	})
+}
+
 type D2SOrderQuote struct {
 	Product      string `json:"product"`
 	LicenseID    string `json:"license_id,omitempty"`
@@ -58,7 +157,7 @@ type D2SOrderQuote struct {
 
 func D2SProviderRegion(provider string) (string, bool) {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "epay", "paymentfm", "alipay", "wechat", "waffo":
+	case "epay", "paymentfm", "alipay", "alipay_pc", "wechat", "waffo":
 		return D2SRegionCN, true
 	case "stripe", "creem", "waffo_pancake":
 		return D2SRegionINTL, true
@@ -247,6 +346,9 @@ func CreateD2SOrderWithMetadataAndAudit(userID int, quote *D2SOrderQuote, balanc
 	if quote.Provider == D2SProviderBalance && balanceMinor != quote.AmountMinor {
 		return nil, ErrD2SOrderInvalid
 	}
+	if quote.Provider == "alipay_pc" && balanceMinor != 0 {
+		return nil, ErrD2SOrderInvalid
+	}
 	if quote.Provider != D2SProviderBalance && balanceMinor == quote.AmountMinor {
 		return nil, ErrD2SOrderInvalid
 	}
@@ -387,7 +489,7 @@ func ExpireD2SPendingOrders(now int64) error {
 	}
 	var orderIDs []string
 	if err := DB.Model(&D2SOrder{}).
-		Where("status = ? AND expires_at <= ?", D2SOrderPending, now).
+		Where("status = ? AND expires_at <= ? AND provider <> ?", D2SOrderPending, now, "alipay_pc").
 		Pluck("id", &orderIDs).Error; err != nil {
 		return err
 	}
@@ -400,7 +502,7 @@ func ExpireD2SPendingOrders(now int64) error {
 				}
 				return err
 			}
-			if order.Status != D2SOrderPending || order.ExpiresAt > now {
+			if order.Status != D2SOrderPending || order.ExpiresAt > now || order.Provider == "alipay_pc" {
 				return nil
 			}
 			if err := tx.Model(&D2SOrder{}).Where("id = ? AND status = ?", order.ID, D2SOrderPending).
@@ -607,7 +709,7 @@ func ProcessD2SPaymentEvent(provider, eventID, orderID, eventType string, amount
 		}
 		switch eventType {
 		case "paid":
-			if order.Status != D2SOrderPending || order.ExpiresAt <= now {
+			if order.Status != D2SOrderPending || (order.ExpiresAt <= now && provider != "alipay_pc") {
 				return ErrD2SOrderState
 			}
 			var profile D2SUserProfile

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as authRouteRouteImport } from './routes/(auth)/route'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as BusinessLicenseRouteImport } from './routes/business-license'
 import { Route as D2sAdminConsoleRouteImport } from './routes/d2s-admin-console'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as PrivacyPolicyRouteImport } from './routes/privacy-policy'
@@ -86,6 +87,11 @@ const authRouteRoute = authRouteRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessLicenseRoute = BusinessLicenseRouteImport.update({
+  id: '/business-license',
+  path: '/business-license',
   getParentRoute: () => rootRouteImport,
 } as any)
 const D2sAdminConsoleRoute = D2sAdminConsoleRouteImport.update({
@@ -434,6 +440,7 @@ const AuthenticatedSystemSettingsSiteSectionRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/business-license': typeof BusinessLicenseRoute
   '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
@@ -499,6 +506,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/business-license': typeof BusinessLicenseRoute
   '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
@@ -566,6 +574,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/(auth)': typeof authRouteRouteWithChildren
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/business-license': typeof BusinessLicenseRoute
   '/d2s-admin-console': typeof D2sAdminConsoleRoute
   '/device': typeof DeviceRoute
   '/privacy-policy': typeof PrivacyPolicyRoute
@@ -633,6 +642,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/business-license'
     | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
@@ -698,6 +708,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/business-license'
     | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
@@ -764,6 +775,7 @@ export interface FileRouteTypes {
     | '/'
     | '/(auth)'
     | '/_authenticated'
+    | '/business-license'
     | '/d2s-admin-console'
     | '/device'
     | '/privacy-policy'
@@ -832,6 +844,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   authRouteRoute: typeof authRouteRouteWithChildren
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  BusinessLicenseRoute: typeof BusinessLicenseRoute
   D2sAdminConsoleRoute: typeof D2sAdminConsoleRoute
   DeviceRoute: typeof DeviceRoute
   PrivacyPolicyRoute: typeof PrivacyPolicyRoute
@@ -871,6 +884,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/business-license': {
+      id: '/business-license'
+      path: '/business-license'
+      fullPath: '/business-license'
+      preLoaderRoute: typeof BusinessLicenseRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/d2s-admin-console': {
@@ -1454,6 +1474,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   authRouteRoute: authRouteRouteWithChildren,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  BusinessLicenseRoute: BusinessLicenseRoute,
   D2sAdminConsoleRoute: D2sAdminConsoleRoute,
   DeviceRoute: DeviceRoute,
   PrivacyPolicyRoute: PrivacyPolicyRoute,

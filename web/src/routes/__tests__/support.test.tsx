@@ -73,6 +73,7 @@ describe('D2S support form', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+    localStorage.removeItem('d2s-support-floating-position')
     supportMocks.auth = {
       user: { id: 7, email: 'user@example.com' },
       accessToken: 'test-access-token',
@@ -221,6 +222,69 @@ describe('D2S support form', () => {
       await i18next.changeLanguage(previousLanguage)
       i18next.removeResourceBundle('zhCN', 'translation')
     }
+  })
+
+  it('starts near the lower-right, supports dragging, and remembers the position', async () => {
+    const { unmount } = render(<D2SSupportFloatingButton />)
+    const toggle = screen.getByRole('button', {
+      name: 'Complaints and support',
+    })
+    const container = toggle.parentElement
+    expect(container).toHaveStyle({ right: '16px', bottom: '96px' })
+
+    fireEvent.pointerDown(toggle, {
+      button: 0,
+      pointerId: 1,
+      clientX: 800,
+      clientY: 600,
+    })
+    fireEvent.pointerMove(toggle, {
+      pointerId: 1,
+      clientX: 720,
+      clientY: 520,
+    })
+    fireEvent.pointerUp(toggle, { pointerId: 1 })
+    fireEvent.click(toggle)
+
+    expect(container).toHaveStyle({ right: '96px', bottom: '176px' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(
+      JSON.parse(localStorage.getItem('d2s-support-floating-position') ?? '{}')
+    ).toEqual({
+      right: 96,
+      bottom: 176,
+    })
+
+    unmount()
+    render(<D2SSupportFloatingButton />)
+    expect(
+      screen.getByRole('button', { name: 'Complaints and support' })
+        .parentElement
+    ).toHaveStyle({ right: '96px', bottom: '176px' })
+  })
+
+  it('cancels an interrupted drag without swallowing the next click', () => {
+    render(<D2SSupportFloatingButton />)
+    const toggle = screen.getByRole('button', {
+      name: 'Complaints and support',
+    })
+
+    fireEvent.pointerDown(toggle, {
+      button: 0,
+      pointerId: 2,
+      clientX: 800,
+      clientY: 600,
+    })
+    fireEvent.pointerMove(toggle, {
+      pointerId: 2,
+      clientX: 720,
+      clientY: 520,
+    })
+    fireEvent.pointerCancel(toggle, { pointerId: 2 })
+
+    expect(toggle.parentElement).toHaveStyle({ right: '16px', bottom: '96px' })
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('hides the floating support contact from the independent admin console', () => {

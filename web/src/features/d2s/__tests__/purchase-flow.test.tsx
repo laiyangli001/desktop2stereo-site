@@ -310,6 +310,7 @@ describe('D2S wallet purchase flow', () => {
         enabled: true,
         providers: [
           'alipay',
+          'alipay_pc',
           'paymentfm',
           'wechat',
           'waffo',
@@ -321,6 +322,12 @@ describe('D2S wallet purchase flow', () => {
     )
 
     renderWorkspace()
+
+    expect(
+      await screen.findByRole('button', {
+        name: /Pay on Alipay \(PC\).*Recommended/,
+      })
+    ).toBeEnabled()
 
     for (const name of [
       'Pay with Alipay',

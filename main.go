@@ -384,6 +384,7 @@ func InitResources() error {
 	service.StartAuthArtifactCleanup()
 	service.StartD2SArtifactCleanup()
 	service.StartD2SSupportTicketRetentionCleanup()
+	controller.StartD2SAlipayReconciliation()
 
 	return nil
 }

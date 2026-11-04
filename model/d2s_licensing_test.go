@@ -40,7 +40,7 @@ func useD2STestDB(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(
 		&User{}, &D2SUserProfile{}, &D2SLicense{}, &D2SDeviceBinding{}, &D2SLicenseEvent{},
 		&D2SDeviceCode{}, &D2SOfflineEntitlement{}, &D2SOnlineLease{}, &D2SFreeRevokeCooldown{},
-		&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{},
+		&D2SPaidRevokeQuota{}, &D2SManualUnbindRequest{}, &D2SOrder{}, &D2SPaymentEvent{}, &D2SAlipayPCSettings{}, &D2SAlipayRefund{},
 		&D2SBalanceAccount{}, &D2SBalanceTransaction{}, &D2SInviteReward{}, &D2SWithdrawalRequest{},
 		&D2SSigningKey{},
 	))
@@ -259,6 +259,40 @@ func TestD2SExpiredPendingOrderReleasesBalanceReservation(t *testing.T) {
 	var releaseCount int64
 	require.NoError(t, DB.Model(&D2SBalanceTransaction{}).Where("order_id = ? AND kind = ?", order.ID, "release").Count(&releaseCount).Error)
 	assert.EqualValues(t, 1, releaseCount)
+}
+
+func TestD2SExpiredAlipayOrderIsNotAutomaticallyCanceled(t *testing.T) {
+	useD2STestDB(t)
+	const now = int64(2_000_010_000)
+	order := D2SOrder{ID: "expired-alipay-order", UserID: 1, Product: D2SOrderProductLicense, Provider: "alipay_pc", Region: D2SRegionCN, Currency: "CNY", AmountMinor: 9900, GatewayMinor: 9900, Status: D2SOrderPending, IdempotencyKey: "expired-alipay-idem", CreatedAt: now - 3600, ExpiresAt: now - 1}
+	require.NoError(t, DB.Create(&order).Error)
+	require.NoError(t, ExpireD2SPendingOrders(now))
+	var stored D2SOrder
+	require.NoError(t, DB.First(&stored, "id = ?", order.ID).Error)
+	assert.Equal(t, D2SOrderPending, stored.Status)
+}
+
+func TestD2SAlipayRefundReservationsAndFullRefundLifecycle(t *testing.T) {
+	useD2STestDB(t)
+	const now = int64(2_000_010_000)
+	order := D2SOrder{ID: "alipay-refund-order", UserID: 1, Product: D2SOrderProductLicense, Provider: "alipay_pc", Region: D2SRegionCN, Currency: "CNY", AmountMinor: 10000, GatewayMinor: 10000, Status: D2SOrderPaid, IdempotencyKey: "alipay-refund-order-idem", CreatedAt: now, ExpiresAt: now + 3600, CompletedAt: now}
+	require.NoError(t, DB.Create(&order).Error)
+	first := &D2SAlipayRefund{ID: "alipay-refund-1", OrderID: order.ID, OutRequestNo: "refund-request-1", AmountMinor: 7000, Status: "pending", OperatorID: 7, CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, CreateD2SAlipayRefund(first))
+	tooLarge := &D2SAlipayRefund{ID: "alipay-refund-too-large", OrderID: order.ID, OutRequestNo: "refund-request-too-large", AmountMinor: 4000, Status: "pending", OperatorID: 7, CreatedAt: now, UpdatedAt: now}
+	require.ErrorIs(t, CreateD2SAlipayRefund(tooLarge), ErrD2SOrderState)
+	require.NoError(t, CompleteD2SAlipayRefund(first.OutRequestNo, "provider-trade", now+1))
+	var partial D2SOrder
+	require.NoError(t, DB.First(&partial, "id = ?", order.ID).Error)
+	assert.EqualValues(t, 7000, partial.RefundedMinor)
+	assert.Equal(t, D2SOrderPaid, partial.Status)
+	last := &D2SAlipayRefund{ID: "alipay-refund-2", OrderID: order.ID, OutRequestNo: "refund-request-2", AmountMinor: 3000, Status: "pending", OperatorID: 7, CreatedAt: now + 2, UpdatedAt: now + 2}
+	require.NoError(t, CreateD2SAlipayRefund(last))
+	require.NoError(t, CompleteD2SAlipayRefund(last.OutRequestNo, "provider-trade", now+3))
+	var fullyRefunded D2SOrder
+	require.NoError(t, DB.First(&fullyRefunded, "id = ?", order.ID).Error)
+	assert.EqualValues(t, 10000, fullyRefunded.RefundedMinor)
+	assert.Equal(t, D2SOrderChargeback, fullyRefunded.Status)
 }
 
 func TestD2SSQLiteConcurrentCriticalPaths(t *testing.T) {
@@ -655,6 +689,7 @@ func TestD2SPaymentEventSharedValidationAcrossOpenProviders(t *testing.T) {
 		{provider: "epay", region: D2SRegionCN, currency: "CNY"},
 		{provider: "paymentfm", region: D2SRegionCN, currency: "CNY"},
 		{provider: "alipay", region: D2SRegionCN, currency: "CNY"},
+		{provider: "alipay_pc", region: D2SRegionCN, currency: "CNY"},
 		{provider: "wechat", region: D2SRegionCN, currency: "CNY"},
 		{provider: "waffo", region: D2SRegionCN, currency: "CNY"},
 		{provider: "stripe", region: D2SRegionINTL, currency: "USD"},

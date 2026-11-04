@@ -69,7 +69,9 @@ func D2SOrderCheckout(c *gin.Context) {
 	}
 	var checkoutURL string
 	var epayCheckout *d2SEpayCheckout
-	if order.Provider == "stripe" {
+	if order.Provider == "alipay_pc" {
+		epayCheckout, err = createD2SAlipayPCCheckout(&order)
+	} else if order.Provider == "stripe" {
 		checkoutURL, err = createD2SStripeCheckout(&order, user)
 	} else if order.Provider == "creem" {
 		checkoutURL, err = createD2SCreemCheckout(&order, user)
@@ -85,7 +87,12 @@ func D2SOrderCheckout(c *gin.Context) {
 		return
 	}
 	if epayCheckout != nil {
-		d2sSuccess(c, http.StatusOK, gin.H{"order_id": order.ID, "checkout_url": epayCheckout.URL, "method": "POST", "params": epayCheckout.Params})
+		response := gin.H{"order_id": order.ID, "checkout_url": epayCheckout.URL, "method": "POST", "params": epayCheckout.Params}
+		if order.Provider == "alipay_pc" {
+			response["display_mode"] = "iframe"
+			response["qr_pay_mode"] = epayCheckout.QRPayMode
+		}
+		d2sSuccess(c, http.StatusOK, response)
 		return
 	}
 	d2sSuccess(c, http.StatusOK, gin.H{"order_id": order.ID, "checkout_url": checkoutURL})
@@ -144,8 +151,9 @@ func createD2SWaffoCheckout(ctx context.Context, order *model.D2SOrder, user *mo
 }
 
 type d2SEpayCheckout struct {
-	URL    string
-	Params map[string]string
+	URL       string
+	Params    map[string]string
+	QRPayMode string
 }
 
 func createD2SEpayCheckout(order *model.D2SOrder) (*d2SEpayCheckout, error) {

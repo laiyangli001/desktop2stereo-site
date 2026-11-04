@@ -9,6 +9,13 @@ const apiMocks = vi.hoisted(() => ({
   getD2SAdminLicenses: vi.fn(),
   getD2SAdminOrders: vi.fn(),
   getD2SAdminPaymentEvents: vi.fn(),
+  getD2SAdminAlipayPCSettings: vi.fn(),
+  setD2SAdminAlipayQRPayMode: vi.fn(),
+  closeD2SAdminAlipayOrder: vi.fn(),
+  createD2SAdminAlipayRefund: vi.fn(),
+  downloadD2SAdminAlipayBill: vi.fn(),
+  getD2SAdminAlipayRefunds: vi.fn(),
+  reconcileD2SAdminAlipayRefund: vi.fn(),
   getD2SAdminReconciliation: vi.fn(),
   getD2SAdminSigningKeys: vi.fn(),
   getD2SAdminUnbindRequests: vi.fn(),
@@ -27,6 +34,9 @@ function response<T>(data: T) {
 }
 
 function renderAdminWorkspace() {
+  apiMocks.getD2SAdminAlipayPCSettings.mockResolvedValue(
+    response({ qr_pay_mode: '4', updated_at: 1 })
+  )
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })

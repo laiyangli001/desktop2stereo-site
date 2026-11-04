@@ -23,6 +23,7 @@ func TestD2SRoutesExposeAuthenticatedSupportAndNoIdentityEntryAPI(t *testing.T) 
 		paths[route.Method+" "+route.Path] = true
 	}
 	require.True(t, paths[http.MethodPost+" /api/v1/support/tickets"])
+	require.True(t, paths[http.MethodPost+" /api/v1/alipay/d2s/notify"])
 	require.True(t, paths[http.MethodGet+" /api/v1/support/my-tickets"])
 	require.True(t, paths[http.MethodPost+" /api/v1/admin/audit/export-approvals"])
 	require.True(t, paths[http.MethodGet+" /api/v1/admin/audit/export-approvals/:id"])

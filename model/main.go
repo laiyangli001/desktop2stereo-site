@@ -429,6 +429,8 @@ func d2sCoreMigrationModels() []any {
 		&D2SOrder{},
 		&D2SSupportTicket{},
 		&D2SPaymentEvent{},
+		&D2SAlipayPCSettings{},
+		&D2SAlipayRefund{},
 		&D2SBalanceAccount{},
 		&D2SBalanceTransaction{},
 		&D2SInviteReward{},

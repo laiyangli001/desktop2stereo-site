@@ -9,6 +9,9 @@ import (
 func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin.HandlerFunc) {
 	v1 := apiRouter.Group("/v1")
 	{
+		v1.GET("/alipay/app-gateway", controller.AlipayPCApplicationGateway)
+		v1.POST("/alipay/app-gateway", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.AlipayPCApplicationGateway)
+		v1.POST("/alipay/d2s/notify", middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.AlipayPCD2SNotify)
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/register", middleware.D2SUserActionLog("REGISTER"), middleware.CriticalRateLimit(), anonymousRequestBodyLimit, controller.Register)
@@ -126,6 +129,13 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 			admin.GET("/licenses", controller.D2SAdminLicenses)
 			admin.GET("/orders", controller.D2SAdminOrders)
 			admin.GET("/payment-events", controller.D2SAdminPaymentEvents)
+			admin.GET("/alipay/settings", controller.D2SAdminAlipayPCSettings)
+			admin.PUT("/alipay/settings", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayPCSettings)
+			admin.GET("/alipay/orders/:id/refunds", controller.D2SAdminAlipayRefunds)
+			admin.POST("/alipay/orders/:id/refunds", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayRefund)
+			admin.POST("/alipay/refunds/:out_request_no/reconcile", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayRefundReconcile)
+			admin.POST("/alipay/orders/:id/close", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayCloseOrder)
+			admin.GET("/alipay/bill", controller.D2SAdminAlipayBill)
 			admin.GET("/balances", controller.D2SAdminBalances)
 			admin.GET("/signing-keys", controller.D2SAdminSigningKeys)
 			admin.PUT("/signing-keys/:id", controller.D2SAdminSigningKeyReview)

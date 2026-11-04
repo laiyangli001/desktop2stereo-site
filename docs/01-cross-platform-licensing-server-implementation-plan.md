@@ -193,6 +193,7 @@ GORM 维护以下表：
 - 2026-11-02 扩展隔离数据库矩阵，实测 MySQL 8.4.13 与 PostgreSQL 17.11 上单账户紧急锁定/解除、服务端登录/购买限制读取及对应 `EMERGENCY_LOCK`/`EMERGENCY_UNLOCK` 审计落库；矩阵测试通过，`go test -p 1 ./model -count=1`、`go vet -p 1 ./model`、`go build -p 1 ./model` 通过。两套数据库测试实例随后停止；此证据不替代生产账号权限与生产环境验收。
 - 2026-11-03 当前分支数据库复验：以隔离 `d2s_test` 账号连接本机 PostgreSQL 15.14（5433）与 MySQL 8.4.9（3307），固定路径 `model` 全包测试通过，实际执行 `TestD2SSchemaConfiguredDatabases` 和 `TestD2SConcurrentCriticalPaths` 两种数据库子项。覆盖迁移重复执行、用户紧急锁定/解除与审计、授权绑定、工单创建/处理与审计、区域/提现/解绑审核、支付对账及并发路径。`controller`、`service`、`router` 固定路径全包测试随后也通过。数据库 DSN 只在本次子进程环境中注入并清除；本地 PostgreSQL/MySQL 实例已停止。此次使用的是隔离持久测试库，不据此声称本轮测试数据库为空库。
 - 2026-11-03 当前工作树再次运行 `scripts/d2s-fixed-go-test.ps1 -Package @('./model','./controller','./service','./router')`，四个包全部通过（退出码 0）。`model` 测试以隔离 `d2s_test` 账号连接 PostgreSQL 15.14（127.0.0.1:5433）与 MySQL 8.4.9（127.0.0.1:3307），配置数据库迁移/并发矩阵子测试实际运行并通过；其余三个包随后通过。测试账号 DSN 只注入本次 PowerShell 子进程，结束后清除；本机 PostgreSQL/MySQL 服务已确认停止。测试使用既有隔离测试库，不代表空库或发布版本升级矩阵在本轮重跑。
+- 2026-11-04 针对当前工作树的账户注销与工单六个月留存变更，在隔离 PostgreSQL 15.14 与 MySQL 8.4.9 测试库分别注入临时 DSN，运行固定路径 `model` 全包测试；配置数据库迁移和并发矩阵均执行并通过。数据库进程已停止，DSN 仅在测试进程环境中使用。该结果覆盖代码级引擎兼容性，不代表生产注销或清理已验收。
 - 2026-11-03 GitHub Actions PR run `41559258003` 的 `MySQL and PostgreSQL migrations` 工作通过：真实数据库迁移/并发矩阵与 PostgreSQL 生产角色隔离检查均成功；该次运行绑定提交 `a2b84c431cb70f746ef690265e342a0d84d0b049`。
 - 2026-09-09 已将本地与 GitHub Actions 的 Go、Vitest 缓存及临时目录固定到工作区路径；扫描确认 D2S 测试不再调用 `t.TempDir`、`os.MkdirTemp` 或 `os.CreateTemp`，Actions `34278684231` 已通过固定目录回归。
 - 2026-09-09 已将登录/注册验证码从拖动拼图切换为自托管点击验证码：后端使用 `go-captcha/v2/click` 生成主图和提示图，服务端保存目标区域并一次性校验坐标数组；登录、注册、前端组件测试和 `controller` 回归均已覆盖。
@@ -201,7 +202,8 @@ GORM 维护以下表：
 
 状态：`in_progress`。
 
-- 已将 Stripe、Creem、易支付（含支付宝、微信和支付 FM）、Waffo、Waffo Pancake 的渠道回调在各自验签成功后接入 D2S 规范结算处理；代码路径已实现，真实渠道沙箱异常矩阵和日终对账仍待执行。
+- 已将 Stripe、Creem、易支付（含支付宝、微信和支付 FM）、Waffo、Waffo Pancake 的渠道回调在各自验签成功后接入 D2S 规范结算处理；新增独立 `alipay_pc` 电脑网站支付，使用 `alipay.trade.page.pay`、RSA2 签名和专用 `/api/v1/alipay/d2s/notify` 回调，保留原易支付 `alipay` provider。支付宝应用凭据、卖家 ID 和 HTTPS 回调地址通过环境变量配置，默认关闭。对照官方指南修正了请求签名参数、通知验签参数、商户订单号字符集和 `time_expire`，并保证关闭新购买入口后仍可处理已创建订单的通知；本地签名/验签及订单结算回归通过。
+- 支付宝电脑网站支付的生产门禁仍为 `in_progress`：实现 `alipay.trade.query` 处理丢失通知、超时与已付款订单补偿；处理退款、关单与账单对账；完成沙箱及生产等价环境真实支付回调矩阵。当前订单可能在有效付款后的通知抵达前过期或被清理，不得将本地模拟回调通过视为可开放收款。
 - PayPal/Paddle 在实现适配器前从首发页面和文档中移除。
 - 2026-10-30 复核首发渠道范围：PayPal/Paddle 在 `web/src`、controller/service/model/router 运行时代码中无入口，仅在拒绝它们的回归和文档中出现；购买页回归 11 项与 `TestD2SProviderRegionExcludesUnsupportedLaunchProviders` 均通过。该证据验证当前工作树实现，不代表生产配置已同步。
 - 已覆盖开放渠道的统一订单事务、幂等、金额/币种校验，以及 Stripe、Creem、易支付（含 `TRADE_REFUND`）、Waffo、Waffo Pancake 的冲正回归；真实渠道沙箱矩阵和日终对账仍待执行。
@@ -218,6 +220,7 @@ GORM 维护以下表：
 - 2026-10-31 Go 验证：设备码登录新增回归 `go test ./middleware -run TestD2SLoginActionLogAssociatesDeviceTokenEvents -count=1` 通过；一次全仓串行测试中 controller 测试程序被 Windows 拒绝启动（`controller.test.exe: Access is denied`），另有两项 HTTP/2 测试出现 socket abort。360 暂时退出后，`go test -p 1 ./... -count=1` 完整重跑通过，因此前述问题未在本次复测中复现。
 - 对所有开放渠道执行完整沙箱异常矩阵和日终对账。
 - 2026-11-02 当前环境复核：Stripe、Creem、易支付、Waffo、Waffo Pancake、Payment FM 沙箱凭据变量均未设置，仓库根目录 `.env` 不存在；本次仅检查变量是否存在，未读取或输出密钥值，因此无法发起真实沙箱交易。后续须从各支付渠道的隔离沙箱环境注入凭据，不得以生产凭据替代。
+- 2026-11-04 为符合运营方确认的“生产购买和下单尚未开放”，新增服务端 `D2S_PURCHASES_ENABLED` 总开关，默认值为关闭；订单预览、创建、结账、付费解绑和离线延长在服务端拒绝，渠道发现接口返回空列表；前端显示未开放提示、禁用购买类型并隐藏渠道按钮。Compose 和 `.env.example` 默认也为 `false`。controller 全包固定路径 Go 测试通过（包含开关关闭和紧急禁购回归）；购买页/工作区 2 个 Vitest 文件共 16 项通过；`tsgo -b`、7 个 locale JSON 解析及 `git diff --check` 通过。此改动尚未部署生产；开放购买前仍须完成渠道沙箱、合规审查和端到端验收。
 
 ### S4：用户与管理员网页
 
@@ -225,6 +228,7 @@ GORM 维护以下表：
 
 - 2026-11-03 按 Web Interface Guidelines 复核管理员导出审批队列，发现审批状态刷新、获批 CSV 下载、刷新待审批、批准和拒绝五个按钮缺少可见键盘焦点样式。已统一加入 `focus-visible` 焦点环，并扩展后台回归验证五个按钮；后台控制台测试 12/12、全量 Vitest 77 文件/478 项、`tsgo -b`、Rsbuild 生产构建、目标文件 oxlint/oxfmt 检查及 `git diff --check` 通过。真实屏幕阅读器验收仍待完成。
 - 2026-11-03 依据代码数据清单编制[隐私政策内部草稿](privacy-policy-draft.md)，明确标为不可发布，并列出主体、生产供应商/处理地区、提现启用与保护、业务数据期限、用户请求渠道及实名适用意见等未决事实。生产 `legal.privacy_policy` 未修改，草稿不能替代运营负责人和法律顾问审核；隐私政策 readiness 仍未通过。
+- 2026-11-04 负责人确认企业微信客服咨询由公司人员处理，聊天内容不会复制到本站工单或其他系统。该事实已写入隐私政策草稿 0.3 和数据清单；草稿仍不可发布，真实身份核验适用范围书面意见、法律审阅、生效日期确认及生产公开验收仍未完成。
 
 - 2026-11-03 隐私政策事实盘点发现提现路径会收集 `AlipayAccount` 和 `RealName`，并以明文字段保存在 `d2s_withdrawal_requests`；这不等同证件核验，但说明“网站只有邮箱”不准确。新增内部数据清单，区分 366 天安全审计、授权/交易/工单留存和未知的生产服务商配置；SEC-001 与管理规格同步区分订单付款标识的 HMAC/脱敏和提现资料明文。生产提现是否启用、必要性、访问权限、安全方式与期限仍待核，未据此自动改变业务或声称政策已完成。
 - 2026-11-03 补齐超级管理员财务/授权后台审计：订单、支付事件、余额、提现、授权、解绑申请和签名公钥查看写入带筛选范围及数量的 `VIEW_*` 审计；提现审核、人工解绑审核、账户区域修改和签名密钥退役的成功审计与业务变更同事务提交，失败尝试单独审计。controller 回归覆盖四类业务变更在审计表不可用时回滚及各成功路径；`scripts/d2s-fixed-go-test.ps1` 将测试二进制写入固定工作区路径后，controller、model、service、router 四个包测试全部通过；`go vet -p 1 ./controller ./model ./service` 和 `go build -p 1 ./controller ./model ./service` 通过。常规临时路径运行 service 测试曾被 Windows 拒绝启动，固定路径运行已通过。MySQL/PostgreSQL 测试 DSN 和本地服务均不可用，因此跨数据库矩阵未验证。改动尚未部署生产。
@@ -299,10 +303,13 @@ GORM 维护以下表：
 
 - 2026-11-02 扩展工单入口前端回归：验证右侧浮动菜单展开/关闭、站内 `/support` 链接、企业微信 URL 与 `target=_blank`/`noopener noreferrer` 属性，以及独立后台中隐藏入口。目标文件 5 项测试通过，完整 Vitest 76 个文件、473 项通过，`tsgo -b` 和目标文件 `oxfmt --check` 通过；未替代真实浏览器/屏幕阅读器验收。
 
+- 2026-11-04 调整投诉与咨询浮动入口：默认距视口右侧 16px、底部 96px，支持鼠标/触屏拖动、Alt+方向键微调，位置保存在本地并随视口变化夹紧；展开面板限制最大高度并允许内部滚动。新增位置、拖动、取消拖动、点击不误展开及重载恢复回归。当前工作树全量 Vitest 串行运行 77 个文件/482 项通过，固定路径 Go runner 对 `./...` 所有含测试包通过；`go vet -p 1 ./...`、`go build -p 1 ./...`、`tsgo -b`、目标文件 Oxlint/Oxfmt、Rsbuild 生产构建及 `git diff --check` 通过。尚未部署生产。
+
 ### S5：部署与生产演练
 
 状态：`in_progress`。
 
+- 2026-11-04 补齐 COS 跨地域备份恢复代码：主机备份脚本现要求 source/target region 不同、上传时启用 SSE-COS/AES256 和完整 CRC64 校验，校验清单改为相对文件名；新增只在校验通过后写出文件的 COS 下载器、root-only 更新服务环境文件入口和隔离模拟 COS 回归。Git Bash 回归覆盖上传标志、同地域拒绝、SHA-256 清单、损坏对象拒绝，shell 语法检查通过。真实 COS 桶、最小权限凭据、真实地域和生产恢复演练仍未配置/验证；S5 保持 `in_progress`。
 - 2026-11-03 以隐私政策内部草稿中的真实方括号占位内容检查 readiness 门禁，发现它只识别部分固定词组，可能放过 `[填写...]`、`[待确定]`、`[负责人核实...]` 等草稿标记。已扩展检查和 mock 回归覆盖这些形式，直接加载仓库的内部草稿并确认拒绝；规则按具体待填标记匹配，`[待付款]`状态文字和正常 Markdown 法规链接可通过。`scripts/d2s-production-readiness-selftest.ps1`、PowerShell AST 检查通过。此门禁仅拦截明显占位符，不判断政策事实准确性或法律充分性，生产政策仍需负责人核实并审核。
 - 2026-11-03 重新运行 `scripts/d2s-production-readiness-selftest.ps1`，有效模拟环境通过，空政策、仓库内部草稿、错误客服主机/路径/端口/查询/凭据/片段、缺失客服接口、错误运行 SHA 和无效 P-256 公钥等拒绝用例全部通过。随后对生产执行无凭据只读 GET：`/api/status` 为 200、运行 SHA `d11d0cc1da5070bc65b57ff72181ed2865043833`；`/api/privacy-policy` 为 200 但内容为空，`privacy_policy_enabled=false`。mock 自测不证明生产就绪；生产政策门禁仍失败。
 - 2026-11-03 在已授权的只读生产核验中再次 GET：`/api/status` 为 200，运行 SHA 仍为 `d11d0cc1da5070bc65b57ff72181ed2865043833`；`/api/privacy-policy` 返回 `{"success":true,"message":"","data":""}`，政策内容为空；`/api/v1/support/config` 返回 200。Draft PR #1 的两个 GitHub Actions 工作流（`41559259029`、`41559258003`）最终均通过，涵盖通用前后端 CI、根模块/relaykit vet/build/test、D2S 前后端、MySQL/PostgreSQL 矩阵及部署检查。PR 保持 Draft，本轮没有部署生产或提交自评估。
@@ -343,7 +350,15 @@ GORM 维护以下表：
 
 只有 S1-S5 全部达到 `verified` 才允许正式上线。
 
+- 2026-11-04 补齐账户注销与工单留存闭环：事务内追加注销行为日志、撤销认证材料和会话、匿名化用户表中的邮箱/用户名/第三方标识及资料并软删除账户，清理用户资料/安全控制表和旧版证件记录；SQLite 模型回归确认原邮箱不再被旧用户记录占用，可供新用户记录复用。注册快照和行为日志仍按各自期限保留；注销事务会关闭该账户所有未结工单并开始六个月保留计时，已有关闭时间不重置，随后由受控工单清理删除。模型回归验证注销后工单六个月留存、到期删除、已关闭时间不重置，以及工单关闭写入失败时账户、工单和注销日志整体回滚。数据库矩阵新增 MySQL/PostgreSQL 注销覆盖，验证认证凭据、会话、2FA、Passkey、OAuth/外部身份和账户资料移除，同时验证注册快照、行为审计、工单保留及原邮箱释放；本机没有两库 DSN，矩阵子测试跳过，尚无跨库结果。controller/model/service/router 固定路径全包测试、对应包 `go vet`/`go build` 通过；前端全量 77 文件/479 项、`tsgo -b`、改动文件 lint/format 通过。随后尝试 39 个包的全量固定路径测试，36 个含测试包通过；最后一个测试程序被 360 移除，runner 停止，故不宣称全量测试通过。2026-11-04 补充工单并发留存保护：创建工单在事务中先锁定所属账户行，并只允许启用且已验证邮箱的账户提交；账户注销/匿名化与提交因此串行化，注销若先完成则后续提交被拒绝，提交若先完成则注销事务随后关闭该工单。控制器将账户不可用明确映射为 403。新增未验证、停用、软删除、不存在账户拒绝和控制器状态码回归；数据库矩阵已加入 MySQL/PostgreSQL 工单提交与账户注销并发竞态（每库 5 次）的断言。本机当前无数据库 DSN、服务或客户端，故配置数据库子测试跳过，仍需在 CI 或配置隔离数据库后取得真实引擎运行证据。2026-11-04 当前工作树的 `model`、`controller` 固定路径全包测试、`go vet -p 1 ./model ./controller`、`go build -p 1 ./model ./controller` 和 `git diff --check` 均通过；数据库矩阵已增加注销后工单关闭断言，但本机无 MySQL/PostgreSQL DSN，矩阵子项未执行。生产注销行为仍待验收。
+
+- 2026-11-03 落实已确认的工单关闭后 6 个月删除：`d2s_support_tickets` 增加 `closed_at` 及组合索引，关闭时记录、重开时清零；旧版已关闭记录以 `updated_at` 回填。主节点启动立即执行并每 24 小时按 500 条一批清理；清理审计与删除在同一事务，失败回滚并写不含工单标识的失败审计。工单处理审计只保留操作者、时间、操作类型、来源 IP 和结果，目标及详情均为空；清理审计仅留汇总范围/数量。model 定向回归和全包固定路径测试通过；当前没有 MySQL/PostgreSQL 测试 DSN，因此本轮未复跑两库迁移矩阵。生产仍需发布后核验定时任务、旧数据回填与故障审计；本轮未对生产写入。
+
+- 2026-11-04 当前工作树复验：固定路径 runner 按 `go list ./...` 枚举并运行所有含测试 Go 包，全部通过（包括先前被 360 移除的 `setting/operation_setting`）；本次未发现 360 相关进程，测试程序保留至运行完成。全仓 `go vet -p 1 ./...` 和 `go build -p 1 ./...` 通过。另在隔离本机 PostgreSQL 15.14（127.0.0.1:5433）和 MySQL 8.4.9（127.0.0.1:3307）运行完整 `model` 包固定路径测试，均通过；两库配置迁移及 `TestD2SConcurrentCriticalPaths` 并发矩阵实际执行通过，随后停止本地数据库服务。前端 Vitest 77 个文件/479 项、`tsgo -b`、Rsbuild 生产构建、D2S 目标文件 Oxlint/Oxfmt 等前次复验通过；全仓敏感扫描覆盖 7,967 个文件。全量 Go 测试、静态检查和构建现已通过，但支付沙箱、生产闭环、跨故障域 COS 备份及真实屏幕阅读器等阶段门槛仍未完成。2026-11-04 当前工作树复验：固定路径 runner 对 `go list ./...` 枚举出的全部含测试 Go 包运行通过；额外注入隔离 PostgreSQL 15.14/MySQL 8.4.9 DSN 后，`model` 全包测试及两库迁移/并发子测试均通过，之后数据库服务已停止。完整 Vitest 77 个文件/480 项通过，`tsgo -b`、Rsbuild 生产构建、D2S 目标文件 Oxlint/Oxfmt 检查、全仓 `go vet -p 1 ./...`、`go build -p 1 ./...` 和 `git diff --check` 通过。无凭据只读 GET 复核：d2s.site 的 `/api/status` 返回 404，d2s.top 返回 200、运行 SHA 为 `d11d0cc1da5070bc65b57ff72181ed2865043833`；两个域名的 `/api/privacy-policy` 均返回空内容，支持配置接口均返回 200。此次未提交、推送或修改生产。
+
 ## 10. 当前待决策与风险
+
+- 2026-11-04 已将实现提交 `0b35b9a` 推送至 Draft PR #1，并在 CI 全部通过后 squash 合并至 `main`，合并提交 `a1355117d4850bbefb1abc1e68a81c767d4e0504`。本地固定路径全量 Go 测试、Go vet/build、Vitest 77 文件/480 项、TypeScript 检查、Rsbuild 构建及 D2S 定向 lint/format 均通过；PR 和主分支 CI 的 MySQL/PostgreSQL 迁移与并发、PostgreSQL 审计权限、Go 全量及前端流水线均通过。尚未部署生产，也未提交自评估。
 
 - 2026-11-03 为取得真实身份核验适用范围的书面意见，新增[事实核对与书面意见请求清单](SEC-002-真实身份核验适用范围书面意见请求.md)。清单区分负责人提供的业务事实、待核验材料，以及《反电信网络诈骗法》第二十一条/第二十三条和账号管理规定第九条/第二十三条涉及的具体问题；它不构成法律结论，不改变自评估和证件采集门槛。
 - 2026-11-03 再次无凭据只读复核生产：`/api/status` 返回 200，运行 SHA 仍为 `d11d0cc1da5070bc65b57ff72181ed2865043833`；`/api/v1/support/config` 返回 200，已配置 `work.weixin.qq.com` 客服入口；`/api/privacy-policy` 返回 200，但 `data` 为空。结合本次发布记录中的审计角色/表权限验收，修正本计划和 SEC-001 当前状态表，删除已过期的“生产旧版本、客服 API 404、角色未配置”现状描述。未访问生产数据库或执行生产写操作；双人审批、支付沙箱、COS、生产工单闭环等仍未验收。
@@ -373,6 +388,13 @@ GORM 维护以下表：
 - 用户和管理员网页已有第一版，管理员权限及组件回归已覆盖；独立后台现在按角色打开首个授权模块，未知角色不展示受限模块，并有账户操作员权限边界回归。完整可访问性、真实屏幕阅读器和端到端支付流程仍待完成。
 - 如需保留旧 `desktop2stereo-server` 数据，必须另做迁移、校验和对账，不能直接复制。
 - 对外部署 AGPL-3.0 修改版服务时必须持续满足对应源代码提供义务。
+
+- 2026-11-04 经重复无凭据只读诊断定位双域名访问差异：公网 d2s.site 经 Tencent EdgeOne 的 `/api/status` 与 `/api/v1/support/config` 连续 4 次均返回 404；公网 d2s.top 经 `nginx/1.24.0` 连续 4 次均返回 200，报告运行 SHA `d11d0cc1da5070bc65b57ff72181ed2865043833`，客服配置为合规的企业微信 HTTPS 链接。`d2s.site` 的公网 DNS CNAME 指向 EdgeOne。经 SSH 只读核验生产源站 `/etc/nginx/sites-enabled/d2s.site` 同时声明 d2s.site/d2s.top 并反代至 `127.0.0.1:3000`；在源站用 Host/SNI 固定回环分别请求 `/api/status`、`/api/v1/support/config`、`/business-license.png` 均为 200，而公网 EdgeOne 上 `/business-license.png` 为 404。由此可确认应用源站路由和静态资源正常，故障位于 d2s.site 的 EdgeOne/边缘转发路径；具体 EdgeOne 规则未取得控制台证据，未改生产配置。d2s.top 的 `/api/privacy-policy` 返回空字符串，d2s.site 当前请求在 EdgeOne 处被 404 拦截；隐私政策 readiness 未通过。源站只读预检查 HTTP 返回 301 至 HTTPS。
+- 2026-11-04 按建议在生产源站执行 A/B/C：`hk-source.callback.cloudses.com` 解析到 `43.129.115.212`，响应头指向 Tencent SES `SesCallback` RPC；A=404、B=404、C=308，确认该地址并非网站源站。实际网站地址 `d2s.top` 解析到 `118.89.79.159`；直接以 `d2s.site` 和 `www.d2s.site` SNI 访问该 IP，严格 TLS 校验通过，根路径、`/api/status`、`/api/privacy-policy`、`/api/v1/support/config`、`/business-license.png` 均返回 200。推定 EdgeOne 源站候选为 `118.89.79.159`，回源 Host 为 `d2s.site`，HTTPS/443 可用；这仍需在 EdgeOne 控制台核对配置后再修改。隐私政策接口内容仍为空，readiness 未通过。
+- 2026-11-04 验证实际网站源站的 HTTP 80：在源站机请求 `http://118.89.79.159/` 并带 `Host: www.d2s.site` 得到 301，`Location: https://www.d2s.site/`；`/api/status` 也返回 301。源站 80 强制跳转 HTTPS；源站 443 严格 TLS 与业务路径均成功，因此 EdgeOne 建议固定 HTTPS/443 回源，不使用协议跟随。未修改生产配置。
+- 2026-11-04 负责人报告 EdgeOne 回源修复后，无缓存 GET 复验 `d2s.site` 与 `d2s.top` 的 `/api/status`、`/api/v1/support/config` 均为 200；运行版本 `d11d0cc1da5070bc65b57ff72181ed2865043833`。两个域名的 `/api/privacy-policy` 均返回 200 但 `data` 为空，`privacy_policy_enabled=false`；readiness 仍未通过。`/business-license.png` 返回 200 但 Content-Type 为 HTML，生产版本 Git 树中没有该图片。工作树新增营业执照展示路由，Rsbuild 构建、TypeScript 检查、目标文件 lint/format 均通过；该页面尚未部署，须在后续发布后核验页面与图片响应。
+
+- 2026-11-04 核对腾讯云 COSCLI 官方 `cp` 文档发现，使用完整 bucket name 的 `cos://bucket-appid/...` 必须显式提供 endpoint。此前备份/恢复脚本遗漏此参数，现统一由 `D2S_BACKUP_COS_REGION` 派生 `cos.<region>.myqcloud.com`，上传、下载及 `stat` 均显式传入；模拟回归新增 endpoint 断言，并确认恢复脚本在缺少桶地域时不会调用 COSCLI；生产演练文档现在从 root-only `backup.env` 读取地域配置。真实 COS 桶地域、凭据、远端上传和恢复演练仍未验证。
 
 ## 11. 文档同步规则
 
