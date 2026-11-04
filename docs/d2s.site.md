@@ -171,7 +171,7 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 授权与商业配置：
 
 - `D2S_PURCHASES_ENABLED=false`：服务端购买和下单总开关，默认关闭；关闭时订单预览、创建、结账以及付费解绑、离线延长等付费订单入口返回 503，支付渠道发现接口返回空列表。前端同步隐藏支付渠道、禁用购买选项并提示暂未开放。生产环境应明确保持 `false`；只有支付沙箱、合规审查和端到端验收完成后，才可显式设为 `true`。
-- 支付宝电脑网站支付需单独配置 `D2S_ALIPAY_PC_ENABLED=true`、`D2S_ALIPAY_APP_ID`、`D2S_ALIPAY_SELLER_ID`、`D2S_ALIPAY_PRIVATE_KEY_PEM`、`D2S_ALIPAY_PUBLIC_KEY_PEM`、`D2S_ALIPAY_NOTIFY_URL` 和 `D2S_ALIPAY_RETURN_URL`；`D2S_ALIPAY_PUBLIC_KEY_PEM` 必须是支付宝公钥，不能填商户应用公钥。`D2S_ALIPAY_GATEWAY_URL` 可选，默认正式网关。沙箱请按支付宝控制台选择 OpenAPI 沙箱网关（如 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`）和对应密钥，不能使用旧国际 MAPI 网关，也不能混用正式与沙箱凭据。私钥只通过受限 Secret 注入。支付宝电脑网站支付由后台设置二维码展示模式（0、1、3、4），支付表单在本站页面的支付宝 iframe 中打开；模式 4 的二维码宽度由服务端固定。后台设置及应用网关地址为 `https://d2s.site/api/v1/alipay/app-gateway`，电脑网站支付仍使用独立 `notify_url`。
+- 支付宝电脑网站支付的 App ID、Seller ID、网关、通知/返回地址、RSA2 商户私钥和支付宝公钥可由超级管理员在后台“支付宝电脑网站支付配置”中维护；私钥和支付宝公钥以 AES-GCM 加密后存入配置表，读取 API 不返回密钥，审计只记录变更字段。加密依赖稳定的 `CRYPTO_SECRET`（未单独配置时使用稳定的 `SESSION_SECRET` 派生）；轮换该 Secret 前必须先迁移并重新加密支付宝密钥，否则旧密文无法解密。后台也支持切回服务器环境变量配置：`D2S_ALIPAY_PC_ENABLED`、`D2S_ALIPAY_APP_ID`、`D2S_ALIPAY_SELLER_ID`、`D2S_ALIPAY_PRIVATE_KEY_PEM`、`D2S_ALIPAY_PUBLIC_KEY_PEM`、`D2S_ALIPAY_NOTIFY_URL`、`D2S_ALIPAY_RETURN_URL`，`D2S_ALIPAY_GATEWAY_URL` 可选，默认正式网关。`D2S_ALIPAY_PUBLIC_KEY_PEM` 必须是支付宝公钥，不能填商户应用公钥。沙箱请按支付宝控制台选择 OpenAPI 沙箱网关（如 `https://openapi-sandbox.dl.alipaydev.com/gateway.do`）和对应密钥，不能使用旧国际 MAPI 网关，也不能混用正式与沙箱凭据。后台的支付宝渠道开关、购买总开关 `D2S_PURCHASES_ENABLED` 和支付合规确认是独立门禁，配置表单不会绕过后两者。支付宝电脑网站支付由后台设置二维码展示模式（0、1、3、4），支付表单在本站页面的支付宝 iframe 中打开；模式 4 的二维码宽度由服务端固定。
 
 电脑网站支付的结果通知地址通过支付请求中的 `notify_url` 传入，本站地址为 `https://d2s.site/api/v1/alipay/d2s/notify`。开放平台“应用网关”为 `https://d2s.site/api/v1/alipay/app-gateway`，GET 用于 HTTPS 可访问性检测，POST 仅验签并处理已支持的电脑网站支付通知；它与每笔请求的 `notify_url` 分开配置，其他支付宝产品仍未启用。
 
@@ -182,7 +182,7 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 | 发起支付 | 已生成 `alipay.trade.page.pay` POST 参数，使用 RSA2；请求签名包含 `sign_type`。`out_trade_no` 使用 `D2S` 加 UUID 的 32 位十六进制字符，符合字符限制；金额取服务端订单快照，`time_expire` 与订单截止时间一致。 |
 | 异步通知 | 已按支付宝通知规则验签（排除 `sign`、`sign_type`），核对 `app_id`、`auth_app_id`、配置的 `seller_id`、订单号、金额及订单渠道；重复同一通知只结算一次。关闭新购买入口后仍可接收已创建订单的有效通知。同步 `return_url` 不触发履约。 |
 | 未收到通知、订单超时 | 已接入经 RSA2 响应验签和身份/金额校验的 `alipay.trade.query` 主动对账。主节点每分钟扫描未完成订单；过期订单先调用 `alipay.trade.close`，仅在支付宝确认关闭后取消本站订单并释放余额预留。通用过期任务会跳过支付宝订单。 |
-| 退款、关单、账单 | 已增加超级管理员退款、主动关单及按日期下载交易账单 API。退款使用幂等号和待核状态，部分退款保留授权，确认全额退款后停用授权；账单即时透传、不在本站存档。后台 UI 和支付宝沙箱验收仍需完成。 |
+| 退款、关单、账单 | 已增加超级管理员退款、主动关单及按日期下载交易账单 API。退款使用幂等号和待核状态，部分退款保留授权，确认全额退款后停用授权；账单即时透传、不在本站存档。后台配置表单已加入代码，尚需部署后填写生产参数；真实支付和退款验收仍待完成。 |
 | 验收 | 商户应用权限与正式密钥配置、支付宝沙箱支付及签名失败/金额不符/重复通知/通知丢失/过期订单/部分退款/全额退款/账单下载测试仍是生产门禁。购买开关必须保持关闭，直到沙箱与生产等价环境验收完成。 |
 
 - `D2S_DEVICE_VERIFICATION_URI=https://d2s.site/device`。

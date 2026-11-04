@@ -15,13 +15,13 @@ type d2SAlipayQRModeRequest struct {
 }
 
 func D2SAdminAlipayPCSettings(c *gin.Context) {
-	settings, err := model.GetD2SAlipayPCSettings()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "SETTINGS_UNAVAILABLE"})
-		return
-	}
 	if c.Request.Method == http.MethodGet {
-		c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
+		response, err := getD2SAlipayPCSettingsResponse()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "SETTINGS_UNAVAILABLE"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "data": response})
 		return
 	}
 	var request d2SAlipayQRModeRequest
@@ -34,7 +34,7 @@ func D2SAdminAlipayPCSettings(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "AUDIT_WRITE_FAILED"})
 		return
 	}
-	updated, err := model.SetD2SAlipayPCQRPayMode(mode, time.Now().UTC().Unix())
+	_, err := model.SetD2SAlipayPCQRPayMode(mode, time.Now().UTC().Unix())
 	result := "SUCCESS"
 	if err != nil {
 		result = "FAILURE"
@@ -48,5 +48,10 @@ func D2SAdminAlipayPCSettings(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "SETTINGS_UPDATE_FAILED"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": updated})
+	response, err := getD2SAlipayPCSettingsResponse()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "code": "SETTINGS_UNAVAILABLE"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": response})
 }

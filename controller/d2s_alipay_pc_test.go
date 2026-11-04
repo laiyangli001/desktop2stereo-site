@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
@@ -115,6 +116,66 @@ func TestAlipayApplicationGatewaySafeDetection(t *testing.T) {
 	assert.Equal(t, "success", response.Body.String())
 }
 
+func TestD2SAlipaySettingEncryptionAndDecryption(t *testing.T) {
+	previousSecret := common.CryptoSecret
+	common.CryptoSecret = "stable-test-encryption-secret"
+	t.Cleanup(func() { common.CryptoSecret = previousSecret })
+
+	plaintext := "-----BEGIN PRIVATE KEY-----\nmerchant-secret\n-----END PRIVATE KEY-----"
+	ciphertext, err := encryptD2SAlipaySetting(plaintext)
+	require.NoError(t, err)
+	require.NotContains(t, ciphertext, "merchant-secret")
+	require.True(t, strings.HasPrefix(ciphertext, "v1:"))
+
+	decrypted, err := decryptD2SAlipaySetting(ciphertext)
+	require.NoError(t, err)
+	require.Equal(t, plaintext, decrypted)
+
+	common.CryptoSecret = "different-test-encryption-secret"
+	_, err = decryptD2SAlipaySetting(ciphertext)
+	require.Error(t, err)
+}
+
+func TestD2SAlipaySettingsResponseDoesNotExposeKeys(t *testing.T) {
+	previousDB, previousSecret := model.DB, common.CryptoSecret
+	db, err := gorm.Open(sqlite.Open("file:"+strings.ReplaceAll(t.Name(), "/", "_")+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&model.D2SAlipayPCSettings{}))
+	model.DB = db
+	common.CryptoSecret = "stable-test-encryption-secret"
+	t.Cleanup(func() {
+		model.DB, common.CryptoSecret = previousDB, previousSecret
+		sqlDB, dbErr := db.DB()
+		if dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	merchantKey, alipayKey := setAlipayPCTestConfig(t)
+	merchantPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: mustPKCS8PrivateKey(t, merchantKey)})
+	publicPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: mustPKIXPublicKey(t, &alipayKey.PublicKey)})
+	merchantCiphertext, err := encryptD2SAlipaySetting(string(merchantPEM))
+	require.NoError(t, err)
+	publicCiphertext, err := encryptD2SAlipaySetting(string(publicPEM))
+	require.NoError(t, err)
+	require.NoError(t, model.SaveD2SAlipayPCSettings(&model.D2SAlipayPCSettings{
+		ID: "default", ConfigManaged: true, AppID: "2026000000000000", SellerID: "2088000000000000",
+		GatewayURL: alipayPCGatewayURL, NotifyURL: "https://d2s.site/api/v1/alipay/d2s/notify",
+		ReturnURL: "https://d2s.site/d2s", PrivateKeyCiphertext: merchantCiphertext,
+		PublicKeyCiphertext: publicCiphertext, QRPayMode: "4",
+	}))
+
+	response, err := getD2SAlipayPCSettingsResponse()
+	require.NoError(t, err)
+	require.True(t, response.Ready)
+	require.True(t, response.MerchantPrivateKeyConfigured)
+	require.True(t, response.AlipayPublicKeyConfigured)
+	encoded, err := json.Marshal(response)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), "BEGIN PRIVATE KEY")
+	require.NotContains(t, string(encoded), "BEGIN PUBLIC KEY")
+}
+
 func TestAlipayQRPayModeValidation(t *testing.T) {
 	for _, mode := range []string{"0", "1", "3", "4"} {
 		assert.True(t, validAlipayQRPayMode(mode))
@@ -200,6 +261,7 @@ func TestAlipayPCD2SNotifyVerifiesAndSettlesOrder(t *testing.T) {
 		&model.User{}, &model.D2SUserProfile{}, &model.D2SLicense{}, &model.D2SLicenseEvent{},
 		&model.D2SOrder{}, &model.D2SPaymentEvent{}, &model.D2SInviteReward{},
 		&model.D2SBalanceAccount{}, &model.D2SBalanceTransaction{},
+		&model.D2SAlipayPCSettings{},
 	))
 	now := time.Now().Unix()
 	require.NoError(t, db.Create(&model.User{

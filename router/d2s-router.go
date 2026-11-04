@@ -131,6 +131,7 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 			admin.GET("/payment-events", controller.D2SAdminPaymentEvents)
 			admin.GET("/alipay/settings", controller.D2SAdminAlipayPCSettings)
 			admin.PUT("/alipay/settings", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayPCSettings)
+			admin.PUT("/alipay/config", middleware.SessionCookieOriginGuard(), controller.D2SAdminConfigureAlipayPC)
 			admin.GET("/alipay/orders/:id/refunds", controller.D2SAdminAlipayRefunds)
 			admin.POST("/alipay/orders/:id/refunds", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayRefund)
 			admin.POST("/alipay/refunds/:out_request_no/reconcile", middleware.SessionCookieOriginGuard(), controller.D2SAdminAlipayRefundReconcile)

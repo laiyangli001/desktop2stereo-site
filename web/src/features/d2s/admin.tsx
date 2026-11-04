@@ -32,6 +32,7 @@ import {
   setD2SUserRegion,
 } from './api'
 import { formatD2SDate, formatD2SMoney } from './lib/format'
+import { AlipayPCConfigForm } from './alipay-config-form'
 
 function AlipayOrderActions(props: {
   orderID: string
@@ -611,6 +612,15 @@ export function D2SAdminWorkspace() {
                 </p>
               </CardContent>
             </Card>
+            <AlipayPCConfigForm
+              key={JSON.stringify(alipaySettings.data?.data ?? null)}
+              settings={alipaySettings.data?.data}
+              onSaved={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: ['d2s-admin', 'alipay-settings'],
+                })
+              }
+            />
             <Card>
               <CardHeader>
                 <CardTitle>{t('Payment events')}</CardTitle>

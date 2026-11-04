@@ -78,6 +78,26 @@ func SetD2SAlipayPCQRPayMode(mode string, now int64) (*D2SAlipayPCSettings, erro
 	return &settings, err
 }
 
+func SaveD2SAlipayPCSettings(settings *D2SAlipayPCSettings) error {
+	if settings == nil || settings.ID != "default" {
+		return ErrD2SOrderInvalid
+	}
+	if DB == nil {
+		return errors.New("database is unavailable")
+	}
+	if settings.UpdatedAt <= 0 {
+		settings.UpdatedAt = time.Now().UTC().Unix()
+	}
+	return DB.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"qr_pay_mode", "config_managed", "channel_enabled", "app_id", "seller_id",
+			"gateway_url", "notify_url", "return_url", "private_key_ciphertext",
+			"public_key_ciphertext", "updated_at",
+		}),
+	}).Create(settings).Error
+}
+
 func CreateD2SAlipayRefund(refund *D2SAlipayRefund) error {
 	if refund == nil || refund.OrderID == "" || refund.OutRequestNo == "" || refund.AmountMinor <= 0 || refund.OperatorID <= 0 {
 		return ErrD2SOrderInvalid

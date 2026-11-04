@@ -272,9 +272,18 @@ type D2SPaymentEvent struct {
 func (D2SPaymentEvent) TableName() string { return "d2s_payment_events" }
 
 type D2SAlipayPCSettings struct {
-	ID        string `json:"-" gorm:"type:varchar(32);primaryKey"`
-	QRPayMode string `json:"qr_pay_mode" gorm:"type:char(1);not null;default:'4'"`
-	UpdatedAt int64  `json:"updated_at" gorm:"type:bigint;not null"`
+	ID                   string `json:"-" gorm:"type:varchar(32);primaryKey"`
+	QRPayMode            string `json:"-" gorm:"type:char(1);not null;default:'4'"`
+	ConfigManaged        bool   `json:"-" gorm:"not null;default:false"`
+	ChannelEnabled       bool   `json:"-" gorm:"not null;default:false"`
+	AppID                string `json:"-" gorm:"type:varchar(128);not null;default:''"`
+	SellerID             string `json:"-" gorm:"type:varchar(128);not null;default:''"`
+	GatewayURL           string `json:"-" gorm:"type:varchar(512);not null;default:''"`
+	NotifyURL            string `json:"-" gorm:"type:varchar(512);not null;default:''"`
+	ReturnURL            string `json:"-" gorm:"type:varchar(512);not null;default:''"`
+	PrivateKeyCiphertext string `json:"-" gorm:"type:text"`
+	PublicKeyCiphertext  string `json:"-" gorm:"type:text"`
+	UpdatedAt            int64  `json:"-" gorm:"type:bigint;not null"`
 }
 
 func (D2SAlipayPCSettings) TableName() string { return "d2s_alipay_pc_settings" }

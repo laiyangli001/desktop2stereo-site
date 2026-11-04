@@ -31,17 +31,22 @@ function readStoredPosition(): Position {
     const stored = localStorage.getItem(SUPPORT_POSITION_KEY)
     if (stored) {
       const parsed: unknown = JSON.parse(stored)
-      if (
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        'right' in parsed &&
-        'bottom' in parsed &&
-        typeof parsed.right === 'number' &&
-        Number.isFinite(parsed.right) &&
-        typeof parsed.bottom === 'number' &&
-        Number.isFinite(parsed.bottom)
-      ) {
-        return clampPosition(parsed, window.innerWidth, window.innerHeight)
+      if (typeof parsed === 'object' && parsed !== null) {
+        const candidate = parsed as Record<string, unknown>
+        const right = candidate.right
+        const bottom = candidate.bottom
+        if (
+          typeof right === 'number' &&
+          Number.isFinite(right) &&
+          typeof bottom === 'number' &&
+          Number.isFinite(bottom)
+        ) {
+          return clampPosition(
+            { right, bottom },
+            window.innerWidth,
+            window.innerHeight
+          )
+        }
       }
     }
   } catch {

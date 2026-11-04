@@ -170,34 +170,72 @@ func closeAlipayPCTrade(order *model.D2SOrder) error {
 		OutTradeNo  string `json:"out_trade_no"`
 		TradeStatus string `json:"trade_status"`
 	}
-	if err := common.Unmarshal(raw, &result); err != nil || result.Code != "10000" || result.AppID != strings.TrimSpace(os.Getenv("D2S_ALIPAY_APP_ID")) || result.OutTradeNo != outTradeNo || result.TradeStatus != "TRADE_CLOSED" {
+	config, err := getAlipayPCConfig()
+	if err != nil {
+		return err
+	}
+	if err := common.Unmarshal(raw, &result); err != nil || result.Code != "10000" || result.AppID != config.appID || result.OutTradeNo != outTradeNo || result.TradeStatus != "TRADE_CLOSED" {
 		return model.ErrD2SPaymentMismatch
 	}
 	return nil
 }
 
 func isAlipayPCEnabled() bool {
-	if !isPaymentComplianceConfirmed() || strings.TrimSpace(os.Getenv("D2S_ALIPAY_PC_ENABLED")) != "true" {
+	if !isPaymentComplianceConfirmed() {
 		return false
 	}
-	_, err := getAlipayPCConfig()
+	settings, err := model.GetD2SAlipayPCSettings()
+	if err != nil {
+		return false
+	}
+	enabled := strings.TrimSpace(os.Getenv("D2S_ALIPAY_PC_ENABLED")) == "true"
+	if settings.ConfigManaged {
+		enabled = settings.ChannelEnabled
+	}
+	if !enabled {
+		return false
+	}
+	_, err = getAlipayPCConfig()
 	return err == nil
 }
 
 func getAlipayPCConfig() (*alipayPCConfig, error) {
+	settings, err := model.GetD2SAlipayPCSettings()
+	if err != nil {
+		return nil, err
+	}
 	appID := strings.TrimSpace(os.Getenv("D2S_ALIPAY_APP_ID"))
 	sellerID := strings.TrimSpace(os.Getenv("D2S_ALIPAY_SELLER_ID"))
-	privateKey, err := parseAlipayPrivateKey(os.Getenv("D2S_ALIPAY_PRIVATE_KEY_PEM"))
-	if err != nil {
-		return nil, err
-	}
-	publicKey, err := parseAlipayPublicKey(os.Getenv("D2S_ALIPAY_PUBLIC_KEY_PEM"))
-	if err != nil {
-		return nil, err
-	}
+	privateKeyRaw := os.Getenv("D2S_ALIPAY_PRIVATE_KEY_PEM")
+	publicKeyRaw := os.Getenv("D2S_ALIPAY_PUBLIC_KEY_PEM")
 	notifyURL := strings.TrimSpace(os.Getenv("D2S_ALIPAY_NOTIFY_URL"))
 	returnURL := strings.TrimSpace(os.Getenv("D2S_ALIPAY_RETURN_URL"))
 	gatewayURL := strings.TrimSpace(os.Getenv("D2S_ALIPAY_GATEWAY_URL"))
+	if settings.ConfigManaged {
+		appID, sellerID = settings.AppID, settings.SellerID
+		gatewayURL, notifyURL, returnURL = settings.GatewayURL, settings.NotifyURL, settings.ReturnURL
+		privateKeyRaw, err = decryptD2SAlipaySetting(settings.PrivateKeyCiphertext)
+		if err != nil {
+			return nil, err
+		}
+		publicKeyRaw, err = decryptD2SAlipaySetting(settings.PublicKeyCiphertext)
+		if err != nil {
+			return nil, err
+		}
+	}
+	privateKey, err := parseAlipayPrivateKey(privateKeyRaw)
+	if err != nil {
+		return nil, err
+	}
+	publicKey, err := parseAlipayPublicKey(publicKeyRaw)
+	if err != nil {
+		return nil, err
+	}
+	appID = strings.TrimSpace(appID)
+	sellerID = strings.TrimSpace(sellerID)
+	notifyURL = strings.TrimSpace(notifyURL)
+	returnURL = strings.TrimSpace(returnURL)
+	gatewayURL = strings.TrimSpace(gatewayURL)
 	if gatewayURL == "" {
 		gatewayURL = alipayPCGatewayURL
 	}
@@ -425,15 +463,15 @@ func alipayAmountMinor(raw string) (int64, error) {
 }
 
 func AlipayPCD2SNotify(c *gin.Context) {
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
+	if err != nil || len(body) > 1<<20 {
+		c.String(http.StatusBadRequest, "failure")
+		return
+	}
 	// Existing payments must still settle after new checkouts are disabled.
 	config, err := getAlipayPCConfig()
 	if err != nil {
 		c.String(http.StatusServiceUnavailable, "failure")
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(c.Request.Body, (1<<20)+1))
-	if err != nil || len(body) > 1<<20 {
-		c.String(http.StatusBadRequest, "failure")
 		return
 	}
 	values, err := url.ParseQuery(string(body))

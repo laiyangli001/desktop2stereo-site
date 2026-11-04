@@ -80,22 +80,53 @@ export async function getD2SAdminPaymentEvents(filters?: {
   return response.data as D2SResponse<{ events: D2SPaymentEvent[] }>
 }
 
+export type D2SAdminAlipayPCSettings = {
+  qr_pay_mode: string
+  config_source: 'admin' | 'environment'
+  channel_enabled: boolean
+  app_id: string
+  seller_id: string
+  gateway_url: string
+  notify_url: string
+  return_url: string
+  merchant_private_key_configured: boolean
+  alipay_public_key_configured: boolean
+  ready: boolean
+  updated_at: number
+}
+
 export async function getD2SAdminAlipayPCSettings() {
   const response = await api.get('/api/v1/admin/alipay/settings')
-  return response.data as D2SResponse<{
-    qr_pay_mode: string
-    updated_at: number
-  }>
+  return response.data as D2SResponse<D2SAdminAlipayPCSettings>
 }
 
 export async function setD2SAdminAlipayQRPayMode(qrPayMode: string) {
   const response = await api.put('/api/v1/admin/alipay/settings', {
     qr_pay_mode: qrPayMode,
   })
-  return response.data as D2SResponse<{
-    qr_pay_mode: string
-    updated_at: number
-  }>
+  return response.data as D2SResponse<D2SAdminAlipayPCSettings>
+}
+
+export async function saveD2SAdminAlipayPCConfig(input: {
+  channel_enabled: boolean
+  qr_pay_mode?: string
+  app_id: string
+  seller_id: string
+  gateway_url: string
+  notify_url: string
+  return_url: string
+  merchant_private_key?: string
+  alipay_public_key?: string
+}) {
+  const response = await api.put('/api/v1/admin/alipay/config', input)
+  return response.data as D2SResponse<D2SAdminAlipayPCSettings>
+}
+
+export async function useD2SAdminAlipayEnvironmentConfig() {
+  const response = await api.put('/api/v1/admin/alipay/config', {
+    use_environment_config: true,
+  })
+  return response.data as D2SResponse<D2SAdminAlipayPCSettings>
 }
 
 export async function getD2SAdminAlipayRefunds(orderID: string) {
@@ -252,7 +283,10 @@ export async function getD2SOrders(): Promise<
 
 export async function getD2SCheckoutProviders() {
   const response = await api.get('/api/v1/orders/providers')
-  return response.data as D2SResponse<{ enabled: boolean; providers: string[] }>
+  return response.data as D2SResponse<{
+    enabled: boolean
+    providers: string[]
+  }>
 }
 
 export type D2SOrderRequest = {
