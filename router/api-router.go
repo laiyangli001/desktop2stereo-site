@@ -195,6 +195,7 @@ func SetApiRouter(router *gin.Engine) {
 		optionRoute := apiRouter.Group("/option")
 		optionRoute.Use(middleware.RootAuth())
 		{
+			registerSystemAlipayRoutes(optionRoute)
 			optionRoute.GET("/", controller.GetOptions)
 			optionRoute.PUT("/", controller.UpdateOption)
 			optionRoute.GET("/tencent-ses", controller.GetTencentSESSettings)

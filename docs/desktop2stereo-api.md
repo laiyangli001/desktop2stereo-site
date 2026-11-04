@@ -89,10 +89,10 @@ access token。
 - `GET /api/v1/orders`：返回当前账号最近 100 笔订单。
 - `GET /api/v1/orders/providers`：返回当前已配置并满足合规开关的 Checkout 渠道；前端不得展示未返回的渠道。
 - `GET /api/v1/orders/:id`
-- `POST /api/v1/orders/:id/checkout`：为已创建的 Stripe、Creem、Waffo、Waffo Pancake、支付宝电脑网站支付或易支付订单生成 Checkout 信息；服务端再次校验订单归属、状态、过期时间、渠道和网关金额。`alipay_pc` 使用支付宝 `alipay.trade.page.pay` RSA2 签名生成并提交收银台 `POST` 表单，模式由超级管理员后台设置并嵌入本站 iframe；支付宝商户订单号为 `D2S` 加本地 UUID 的 32 位十六进制字符，`time_expire` 与本地订单截止时间一致。易支付 provider 包括 `alipay`、`wechat` 和可配置的 `paymentfm`，其中 `wechat` 映射到网关的 `wxpay` 参数；Creem 还要求已配置与服务器报价完全匹配的 USD 商品，Waffo/Waffo Pancake 使用服务器价格快照；易支付返回服务端签名的 `POST` 地址和参数，客户端不得自行改写。
+- `POST /api/v1/orders/:id/checkout`：为已创建的 Stripe、Creem、Waffo、Waffo Pancake、支付宝电脑网站支付或易支付订单生成 Checkout 信息；服务端再次校验订单归属、状态、过期时间、渠道和网关金额。`alipay_pc` 使用支付宝 `alipay.trade.page.pay` RSA2 签名生成并提交收银台 `POST` 表单，模式由普通系统后台的支付网关设置并嵌入本站 iframe；支付宝商户订单号为 `D2S` 加本地 UUID 的 32 位十六进制字符，`time_expire` 与本地订单截止时间一致。易支付 provider 包括 `alipay`、`wechat` 和可配置的 `paymentfm`，其中 `wechat` 映射到网关的 `wxpay` 参数；Creem 还要求已配置与服务器报价完全匹配的 USD 商品，Waffo/Waffo Pancake 使用服务器价格快照；易支付返回服务端签名的 `POST` 地址和参数，客户端不得自行改写。
 - `POST /api/v1/alipay/d2s/notify`：支付宝电脑网站支付异步通知；服务端验 RSA2、公钥签名和应用 ID，并校验商户订单号、订单金额/币种后通过现有 D2S 支付事务履约。关闭新购买入口不会阻断已有订单的已验签通知。同步 return URL 仅用于用户跳转，不能作为支付成功依据。
 - `GET/POST /api/v1/alipay/app-gateway`：支付宝开放平台应用网关的公网检测与通知入口。GET 返回检测响应；POST 仅接受验签通过的 `trade_status_sync` 通知并复用电脑网站支付结算逻辑。其他通知类型不启用。
-- 超级管理员支付宝管理接口：`GET/PUT /api/v1/admin/alipay/settings` 设置二维码模式；`POST /api/v1/admin/alipay/orders/:id/refunds` 发起退款，`GET /api/v1/admin/alipay/orders/:id/refunds` 查询退款记录，`POST /api/v1/admin/alipay/refunds/:out_request_no/reconcile` 查询待确认退款；`POST /api/v1/admin/alipay/orders/:id/close` 关单；`GET /api/v1/admin/alipay/bill?date=YYYY-MM-DD` 下载交易账单。敏感写操作和账单下载写入后台审计日志。
+- 普通系统后台支付宝管理接口（与其他支付配置相同，要求系统 root 登录）：`GET/PUT /api/option/alipay/settings` 读取/设置二维码模式，`PUT /api/option/alipay/config` 保存加密参数；`POST /api/option/alipay/orders/:id/refunds` 发起退款，`GET /api/option/alipay/orders/:id/refunds` 查询退款记录，`POST /api/option/alipay/refunds/:out_request_no/reconcile` 查询待确认退款；`POST /api/option/alipay/orders/:id/close` 关单；`GET /api/option/alipay/bill?date=YYYY-MM-DD` 下载交易账单。敏感写操作和账单下载写入后台审计日志。 独立安全审计后台的 Cookie 不具备这些接口权限，审计记录带 `operator_realm=system_admin` 以区分账号体系。
 - `GET /api/v1/invite/info`、`GET /api/v1/invite/records`
 - `GET /api/v1/balance/info`、`GET /api/v1/balance/transactions`
 - `POST /api/v1/withdrawal/request`、`GET /api/v1/withdrawal/status`：用户响应不回传收款支付宝账号或姓名。

@@ -96,12 +96,12 @@ export type D2SAdminAlipayPCSettings = {
 }
 
 export async function getD2SAdminAlipayPCSettings() {
-  const response = await api.get('/api/v1/admin/alipay/settings')
+  const response = await api.get('/api/option/alipay/settings')
   return response.data as D2SResponse<D2SAdminAlipayPCSettings>
 }
 
 export async function setD2SAdminAlipayQRPayMode(qrPayMode: string) {
-  const response = await api.put('/api/v1/admin/alipay/settings', {
+  const response = await api.put('/api/option/alipay/settings', {
     qr_pay_mode: qrPayMode,
   })
   return response.data as D2SResponse<D2SAdminAlipayPCSettings>
@@ -118,12 +118,12 @@ export async function saveD2SAdminAlipayPCConfig(input: {
   merchant_private_key?: string
   alipay_public_key?: string
 }) {
-  const response = await api.put('/api/v1/admin/alipay/config', input)
+  const response = await api.put('/api/option/alipay/config', input)
   return response.data as D2SResponse<D2SAdminAlipayPCSettings>
 }
 
 export async function useD2SAdminAlipayEnvironmentConfig() {
-  const response = await api.put('/api/v1/admin/alipay/config', {
+  const response = await api.put('/api/option/alipay/config', {
     use_environment_config: true,
   })
   return response.data as D2SResponse<D2SAdminAlipayPCSettings>
@@ -131,7 +131,7 @@ export async function useD2SAdminAlipayEnvironmentConfig() {
 
 export async function getD2SAdminAlipayRefunds(orderID: string) {
   const response = await api.get(
-    `/api/v1/admin/alipay/orders/${encodeURIComponent(orderID)}/refunds`
+    `/api/option/alipay/orders/${encodeURIComponent(orderID)}/refunds`
   )
   return response.data as D2SResponse<{
     refunds: Array<{
@@ -151,7 +151,7 @@ export async function createD2SAdminAlipayRefund(
   input: { amount_minor: number; reason: string; idempotency_key: string }
 ) {
   const response = await api.post(
-    `/api/v1/admin/alipay/orders/${encodeURIComponent(orderID)}/refunds`,
+    `/api/option/alipay/orders/${encodeURIComponent(orderID)}/refunds`,
     input
   )
   return response.data as D2SResponse<{
@@ -162,20 +162,20 @@ export async function createD2SAdminAlipayRefund(
 
 export async function reconcileD2SAdminAlipayRefund(outRequestNo: string) {
   const response = await api.post(
-    `/api/v1/admin/alipay/refunds/${encodeURIComponent(outRequestNo)}/reconcile`
+    `/api/option/alipay/refunds/${encodeURIComponent(outRequestNo)}/reconcile`
   )
   return response.data as D2SResponse<{ status: string }>
 }
 
 export async function closeD2SAdminAlipayOrder(orderID: string) {
   const response = await api.post(
-    `/api/v1/admin/alipay/orders/${encodeURIComponent(orderID)}/close`
+    `/api/option/alipay/orders/${encodeURIComponent(orderID)}/close`
   )
   return response.data as D2SResponse<unknown>
 }
 
 export async function downloadD2SAdminAlipayBill(date: string) {
-  const response = await api.get('/api/v1/admin/alipay/bill', {
+  const response = await api.get('/api/option/alipay/bill', {
     params: { date },
     responseType: 'blob',
   })

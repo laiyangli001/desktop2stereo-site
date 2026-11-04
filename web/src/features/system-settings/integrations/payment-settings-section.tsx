@@ -20,11 +20,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Code2, Eye, ShieldAlert } from 'lucide-react'
 import * as React from 'react'
-import { useForm, type Resolver } from 'react-hook-form'
+import { useForm, useWatch, type Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import * as z from 'zod'
 
+import { AlipayPCSettingsPanel } from '@/features/d2s/alipay-settings-panel'
 import { JsonCodeEditor } from '@/components/json-code-editor'
 import { RiskAcknowledgementDialog } from '@/components/risk-acknowledgement-dialog'
 import {
@@ -223,6 +224,7 @@ export function PaymentSettingsSection({
 }: PaymentSettingsSectionProps) {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [paymentTab, setPaymentTab] = React.useState('general')
   const updateOption = useUpdateOption()
   const initialFormValues = React.useMemo<PaymentFormValues>(
     () => ({
@@ -260,18 +262,32 @@ export function PaymentSettingsSection({
       productID: waffoPancakeProvisionedProductID ?? '',
     })
 
-  React.useEffect(() => {
+  const [previousWaffoMethods, setPreviousWaffoMethods] = React.useState(
+    waffoDefaultValues.WaffoPayMethods
+  )
+  if (previousWaffoMethods !== waffoDefaultValues.WaffoPayMethods) {
+    setPreviousWaffoMethods(waffoDefaultValues.WaffoPayMethods)
     setWaffoPayMethods(parseWaffoPayMethods(waffoDefaultValues.WaffoPayMethods))
-  }, [waffoDefaultValues.WaffoPayMethods])
+  }
 
-  React.useEffect(() => {
+  const [previousPancakeBinding, setPreviousPancakeBinding] =
+    React.useState<WaffoPancakeBinding>({
+      storeID: waffoPancakeProvisionedStoreID ?? '',
+      productID: waffoPancakeProvisionedProductID ?? '',
+    })
+  if (
+    previousPancakeBinding.storeID !== (waffoPancakeProvisionedStoreID ?? '') ||
+    previousPancakeBinding.productID !==
+      (waffoPancakeProvisionedProductID ?? '')
+  ) {
     const nextBinding = {
       storeID: waffoPancakeProvisionedStoreID ?? '',
       productID: waffoPancakeProvisionedProductID ?? '',
     }
+    setPreviousPancakeBinding(nextBinding)
     setWaffoPancakeSelection(nextBinding)
     setWaffoPancakeSavedBinding(nextBinding)
-  }, [waffoPancakeProvisionedProductID, waffoPancakeProvisionedStoreID])
+  }
 
   const complianceStatements = React.useMemo(
     () => [
@@ -772,7 +788,11 @@ export function PaymentSettingsSection({
     }
   }
 
-  const currentFormValues = form.watch()
+  const currentFormValues = useWatch({
+    control: form.control,
+    defaultValue: initialFormValues,
+    compute: (values: PaymentFormValues) => values,
+  })
   const waffoValues: WaffoSettingsValues = {
     WaffoEnabled: currentFormValues.WaffoEnabled,
     WaffoApiKey: currentFormValues.WaffoApiKey,
@@ -862,31 +882,41 @@ export function PaymentSettingsSection({
       />
 
       <Form {...form}>
-        <SettingsForm
-          onSubmit={form.handleSubmit(onSubmit)}
-          className={cn(
-            'gap-y-8',
-            !complianceConfirmed && 'pointer-events-none opacity-40'
-          )}
-          data-no-autosubmit='true'
+        <Tabs
+          value={paymentTab}
+          onValueChange={setPaymentTab}
+          className='min-w-0'
         >
-          <SettingsPageFormActions
-            onSave={form.handleSubmit(onSubmit)}
-            isSaving={updateOption.isPending || isSubmitting}
-            saveLabel='Save all settings'
-          />
-          <Tabs defaultValue='general' className='min-w-0'>
-            <div className='overflow-x-auto pb-1'>
-              <TabsList className='grid min-w-[44rem] grid-cols-6'>
-                <TabsTrigger value='general'>{t('General')}</TabsTrigger>
-                <TabsTrigger value='epay'>Epay</TabsTrigger>
-                <TabsTrigger value='stripe'>{t('Stripe')}</TabsTrigger>
-                <TabsTrigger value='creem'>Creem</TabsTrigger>
-                <TabsTrigger value='waffo-pancake'>Waffo Pancake</TabsTrigger>
-                <TabsTrigger value='waffo'>Waffo</TabsTrigger>
-              </TabsList>
-            </div>
-
+          <div className='overflow-x-auto pb-1'>
+            <TabsList className='grid min-w-[50rem] grid-cols-7'>
+              <TabsTrigger value='general'>{t('General')}</TabsTrigger>
+              <TabsTrigger value='alipay'>{t('Alipay')}</TabsTrigger>
+              <TabsTrigger value='epay'>Epay</TabsTrigger>
+              <TabsTrigger value='stripe'>{t('Stripe')}</TabsTrigger>
+              <TabsTrigger value='creem'>Creem</TabsTrigger>
+              <TabsTrigger value='waffo-pancake'>Waffo Pancake</TabsTrigger>
+              <TabsTrigger value='waffo'>Waffo</TabsTrigger>
+            </TabsList>
+          </div>
+          <TabsContent value='alipay' className={paymentTabContentClassName}>
+            <AlipayPCSettingsPanel />
+          </TabsContent>
+          <SettingsForm
+            onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
+            className={cn(
+              'gap-y-8',
+              paymentTab === 'alipay' && 'hidden',
+              !complianceConfirmed && 'pointer-events-none opacity-40'
+            )}
+            data-no-autosubmit='true'
+          >
+            {paymentTab !== 'alipay' && (
+              <SettingsPageFormActions
+                onSave={() => void form.handleSubmit(onSubmit)()}
+                isSaving={updateOption.isPending || isSubmitting}
+                saveLabel='Save all settings'
+              />
+            )}
             <TabsContent value='general' className={paymentTabContentClassName}>
               <div className='space-y-4'>
                 <div>
@@ -1626,8 +1656,8 @@ export function PaymentSettingsSection({
                 onPayMethodsChange={setWaffoPayMethods}
               />
             </TabsContent>
-          </Tabs>
-        </SettingsForm>
+          </SettingsForm>
+        </Tabs>
       </Form>
     </SettingsSection>
   )

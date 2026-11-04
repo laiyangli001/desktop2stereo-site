@@ -26,6 +26,14 @@ func writeD2SAdminAudit(c *gin.Context, operationType, target, result string, de
 }
 
 func d2SAdminAuditEntry(c *gin.Context, operationType, target, result string, details map[string]any) (*model.D2SAdminOperationAudit, error) {
+	if c.GetString("d2s_operator_realm") == "system_admin" {
+		systemDetails := make(map[string]any, len(details)+1)
+		for key, value := range details {
+			systemDetails[key] = value
+		}
+		systemDetails["operator_realm"] = "system_admin"
+		details = systemDetails
+	}
 	detailsJSON, err := common.Marshal(details)
 	if err != nil {
 		return nil, err
