@@ -72,6 +72,7 @@ vi.mock('@tanstack/react-router', () => ({
 describe('D2S support form', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    window.localStorage.clear()
     vi.clearAllMocks()
     supportMocks.auth = {
       user: { id: 7, email: 'user@example.com' },
@@ -201,6 +202,62 @@ describe('D2S support form', () => {
     expect(
       screen.queryByRole('link', { name: 'Submit a complaint or question' })
     ).not.toBeInTheDocument()
+  })
+
+  it('lets visitors drag and reposition the support button without opening its panel', () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        json: async () => ({ success: true, data: {} }),
+      })
+    )
+    const { unmount } = render(<D2SSupportFloatingButton />)
+    const button = screen.getByRole('button', {
+      name: 'Complaints and support',
+    })
+    vi.spyOn(button, 'getBoundingClientRect').mockReturnValue({
+      x: 800,
+      y: 300,
+      left: 800,
+      top: 300,
+      right: 980,
+      bottom: 348,
+      width: 180,
+      height: 48,
+      toJSON: () => ({}),
+    })
+
+    fireEvent.pointerDown(button, {
+      button: 0,
+      pointerId: 1,
+      clientX: 810,
+      clientY: 310,
+    })
+    fireEvent.pointerMove(button, {
+      pointerId: 1,
+      clientX: 600,
+      clientY: 380,
+    })
+    fireEvent.pointerUp(button, {
+      pointerId: 1,
+      clientX: 600,
+      clientY: 380,
+    })
+    fireEvent.click(button)
+
+    expect(
+      document.querySelector('[data-support-floating-button-container]')
+    ).toHaveStyle({ left: '590px', top: '370px' })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+    expect(
+      window.localStorage.getItem('d2s-support-floating-button-position-v1')
+    ).toBe(JSON.stringify({ left: 590, top: 370 }))
+
+    unmount()
+    render(<D2SSupportFloatingButton />)
+    expect(
+      document.querySelector('[data-support-floating-button-container]')
+    ).toHaveStyle({ left: '590px', top: '370px' })
   })
 
   it('explains the registered-account requirement in Simplified Chinese', async () => {

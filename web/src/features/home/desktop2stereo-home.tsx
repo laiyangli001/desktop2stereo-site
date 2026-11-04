@@ -11,7 +11,7 @@ import {
   Sparkles,
   X,
 } from 'lucide-react'
-import { useState, type MouseEvent } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 
@@ -24,7 +24,9 @@ interface Desktop2StereoHomeProps {
 }
 
 const repoUrl = 'https://github.com/lc700x/desktop2stereo'
-const releaseUrl = `${repoUrl}/releases/tag/v2.5.0`
+const releaseUrl = `${repoUrl}/releases/latest`
+const latestReleaseApiUrl =
+  'https://api.github.com/repos/lc700x/desktop2stereo/releases/latest'
 const requirementsUrl = `${repoUrl}/blob/main/requirements.txt`
 const guideUrl = `${repoUrl}#readme`
 const bilibiliGuideUrl = 'https://space.bilibili.com/156928642/lists'
@@ -40,7 +42,7 @@ const copy = {
   en: {
     eyebrow: 'Official Desktop2Stereo Website',
     hero: 'Convert ordinary desktop, video, game, and media content into stereo 3D output for large displays, VR viewing, and 3D display experiments.',
-    download: 'Download v2.5',
+    download: 'Download',
     downloadTrackingFailed:
       'Could not record the download request. Please try again.',
     guide: 'Read install guide',
@@ -147,7 +149,7 @@ const copy = {
     sourceTitle: 'Source package from GitHub',
     sourceCopy:
       'Download the repository source with requirements.txt, then create and install the Python runtime environment yourself.',
-    release: 'Open v2.5.0 releases',
+    release: 'Open latest release',
     requirements: 'requirements.txt',
     mainland: 'Mainland China',
     lazyTitle: 'Lazy package with Python runtime',
@@ -184,15 +186,11 @@ const copy = {
     platforms: 'Platforms',
     platformsTitle: 'Version and project links',
     platformsCopy:
-      'Current website version label: Desktop2Stereo v2.5. The official code and tutorial source is lc700x/desktop2stereo.',
+      'The official code and tutorial source is lc700x/desktop2stereo.',
     platformItems: [
       [
         'Official GitHub',
         'Repository, README, source files, requirements, and issue history.',
-      ],
-      [
-        'v2.5 software line',
-        'Website copy follows the current release information.',
       ],
       [
         'China downloads',
@@ -214,7 +212,6 @@ const copy = {
       'If sponsorship is not convenient, a free GitHub Star or sharing the project in a VR group helps just as much.',
     project: 'Project information',
     projectItems: [
-      'Current software version: Desktop2Stereo v2.5',
       'Official source: lc700x/desktop2stereo on GitHub',
       'Manual resources: English / 中文',
     ],
@@ -224,8 +221,8 @@ const copy = {
   },
   zh: {
     eyebrow: '官方 Desktop2Stereo 网站',
-    hero: 'Desktop2Stereo v2.5 可以把普通桌面、视频、游戏和媒体内容转换成 3D 立体输出，面向大屏、VR 观看和 3D 显示实验。',
-    download: '下载 v2.5',
+    hero: '可以把普通桌面、视频、游戏和媒体内容转换成 3D 立体输出，面向大屏、VR 观看和 3D 显示实验。',
+    download: '下载',
     downloadTrackingFailed: '下载请求记录失败，请重试。',
     guide: '查看使用教程',
     dashboard: '进入控制台',
@@ -330,7 +327,7 @@ const copy = {
     sourceTitle: 'GitHub 源码版',
     sourceCopy:
       '下载包含 requirements.txt 的仓库源码，自行配置 Python 运行环境。',
-    release: '打开 v2.5.0 Release',
+    release: '打开最新版本',
     requirements: 'requirements.txt',
     mainland: '中国大陆',
     lazyTitle: '带 Python 环境的懒人包',
@@ -353,14 +350,12 @@ const copy = {
     ],
     platforms: '项目链接',
     platformsTitle: '版本与项目链接',
-    platformsCopy:
-      '当前网站标注的软件版本为 Desktop2Stereo v2.5，官方代码与教程来源是 lc700x/desktop2stereo。',
+    platformsCopy: '官方代码与教程来源是 lc700x/desktop2stereo。',
     platformItems: [
       [
         '官方 GitHub',
         '仓库、README 教程、源码文件、requirements.txt 和 issue 历史。',
       ],
-      ['v2.5 软件线', '网站文案按当前提供的版本信息标注。'],
       ['中国下载', '夸克与百度网盘懒人包，包含完整运行库。'],
       ['手动源码安装', 'GitHub ZIP 加 Python 依赖配置。'],
     ],
@@ -378,7 +373,6 @@ const copy = {
       '如果不方便赞助，点个免费的 GitHub Star 或在 VR 群里转发项目同样有帮助。',
     project: '项目信息',
     projectItems: [
-      '当前软件版本：Desktop2Stereo v2.5',
       '官方源码：GitHub lc700x/desktop2stereo',
       '手册资源：English / 中文',
     ],
@@ -396,6 +390,31 @@ export function Desktop2StereoHome({
       ? copy.zh
       : copy.en
   const [lightbox, setLightbox] = useState<'qq' | 'support' | null>(null)
+  const [latestVersion, setLatestVersion] = useState('')
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch(latestReleaseApiUrl, {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('GitHub release lookup failed')
+        return response.json() as Promise<{ tag_name?: unknown }>
+      })
+      .then((release) => {
+        if (
+          typeof release.tag_name === 'string' &&
+          /^[vV]?[0-9A-Za-z][0-9A-Za-z.+_-]{0,31}$/.test(release.tag_name)
+        ) {
+          setLatestVersion(release.tag_name)
+        }
+      })
+      .catch(() => undefined)
+
+    return () => controller.abort()
+  }, [])
+
   const openTrackedDownload = async (
     target: D2SDownloadTarget,
     href: string
@@ -443,7 +462,10 @@ export function Desktop2StereoHome({
               {text.eyebrow}
             </p>
             <h1 className='max-w-3xl text-4xl font-bold tracking-tight md:text-6xl'>
-              Desktop2Stereo <span className='text-primary'>v2.5</span>
+              Desktop2Stereo{' '}
+              {latestVersion ? (
+                <span className='text-primary'>{latestVersion}</span>
+              ) : null}
             </h1>
             <p className='text-muted-foreground mt-6 max-w-2xl text-lg leading-8'>
               {text.hero}
@@ -812,14 +834,12 @@ export function Desktop2StereoHome({
               </p>
             ))}
           </div>
-          <a
-            href='/business-license.png'
-            target='_blank'
-            rel='noopener noreferrer'
+          <Link
+            to='/business-license'
             className='text-primary hover:text-primary/80 mt-5 inline-flex min-h-11 items-center rounded-sm font-medium underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4'
           >
             {text.businessLicense}
-          </a>
+          </Link>
         </div>
       </section>
       {lightbox ? (
