@@ -32,6 +32,10 @@ export function AlipayPCConfigForm(props: {
 }) {
   const { t } = useTranslation()
   const config = props.settings
+  const sourceLabels = {
+    admin: t('System admin settings'),
+    environment: t('Server environment settings'),
+  }
   const [form, setForm] = useState<AlipayPCConfigFormState>(() => ({
     qr_pay_mode: config?.qr_pay_mode || '4',
     channel_enabled: config?.channel_enabled ?? false,
@@ -88,7 +92,10 @@ export function AlipayPCConfigForm(props: {
       <CardContent className='space-y-4 text-sm'>
         <div className='rounded-md border p-3'>
           <p>
-            {t('Configuration source')}: {config?.config_source || t('Loading')}
+            {t('Configuration source')}:{' '}
+            {config?.config_source
+              ? sourceLabels[config.config_source]
+              : t('Loading')}
           </p>
           <p>
             {t('Configuration status')}:{' '}
