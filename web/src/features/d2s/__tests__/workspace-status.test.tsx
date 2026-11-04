@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { D2SWorkspace, D2SWalletSection } from '..'
 
@@ -44,6 +44,33 @@ vi.mock('@tanstack/react-router', () => ({
 }))
 
 describe('D2SWorkspace data status', () => {
+  beforeEach(() => {
+    vi.resetAllMocks()
+    apiMocks.getD2SLicenses.mockResolvedValue({
+      success: true,
+      data: { licenses: [] },
+    })
+    apiMocks.getD2SManualUnbindRequests.mockResolvedValue({
+      success: true,
+      data: { requests: [] },
+    })
+    apiMocks.getD2SCheckoutProviders.mockResolvedValue({
+      success: true,
+      data: { enabled: false, providers: [] },
+    })
+    apiMocks.getD2SBalance.mockResolvedValue({
+      success: true,
+      data: { accounts: [] },
+    })
+    apiMocks.getD2SOrders.mockResolvedValue({
+      success: true,
+      data: { orders: [] },
+    })
+    apiMocks.getD2SWithdrawals.mockResolvedValue({
+      success: true,
+      data: { withdrawals: [] },
+    })
+  })
   it('announces unavailable data instead of showing an empty account state', async () => {
     for (const query of Object.values(apiMocks)) {
       query.mockRejectedValue(new Error('D2S API unavailable'))
@@ -170,7 +197,7 @@ describe('D2SWorkspace data status', () => {
     confirmSpy.mockRestore()
   })
 
-  it('keeps commerce controls and invitations out of authorization management', async () => {
+  it('places purchases in authorization management without support shortcuts or wallet-only sections', async () => {
     apiMocks.getD2SLicenses.mockResolvedValue({
       success: true,
       data: { licenses: [] },
@@ -192,8 +219,28 @@ describe('D2SWorkspace data status', () => {
     expect(
       await screen.findByText('Authorization management')
     ).toBeInTheDocument()
-    expect(screen.queryByText('Purchase a license')).not.toBeInTheDocument()
+    expect(screen.getByText('Purchase a license')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'Complaints and support' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: 'My support tickets' })
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Invitations')).not.toBeInTheDocument()
     expect(screen.queryByText('Withdrawals')).not.toBeInTheDocument()
+  })
+
+  it('keeps the wallet focused on wallet records and withdrawals', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <D2SWalletSection />
+      </QueryClientProvider>
+    )
+    expect(await screen.findByText('Withdrawals')).toBeInTheDocument()
+    expect(screen.queryByText('Purchase a license')).not.toBeInTheDocument()
+    expect(screen.queryByText('Licenses and devices')).not.toBeInTheDocument()
   })
 })

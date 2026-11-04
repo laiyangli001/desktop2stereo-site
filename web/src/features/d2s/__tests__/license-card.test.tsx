@@ -18,6 +18,30 @@ const activeBoundLicense: D2SLicense = {
 }
 
 describe('LicenseCard', () => {
+  it('groups mode controls and exposes their selected state separately from device actions', () => {
+    render(
+      <LicenseCard
+        license={activeBoundLicense}
+        actionPending={false}
+        onChangeMode={vi.fn()}
+        onConfirmPermanent={vi.fn()}
+        onFreeRevoke={vi.fn()}
+        onManualUnbind={vi.fn()}
+      />
+    )
+    expect(
+      screen.getByRole('group', { name: 'Usage mode' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Online mode D2S-TEST-0001' })
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Offline mode D2S-TEST-0001' })
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByText('Device actions')).toBeInTheDocument()
+    expect(screen.getByText('a'.repeat(64))).toBeInTheDocument()
+    expect(screen.getByText('No expiry')).toBeInTheDocument()
+  })
   it('submits the selected offline period when switching mode', () => {
     const onChangeMode = vi.fn()
     render(

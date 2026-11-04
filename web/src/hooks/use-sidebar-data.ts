@@ -116,6 +116,11 @@ export function useSidebarData(): SidebarData {
             icon: CreditCard,
           },
           {
+            title: t('My support tickets'),
+            url: '/d2s/support-tickets',
+            icon: Ticket,
+          },
+          {
             title: t('Profile'),
             url: '/profile',
             icon: User,

@@ -9,7 +9,7 @@ import {
 import i18n from 'i18next'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { D2SWalletSection } from '..'
+import { D2SWorkspace } from '..'
 
 const apiMocks = vi.hoisted(() => ({
   changeD2SMode: vi.fn(),
@@ -43,12 +43,12 @@ function renderWorkspace() {
   })
   return render(
     <QueryClientProvider client={queryClient}>
-      <D2SWalletSection />
+      <D2SWorkspace />
     </QueryClientProvider>
   )
 }
 
-describe('D2S wallet purchase flow', () => {
+describe('D2S authorization purchase flow', () => {
   const initialLanguage = i18n.language
 
   afterEach(async () => {
