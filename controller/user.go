@@ -221,7 +221,9 @@ func setupLoginAtAuthVersion(user *model.User, expectedAuthVersion int64, c *gin
 		common.ApiError(c, err)
 		return
 	}
-	if currentUser.EmailVerifiedAt <= 0 {
+	// System setup creates the owner root without an email; this is not a customer registration.
+	isSetupRoot := currentUser.Role == common.RoleRootUser && strings.TrimSpace(currentUser.Email) == ""
+	if currentUser.EmailVerifiedAt <= 0 && !isSetupRoot {
 		id := user.Id
 		if !recordD2SLoginEventOrRespond(c, &id, currentUser.Email, model.D2SActionResultBlocked) {
 			return

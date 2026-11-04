@@ -168,6 +168,8 @@ systemctl enable --now desktop2stereo-reconciliation.timer
 - `SESSION_COOKIE_TRUSTED_URL=https://d2s.site`。
 - `TRUSTED_PROXIES`：实际 CLB、Nginx 或 Tunnel 网络范围。
 
+系统初始化通过受控部署创建、角色为 root 且未绑定邮箱的所有者管理账号，可使用原管理员密码登录系统后台；该管理登录不会填写邮箱验证时间，也不会激活购买、下载授权或试用资格。普通账户以及已填写但尚未验证邮箱的 root 账户仍须先完成邮箱验证；账户紧急登录限制对初始化 root 同样生效。
+
 授权与商业配置：
 
 - `D2S_PURCHASES_ENABLED=false`：服务端购买和下单总开关，默认关闭；关闭时订单预览、创建、结账以及付费解绑、离线延长等付费订单入口返回 503，支付渠道发现接口返回空列表。前端同步隐藏支付渠道、禁用购买选项并提示暂未开放。生产环境应明确保持 `false`；只有支付沙箱、合规审查和端到端验收完成后，才可显式设为 `true`。

@@ -21,6 +21,19 @@ import { describe, expect, test } from 'vitest'
 import { getServerErrorMessageKey } from './server-error-message'
 
 describe('server error message mapping', () => {
+  test('explains an email-verification rejection instead of showing a generic HTTP 403', () => {
+    expect(
+      getServerErrorMessageKey({
+        response: {
+          status: 403,
+          data: {
+            code: 'EMAIL_VERIFICATION_REQUIRED',
+          },
+        },
+      })
+    ).toBe('Email verification is required before sign-in.')
+  })
+
   test('maps the active-session limit to recovery instructions', () => {
     const message = getServerErrorMessageKey({ code: 'AUTH_SESSION_LIMIT' })
 
