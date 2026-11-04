@@ -14,6 +14,7 @@ import {
 } from './api'
 
 type AlipayPCConfigFormState = {
+  qr_pay_mode: string
   channel_enabled: boolean
   app_id: string
   seller_id: string
@@ -26,11 +27,13 @@ type AlipayPCConfigFormState = {
 
 export function AlipayPCConfigForm(props: {
   settings?: D2SAdminAlipayPCSettings
+  showQRMode?: boolean
   onSaved: () => void
 }) {
   const { t } = useTranslation()
   const config = props.settings
   const [form, setForm] = useState<AlipayPCConfigFormState>(() => ({
+    qr_pay_mode: config?.qr_pay_mode || '4',
     channel_enabled: config?.channel_enabled ?? false,
     app_id: config?.app_id ?? '',
     seller_id: config?.seller_id ?? '',
@@ -206,6 +209,23 @@ export function AlipayPCConfigForm(props: {
               'Paste key as one line with literal backslash-n separators or as base64 PEM. Keys are encrypted at rest and never returned by the API.'
             )}
           </p>
+          {props.showQRMode !== false && (
+            <label className='grid gap-1'>
+              <span>{t('QR display mode')}</span>
+              <select
+                aria-label={t('QR display mode')}
+                className='bg-background h-9 rounded-md border px-3'
+                value={form.qr_pay_mode}
+                onChange={(event) => update('qr_pay_mode', event.target.value)}
+                disabled={busy}
+              >
+                <option value='0'>0 · {t('Compact landscape')}</option>
+                <option value='1'>1 · {t('Portrait')}</option>
+                <option value='3'>3 · {t('Mini')}</option>
+                <option value='4'>4 · {t('Embedded QR')}</option>
+              </select>
+            </label>
+          )}
           <label className='flex items-center gap-2 sm:col-span-2'>
             <input
               type='checkbox'

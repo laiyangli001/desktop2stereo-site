@@ -615,6 +615,7 @@ export function D2SAdminWorkspace() {
             <AlipayPCConfigForm
               key={JSON.stringify(alipaySettings.data?.data ?? null)}
               settings={alipaySettings.data?.data}
+              showQRMode={false}
               onSaved={() =>
                 void queryClient.invalidateQueries({
                   queryKey: ['d2s-admin', 'alipay-settings'],

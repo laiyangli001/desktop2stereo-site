@@ -17,6 +17,7 @@ import {
 
 import { SkipToMain } from '@/components/skip-to-main'
 
+import { AlipayPCSettingsPanel } from '../features/d2s/alipay-settings-panel'
 import { downloadBlob } from '../features/d2s/download'
 
 const MAX_AUDIT_RETENTION_DAYS = 2_147_483_647
@@ -64,6 +65,7 @@ type AdminSection =
   | 'support'
   | 'accounts'
   | 'retention'
+  | 'alipay'
 
 function defaultAdminSection(role: string): AdminSection | null {
   if (role === 'super_admin' || role === 'audit_reader') return 'logs'
@@ -584,6 +586,7 @@ export function D2SAdminConsole() {
             ['support', '投诉与咨询', 'account_operator'],
             ['accounts', '紧急限制', 'account_operator'],
             ['retention', '日志留存', 'super_admin'],
+            ['alipay', '支付宝支付', 'super_admin'],
           ]
             .filter(([, , role]) => isAllowed(role as string))
             .map(([key, label]) => (
@@ -1225,6 +1228,10 @@ export function D2SAdminConsole() {
               )}
             </div>
           </section>
+        )}
+
+        {section === 'alipay' && admin.role === 'super_admin' && (
+          <AlipayPCSettingsPanel />
         )}
 
         {section === 'retention' && (

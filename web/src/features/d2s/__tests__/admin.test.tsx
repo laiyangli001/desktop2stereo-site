@@ -10,6 +10,8 @@ const apiMocks = vi.hoisted(() => ({
   getD2SAdminOrders: vi.fn(),
   getD2SAdminPaymentEvents: vi.fn(),
   getD2SAdminAlipayPCSettings: vi.fn(),
+  saveD2SAdminAlipayPCConfig: vi.fn(),
+  useD2SAdminAlipayEnvironmentConfig: vi.fn(),
   setD2SAdminAlipayQRPayMode: vi.fn(),
   closeD2SAdminAlipayOrder: vi.fn(),
   createD2SAdminAlipayRefund: vi.fn(),

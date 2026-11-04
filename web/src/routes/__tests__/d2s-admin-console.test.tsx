@@ -1,16 +1,104 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import {
+  getD2SAdminAlipayPCSettings,
+  saveD2SAdminAlipayPCConfig,
+} from '../../features/d2s/api'
 import { downloadBlob } from '../../features/d2s/download'
 import { D2SAdminConsole } from '../d2s-admin-console'
 
 vi.mock('../../features/d2s/download', () => ({ downloadBlob: vi.fn() }))
+vi.mock('../../features/d2s/api', () => ({
+  getD2SAdminAlipayPCSettings: vi.fn(),
+  saveD2SAdminAlipayPCConfig: vi.fn(),
+  useD2SAdminAlipayEnvironmentConfig: vi.fn(),
+}))
 
 describe('D2SAdminConsole login', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+  })
+
+  it('opens Alipay settings for an independent super admin and saves the selected QR mode without resending stored keys', async () => {
+    const settings = {
+      qr_pay_mode: '4',
+      config_source: 'admin' as const,
+      channel_enabled: false,
+      app_id: '2026000000000000',
+      seller_id: '2088000000000000',
+      gateway_url: 'https://openapi.alipay.com/gateway.do',
+      notify_url: 'https://d2s.site/api/v1/alipay/d2s/notify',
+      return_url: 'https://d2s.site/d2s',
+      merchant_private_key_configured: true,
+      alipay_public_key_configured: true,
+      ready: true,
+      updated_at: 1,
+    }
+    vi.mocked(getD2SAdminAlipayPCSettings).mockResolvedValue({
+      success: true,
+      data: settings,
+    })
+    vi.mocked(saveD2SAdminAlipayPCConfig).mockResolvedValue({
+      success: true,
+      data: settings,
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              success: true,
+              data: {
+                admin: {
+                  id: 1,
+                  email: 'admin@example.com',
+                  role: 'super_admin',
+                },
+              },
+            }),
+          }) as Response
+      )
+    )
+    const user = userEvent.setup()
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <D2SAdminConsole />
+      </QueryClientProvider>
+    )
+    await user.click(await screen.findByRole('button', { name: '支付宝支付' }))
+    expect(await screen.findByLabelText('Alipay app ID')).toHaveValue(
+      settings.app_id
+    )
+    expect(screen.getByLabelText(/Merchant RSA2 private key/)).toHaveValue('')
+    expect(screen.getByLabelText(/Alipay RSA2 public key/)).toHaveValue('')
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'QR display mode' }),
+      '1'
+    )
+    await user.click(
+      screen.getByRole('button', { name: 'Save Alipay settings' })
+    )
+    await waitFor(() =>
+      expect(saveD2SAdminAlipayPCConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          app_id: settings.app_id,
+          qr_pay_mode: '1',
+          merchant_private_key: undefined,
+          alipay_public_key: undefined,
+        }),
+        expect.anything()
+      )
+    )
   })
 
   it('announces the pending admin-session check', async () => {
@@ -89,6 +177,7 @@ describe('D2SAdminConsole login', () => {
       screen.queryByRole('heading', { name: '用户行为日志' })
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '行为日志' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '支付宝支付' })).toBeNull()
   })
 
   it('shows every audit field to an audit reader', async () => {
