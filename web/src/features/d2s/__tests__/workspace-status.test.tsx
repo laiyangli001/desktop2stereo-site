@@ -90,7 +90,7 @@ describe('D2SWorkspace data status', () => {
     )
   })
 
-  it('renders configured Payment FM and balance ledger entries', async () => {
+  it('keeps license binding actions in authorization management and purchase controls out of the wallet', async () => {
     apiMocks.confirmD2SPermanent.mockResolvedValue({
       success: true,
       data: { changed: true },
@@ -179,12 +179,12 @@ describe('D2SWorkspace data status', () => {
     )
 
     expect(
-      await screen.findByRole('button', { name: 'Pay with Payment FM' })
-    ).toBeInTheDocument()
+      screen.queryByRole('button', { name: 'Pay with Payment FM' })
+    ).not.toBeInTheDocument()
 
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true)
     fireEvent.click(
-      screen.getByRole('button', { name: 'Make permanent D2S-TEST-1' })
+      await screen.findByRole('button', { name: 'Make permanent D2S-TEST-1' })
     )
     await waitFor(() => {
       expect(apiMocks.confirmD2SPermanent).toHaveBeenCalledWith({
@@ -197,7 +197,7 @@ describe('D2SWorkspace data status', () => {
     confirmSpy.mockRestore()
   })
 
-  it('places purchases in authorization management without support shortcuts or wallet-only sections', async () => {
+  it('links authorization management to the single store without embedding checkout', async () => {
     apiMocks.getD2SLicenses.mockResolvedValue({
       success: true,
       data: { licenses: [] },
@@ -219,7 +219,11 @@ describe('D2SWorkspace data status', () => {
     expect(
       await screen.findByText('Authorization management')
     ).toBeInTheDocument()
-    expect(screen.getByText('Purchase a license')).toBeInTheDocument()
+    expect(screen.queryByText('Purchase a license')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Visit store/ })).toHaveAttribute(
+      'href',
+      '/d2s/store'
+    )
     expect(
       screen.queryByRole('link', { name: 'Complaints and support' })
     ).not.toBeInTheDocument()

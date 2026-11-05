@@ -126,6 +126,13 @@ CN 1990/3490/6990、INTL 299/499/999。离线延长价格必须由部署配置�
 的已规范化订单事件直接送入同一 D2S 事务处理器；普通 new-api 充值仍沿用原有回调逻辑。
 PayPal/Paddle 尚未接入，不能作为订单渠道使用。
 
+## 用户商店
+
+- 唯一购买页面：`/d2s/store`，要求用户登录。授权管理及钱包不再嵌入授权购买表单。
+- `GET /api/v1/store/products`：已登录用户读取商品目录，返回 `data.products`。每项包含 `id`（`license / paid_revoke / offline_extension`）、`prices`（币种到最小货币单位的映射）及 `starting_at`（是否为起价）。
+- 商品目录与订单报价共享 `D2SProductPrice`。缺少某币种定价时省略该币种，不以零元展示。目录允许在购买总开关关闭时读取，不创建订单或修改购买开关。
+- 实际报价仍由 `POST /api/v1/orders/preview` 核对账号区域、授权状态及解绑次数；确认支付后再提交原有订单创建接口。商品切换、授权切换或付款方式切换均需重新核对；实际价格变化时拒绝使用旧报价。
+
 ## 系统支付购买开关
 
 - `GET /api/option/d2s-purchases`：返回 `{"success":true,"data":{"enabled":false}}`。

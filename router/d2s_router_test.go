@@ -37,6 +37,7 @@ func TestD2SRoutesExposeAuthenticatedSupportAndNoIdentityEntryAPI(t *testing.T) 
 	for _, request := range []*http.Request{
 		httptest.NewRequest(http.MethodPost, "/api/v1/support/tickets", strings.NewReader(`{"category":"OTHER"}`)),
 		httptest.NewRequest(http.MethodGet, "/api/v1/support/my-tickets", nil),
+		httptest.NewRequest(http.MethodGet, "/api/v1/store/products", nil),
 	} {
 		recorder := httptest.NewRecorder()
 		engine.ServeHTTP(recorder, request)

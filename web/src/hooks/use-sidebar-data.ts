@@ -30,6 +30,7 @@ import {
   Radio,
   ServerCog,
   Settings,
+  ShoppingBag,
   Ticket,
   User,
   Users,
@@ -105,6 +106,11 @@ export function useSidebarData(): SidebarData {
         id: 'personal',
         title: t('Personal'),
         items: [
+          {
+            title: t('Store'),
+            url: '/d2s/store',
+            icon: ShoppingBag,
+          },
           {
             title: t('Wallet'),
             url: '/wallet',

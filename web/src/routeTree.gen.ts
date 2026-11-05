@@ -42,6 +42,7 @@ import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
 import { Route as AuthenticatedD2sAdminIndexRouteImport } from './routes/_authenticated/d2s-admin/index'
 import { Route as AuthenticatedD2sIndexRouteImport } from './routes/_authenticated/d2s/index'
+import { Route as AuthenticatedD2sStoreRouteImport } from './routes/_authenticated/d2s/store'
 import { Route as AuthenticatedD2sSupportTicketsRouteImport } from './routes/_authenticated/d2s/support-tickets'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
@@ -240,6 +241,11 @@ const AuthenticatedD2sAdminIndexRoute =
 const AuthenticatedD2sIndexRoute = AuthenticatedD2sIndexRouteImport.update({
   id: '/d2s/',
   path: '/d2s/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedD2sStoreRoute = AuthenticatedD2sStoreRouteImport.update({
+  id: '/d2s/store',
+  path: '/d2s/store',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedD2sSupportTicketsRoute =
@@ -467,6 +473,7 @@ export interface FileRoutesByFullPath {
   '/setup/': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/d2s/store': typeof AuthenticatedD2sStoreRoute
   '/d2s/support-tickets': typeof AuthenticatedD2sSupportTicketsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -532,6 +539,7 @@ export interface FileRoutesByTo {
   '/setup': typeof SetupIndexRoute
   '/user/reset': typeof authUserResetRoute
   '/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/d2s/store': typeof AuthenticatedD2sStoreRoute
   '/d2s/support-tickets': typeof AuthenticatedD2sSupportTicketsRoute
   '/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -601,6 +609,7 @@ export interface FileRoutesById {
   '/setup/': typeof SetupIndexRoute
   '/(auth)/user/reset': typeof authUserResetRoute
   '/_authenticated/chat/$chatId': typeof AuthenticatedChatChatIdRoute
+  '/_authenticated/d2s/store': typeof AuthenticatedD2sStoreRoute
   '/_authenticated/d2s/support-tickets': typeof AuthenticatedD2sSupportTicketsRoute
   '/_authenticated/dashboard/$section': typeof AuthenticatedDashboardSectionRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
@@ -669,6 +678,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/d2s/store'
     | '/d2s/support-tickets'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -734,6 +744,7 @@ export interface FileRouteTypes {
     | '/setup'
     | '/user/reset'
     | '/chat/$chatId'
+    | '/d2s/store'
     | '/d2s/support-tickets'
     | '/dashboard/$section'
     | '/errors/$error'
@@ -802,6 +813,7 @@ export interface FileRouteTypes {
     | '/setup/'
     | '/(auth)/user/reset'
     | '/_authenticated/chat/$chatId'
+    | '/_authenticated/d2s/store'
     | '/_authenticated/d2s/support-tickets'
     | '/_authenticated/dashboard/$section'
     | '/_authenticated/errors/$error'
@@ -1094,6 +1106,13 @@ declare module '@tanstack/react-router' {
       path: '/d2s'
       fullPath: '/d2s/'
       preLoaderRoute: typeof AuthenticatedD2sIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/d2s/store': {
+      id: '/_authenticated/d2s/store'
+      path: '/d2s/store'
+      fullPath: '/d2s/store'
+      preLoaderRoute: typeof AuthenticatedD2sStoreRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/d2s/support-tickets': {
@@ -1417,6 +1436,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemSettingsRouteRoute: typeof AuthenticatedSystemSettingsRouteRouteWithChildren
   AuthenticatedChat2linkRoute: typeof AuthenticatedChat2linkRoute
   AuthenticatedChatChatIdRoute: typeof AuthenticatedChatChatIdRoute
+  AuthenticatedD2sStoreRoute: typeof AuthenticatedD2sStoreRoute
   AuthenticatedD2sSupportTicketsRoute: typeof AuthenticatedD2sSupportTicketsRoute
   AuthenticatedDashboardSectionRoute: typeof AuthenticatedDashboardSectionRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
@@ -1444,6 +1464,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
     AuthenticatedSystemSettingsRouteRouteWithChildren,
   AuthenticatedChat2linkRoute: AuthenticatedChat2linkRoute,
   AuthenticatedChatChatIdRoute: AuthenticatedChatChatIdRoute,
+  AuthenticatedD2sStoreRoute: AuthenticatedD2sStoreRoute,
   AuthenticatedD2sSupportTicketsRoute: AuthenticatedD2sSupportTicketsRoute,
   AuthenticatedDashboardSectionRoute: AuthenticatedDashboardSectionRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,

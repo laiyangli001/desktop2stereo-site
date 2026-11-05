@@ -232,11 +232,7 @@ func QuoteD2SOrder(userID int, product, licenseID, provider string, now int64) (
 		if licenseID != "" {
 			return nil, ErrD2SOrderInvalid
 		}
-		if region == D2SRegionCN {
-			quote.AmountMinor = 9900
-		} else {
-			quote.AmountMinor = 2990
-		}
+
 	case D2SOrderProductPaidRevoke:
 		license, err := GetD2SLicense(userID, licenseID, nil)
 		if err != nil {
@@ -257,13 +253,7 @@ func QuoteD2SOrder(userID int, product, licenseID, provider string, now int64) (
 		if quote.RevokeNumber > 3 {
 			return nil, ErrD2SPaidRevokeLimit
 		}
-		cnPrices := []int64{1990, 3490, 6990}
-		intlPrices := []int64{299, 499, 999}
-		if region == D2SRegionCN {
-			quote.AmountMinor = cnPrices[quote.RevokeNumber-1]
-		} else {
-			quote.AmountMinor = intlPrices[quote.RevokeNumber-1]
-		}
+
 	case D2SOrderProductOfflineExtension:
 		license, err := GetD2SLicense(userID, licenseID, nil)
 		if err != nil {
@@ -272,16 +262,13 @@ func QuoteD2SOrder(userID int, product, licenseID, provider string, now int64) (
 		if license.Status != D2SLicenseStatusActive || (license.ExpiresAt > 0 && license.ExpiresAt <= now) || license.Mode == D2SLicenseModePermanent {
 			return nil, ErrD2SLicenseUnavailable
 		}
-		if region == D2SRegionCN {
-			quote.AmountMinor, err = d2sConfiguredPrice("D2S_OFFLINE_EXTENSION_CNY_MINOR")
-		} else {
-			quote.AmountMinor, err = d2sConfiguredPrice("D2S_OFFLINE_EXTENSION_USD_MINOR")
-		}
-		if err != nil {
-			return nil, err
-		}
+
 	default:
 		return nil, ErrD2SOrderInvalid
+	}
+	quote.AmountMinor, err = D2SProductPrice(product, quote.Currency, quote.RevokeNumber)
+	if err != nil {
+		return nil, err
 	}
 	return quote, nil
 }

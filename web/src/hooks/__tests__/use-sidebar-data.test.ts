@@ -17,6 +17,11 @@ it('places support tickets in the personal group with a separate active navigati
   )
   const licenses = personal?.items.find((item) => item.url === '/d2s')
   expect(tickets?.title).toBe('My support tickets')
+  const store = personal?.items.find((item) => item.url === '/d2s/store')
+  expect(store?.title).toBe('Store')
+  expect(
+    personal?.items.filter((item) => item.url === '/d2s/store')
+  ).toHaveLength(1)
   expect(tickets?.items).toBeUndefined()
   expect(licenses).toBeDefined()
   if (!tickets || !licenses) {

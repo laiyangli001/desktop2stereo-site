@@ -281,6 +281,17 @@ export async function getD2SOrders(): Promise<
   return response.data
 }
 
+export type D2SStoreProduct = {
+  id: 'license' | 'paid_revoke' | 'offline_extension'
+  prices: Partial<Record<'CNY' | 'USD', number>>
+  starting_at: boolean
+}
+
+export async function getD2SStoreProducts() {
+  const response = await api.get('/api/v1/store/products')
+  return response.data as D2SResponse<{ products: D2SStoreProduct[] }>
+}
+
 export async function getD2SCheckoutProviders() {
   const response = await api.get('/api/v1/orders/providers')
   return response.data as D2SResponse<{

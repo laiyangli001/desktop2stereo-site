@@ -64,6 +64,8 @@ func registerD2SRoutes(apiRouter *gin.RouterGroup, anonymousRequestBodyLimit gin
 			licensePurchase.POST("/offline/extend", middleware.CriticalRateLimit(), controller.D2SLicenseOfflineExtend)
 		}
 
+		v1.GET("/store/products", middleware.UserAuth(), controller.D2SStoreProducts)
+
 		orders := v1.Group("/orders")
 		{
 			orders.POST("/preview", middleware.D2SUserActionLog("PURCHASE"), middleware.UserAuth(), controller.D2SOrderPreview)
